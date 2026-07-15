@@ -37,6 +37,7 @@
 *.p8
 *.p12
 *.cer
+!cert/DeveloperID_Application_8UPRU238P7.cer
 *.mobileprovision
 *.provisionprofile
 ExportOptions.plist

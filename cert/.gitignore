@@ -1,0 +1,8 @@
+*.certSigningRequest
+*.csr
+*.key
+*.p8
+*.p12
+*.pem
+*.provisionprofile
+*.mobileprovision
