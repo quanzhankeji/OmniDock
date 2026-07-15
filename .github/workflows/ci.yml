@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  swiftpm-tests:
+    name: SwiftPM tests (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner:
+          - macos-26
+          - macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Test with warnings as errors
+        run: swift test -Xswiftc -warnings-as-errors
+
+  universal-xcode-build:
+    name: Universal Xcode build
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Verify generated project
+        run: ./script/generate_xcode_project.py --check
+      - name: Validate App Store metadata inputs
+        run: |
+          plutil -lint Resources/OmniDock-Info.plist
+          plutil -lint Resources/OmniDock-AppStore.entitlements
+          test "$(plutil -extract 'com\.apple\.security\.app-sandbox' raw Resources/OmniDock-AppStore.entitlements)" = "true"
+          test "$(plutil -extract 'com\.apple\.security\.files\.user-selected\.read-only' raw Resources/OmniDock-AppStore.entitlements)" = "true"
+      - name: Build unsigned Universal app
+        run: |
+          xcodebuild \
+            -project OmniDock.xcodeproj \
+            -scheme OmniDock \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/OmniDockDerivedData" \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+            build
+      - name: Verify architectures and resources
+        run: |
+          app="$RUNNER_TEMP/OmniDockDerivedData/Build/Products/Release/OmniDock.app"
+          binary="$app/Contents/MacOS/OmniDock"
+          resources="$app/Contents/Resources"
+
+          test -x "$binary"
+          lipo "$binary" -verify_arch arm64 x86_64
+          test "$(lipo "$binary" -archs | awk '{ print NF }')" -eq 2
+
+          for file in \
+            "$app/Contents/Info.plist" \
+            "$resources/Assets.car" \
+            "$resources/PrivacyInfo.xcprivacy" \
+            "$resources/en.lproj/AppStrings.strings" \
+            "$resources/en.lproj/InfoPlist.strings" \
+            "$resources/zh-Hans.lproj/AppStrings.strings" \
+            "$resources/zh-Hans.lproj/InfoPlist.strings"; do
+            test -f "$file"
+          done
+
+          plutil -lint "$app/Contents/Info.plist"
+          plutil -lint "$resources/PrivacyInfo.xcprivacy"
+          plutil -lint "$resources/en.lproj/AppStrings.strings"
+          plutil -lint "$resources/en.lproj/InfoPlist.strings"
+          plutil -lint "$resources/zh-Hans.lproj/AppStrings.strings"
+          plutil -lint "$resources/zh-Hans.lproj/InfoPlist.strings"
+
+          test "$(plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist")" = "com.quanzhankeji.OmniDock"
+          test "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" = "1.0"
+          test "$(plutil -extract CFBundleVersion raw "$app/Contents/Info.plist")" = "3"

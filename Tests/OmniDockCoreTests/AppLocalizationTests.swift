@@ -1,0 +1,159 @@
+import XCTest
+@testable import OmniDockCore
+
+final class AppLocalizationTests: XCTestCase {
+    override func tearDown() {
+        AppLocalization.configure(language: .system)
+        super.tearDown()
+    }
+
+    func testSystemLanguageResolvesChinesePreferredLanguageToSimplifiedChinese() {
+        XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["zh-Hans-US"]), .zhHans)
+        XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["zh-Hant-TW"]), .zhHans)
+    }
+
+    func testSystemLanguageFallsBackToEnglishForUnsupportedLanguages() {
+        XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: ["fr-FR"]), .en)
+        XCTAssertEqual(AppLanguage.system.resolved(preferredLanguages: []), .en)
+    }
+
+    func testLocalizedStringTablesContainAllKeys() {
+        for language in AppLanguage.Resolved.allCases {
+            let values = AppLocalization.values(language: language)
+            for key in AppStringKey.allCases {
+                XCTAssertNotNil(values[key.rawValue], "Missing \(key.rawValue) for \(language.rawValue)")
+            }
+        }
+    }
+
+    func testLocalizedShortcutMessagesFollowSelectedLanguage() {
+        AppLocalization.configure(language: .zhHans)
+        XCTAssertEqual(
+            ShortcutRecorderValidation.regularKeyMinimumModifierMessage,
+            AppLocalization.text(.hotkeyGuidance, language: .zhHans)
+        )
+
+        AppLocalization.configure(language: .en)
+        XCTAssertEqual(
+            ShortcutRecorderValidation.regularKeyMinimumModifierMessage,
+            AppLocalization.text(.hotkeyGuidance, language: .en)
+        )
+    }
+
+    func testHotkeyGuidancePresentationReadsCurrentLanguageEachTime() {
+        AppLocalization.configure(language: .en)
+        XCTAssertEqual(
+            HotkeyGuidancePresentation.message,
+            AppLocalization.text(.hotkeyGuidance, language: .en)
+        )
+
+        AppLocalization.configure(language: .zhHans)
+        XCTAssertEqual(
+            HotkeyGuidancePresentation.message,
+            AppLocalization.text(.hotkeyGuidance, language: .zhHans)
+        )
+    }
+
+    func testLocalizationStateSupportsConcurrentReadsAndLanguageChanges() {
+        let group = DispatchGroup()
+        let queue = DispatchQueue(label: "AppLocalizationTests.concurrent", attributes: .concurrent)
+
+        for index in 0..<1_000 {
+            group.enter()
+            queue.async {
+                AppLocalization.configure(language: index.isMultiple(of: 2) ? .en : .zhHans)
+                _ = AppLocalization.text(.previewStaticFailure)
+                _ = AppLocalization.format(.permissionStatusFormat, arguments: ["A", "B"])
+                group.leave()
+            }
+        }
+
+        XCTAssertEqual(group.wait(timeout: .now() + 5), .success)
+    }
+
+    func testPermissionStatusFormatUsesLocalizedPunctuation() {
+        XCTAssertEqual(
+            AppLocalization.format(
+                .permissionStatusFormat,
+                arguments: ["Accessibility", "Granted"],
+                language: .en
+            ),
+            "Accessibility: Granted"
+        )
+        XCTAssertEqual(
+            AppLocalization.format(
+                .permissionStatusFormat,
+                arguments: ["辅助功能", "已授权"],
+                language: .zhHans
+            ),
+            "辅助功能：已授权"
+        )
+    }
+
+    func testApplicationPickerLoadingMessagesAreLocalized() {
+        let expectations: [(AppLanguage, [AppStringKey: String])] = [
+            (
+                .en,
+                [
+                    .pickerLoading: "Loading apps...",
+                    .pickerLoadFailure: "Could not load apps.",
+                    .pickerRetry: "Retry"
+                ]
+            ),
+            (
+                .zhHans,
+                [
+                    .pickerLoading: "正在加载应用…",
+                    .pickerLoadFailure: "无法加载应用。",
+                    .pickerRetry: "重试"
+                ]
+            )
+        ]
+
+        for (language, values) in expectations {
+            for (key, expectedValue) in values {
+                XCTAssertEqual(AppLocalization.text(key, language: language), expectedValue)
+            }
+        }
+    }
+
+    func testScreenRecordingDisclosuresMentionLiveAndStaticThumbnails() {
+        let expectations: [(AppLanguage.Resolved, [String])] = [
+            (.en, ["live images", "one-time static snapshots"]),
+            (.zhHans, ["实时画面", "一次性静态截图"])
+        ]
+
+        for (language, requiredFragments) in expectations {
+            let appValues = AppLocalization.values(language: language)
+            let infoPlistValues = AppLocalization.infoPlistValues(language: language)
+            let disclosures = [
+                appValues[AppStringKey.onboardingScreenRecordingPurpose.rawValue, default: ""],
+                appValues[AppStringKey.previewNeedsScreenRecording.rawValue, default: ""],
+                infoPlistValues["NSScreenCaptureUsageDescription", default: ""]
+            ]
+
+            for disclosure in disclosures {
+                for fragment in requiredFragments {
+                    XCTAssertTrue(
+                        disclosure.contains(fragment),
+                        "Missing \(fragment) from \(language.rawValue) screen recording disclosure: \(disclosure)"
+                    )
+                }
+            }
+        }
+    }
+
+    func testInfoPlistPermissionStringsExistForSupportedLanguages() throws {
+        let keys = [
+            "NSScreenCaptureUsageDescription",
+            "NSInputMonitoringUsageDescription"
+        ]
+
+        for language in AppLanguage.Resolved.allCases {
+            let values = AppLocalization.infoPlistValues(language: language)
+            for key in keys {
+                XCTAssertFalse(values[key, default: ""].isEmpty, "Missing \(key) for \(language.rawValue)")
+            }
+        }
+    }
+}

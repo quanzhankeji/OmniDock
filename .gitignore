@@ -1,0 +1,49 @@
+.DS_Store
+
+# SwiftPM and build output
+.build/
+.swiftpm/
+/dist/
+/DerivedData/
+*.dSYM/
+*.xcarchive/
+*.ipa
+*.pkg
+*.app
+
+# Local editor and workspace state
+.vscode/
+.idea/
+*.swp
+
+# Local-only project notes and rules
+*.local.md
+
+# Xcode generated or user-specific files
+*.xcuserdata/
+**/xcuserdata/*.xcuserdatad/
+*.xcuserstate
+*.xcodeproj/
+!OmniDock.xcodeproj/
+!OmniDock.xcodeproj/project.pbxproj
+!OmniDock.xcodeproj/xcshareddata/
+!OmniDock.xcodeproj/xcshareddata/xcschemes/
+!OmniDock.xcodeproj/xcshareddata/xcschemes/*.xcscheme
+*.xcworkspace/
+
+# Local configuration, signing, and App Store upload secrets
+.env
+.env.*
+*.p8
+*.p12
+*.cer
+*.mobileprovision
+*.provisionprofile
+ExportOptions.plist
+
+# Logs
+*.log
+
+# Local media and research artifacts
+/video/
+/research/

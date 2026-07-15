@@ -1,0 +1,2 @@
+"NSScreenCaptureUsageDescription" = "OmniDock 使用屏幕录制权限生成窗口缩略图，包括实时画面和一次性静态截图。";
+"NSInputMonitoringUsageDescription" = "OmniDock 使用输入监控权限检测重复点击 Dock 图标。";

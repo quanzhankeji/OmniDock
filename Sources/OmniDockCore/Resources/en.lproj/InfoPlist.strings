@@ -1,0 +1,2 @@
+"NSScreenCaptureUsageDescription" = "OmniDock uses Screen Recording permission to create window thumbnails, including live images and one-time static snapshots, above Dock icons.";
+"NSInputMonitoringUsageDescription" = "OmniDock uses Input Monitoring permission to detect repeated Dock icon clicks.";
