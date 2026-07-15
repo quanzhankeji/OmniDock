@@ -684,7 +684,7 @@ fi
 /usr/bin/plutil -insert artifacts.1.sha256 -string "$DSYM_SHA256" "$MANIFEST_PATH"
 /usr/bin/plutil -insert artifacts.1.bytes -integer "$(/usr/bin/stat -f '%z' "$DSYM_ZIP")" "$MANIFEST_PATH"
 /usr/bin/plutil -convert json -r "$MANIFEST_PATH"
-/usr/bin/plutil -lint "$MANIFEST_PATH" >/dev/null
+/usr/bin/plutil -convert xml1 -o /dev/null "$MANIFEST_PATH"
 
 (
   cd "$WORK_DIR"
