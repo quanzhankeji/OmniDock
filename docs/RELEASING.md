@@ -35,6 +35,19 @@ For a separately licensed Developer ID release, use `--license-mode eula --binar
 
 The script refuses a dirty worktree, builds a Universal 2 executable, creates and validates its dSYM, signs the app with the hardened runtime and a secure timestamp, submits the app for notarization, staples the accepted ticket, and verifies Gatekeeper assessment. It produces a ZIP of the stapled app, a dSYM ZIP, a release manifest, and SHA256 checksums under `dist/release/`.
 
+Notarization can occasionally outlast the local wait period. The service continues processing after a timeout. Resume that exact release from the same source commit, version, build, license mode, and signing identity without uploading a duplicate:
+
+```bash
+./script/release.sh \
+  --version <marketing-version> \
+  --build <build-number> \
+  --license-mode gpl \
+  --notary-profile <keychain-profile> \
+  --notary-submission-id <submission-uuid>
+```
+
+The script verifies that the existing submission's archive name matches the rebuilt candidate before waiting and stapling. Use `--notary-timeout <duration>` to override the default two-hour wait. If the rebuilt signature does not match the accepted ticket, stapling fails and the script stops rather than silently creating another submission.
+
 The script does not create a DMG, publish a release, upload source, or modify Git history.
 
 ## Xcode Archives
