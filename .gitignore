@@ -37,6 +37,7 @@
 *.p8
 *.p12
 *.cer
+
 *.mobileprovision
 *.provisionprofile
 ExportOptions.plist
