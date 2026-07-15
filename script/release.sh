@@ -10,6 +10,8 @@ VERSION=""
 BUILD_NUMBER=""
 LICENSE_MODE=""
 NOTARY_PROFILE="${OMNIDOCK_NOTARY_PROFILE:-}"
+NOTARY_SUBMISSION_ID="${OMNIDOCK_NOTARY_SUBMISSION_ID:-}"
+NOTARY_TIMEOUT="${OMNIDOCK_NOTARY_TIMEOUT:-2h}"
 SIGN_IDENTITY="${OMNIDOCK_SIGN_IDENTITY:-}"
 BINARY_LICENSE_PATH="${OMNIDOCK_BINARY_LICENSE:-}"
 BINARY_LICENSE_SHA256=""
@@ -34,11 +36,15 @@ Required:
 Options:
   --binary-license <path>        Approved EULA; required only for eula mode
   --signing-identity <identity>  Developer ID Application identity
+  --notary-submission-id <uuid> Resume an existing submission; do not upload again
+  --notary-timeout <duration>    Maximum wait time (default: 2h)
   --output-dir <directory>       Release output root (default: dist/release)
   -h, --help                     Show this help
 
 Environment equivalents:
   OMNIDOCK_NOTARY_PROFILE
+  OMNIDOCK_NOTARY_SUBMISSION_ID
+  OMNIDOCK_NOTARY_TIMEOUT
   OMNIDOCK_SIGN_IDENTITY
   OMNIDOCK_BINARY_LICENSE
   OMNIDOCK_RELEASE_DIR
@@ -92,6 +98,16 @@ while [[ $# -gt 0 ]]; do
       SIGN_IDENTITY="$2"
       shift 2
       ;;
+    --notary-submission-id)
+      [[ $# -ge 2 ]] || die "--notary-submission-id requires a value"
+      NOTARY_SUBMISSION_ID="$2"
+      shift 2
+      ;;
+    --notary-timeout)
+      [[ $# -ge 2 ]] || die "--notary-timeout requires a value"
+      NOTARY_TIMEOUT="$2"
+      shift 2
+      ;;
     --binary-license)
       [[ $# -ge 2 ]] || die "--binary-license requires a value"
       BINARY_LICENSE_PATH="$2"
@@ -120,6 +136,12 @@ done
   || die "version must contain two or three dot-separated integers"
 [[ "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] \
   || die "build number must be a positive integer"
+[[ "$NOTARY_TIMEOUT" =~ ^[1-9][0-9]*([smh])?$ ]] \
+  || die "notary timeout must be a positive duration such as 30m or 2h"
+if [[ -n "$NOTARY_SUBMISSION_ID" ]]; then
+  [[ "$NOTARY_SUBMISSION_ID" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$ ]] \
+    || die "notary submission ID must be a UUID"
+fi
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
@@ -522,27 +544,66 @@ notarize() {
   local artifact="$1"
   local label="$2"
   local result_path="$WORK_DIR/$label-notary-result.json"
+  local info_path="$WORK_DIR/$label-notary-info.json"
   local log_path="$WORK_DIR/$label-notary-log.json"
+  local expected_name
+  local submission_name
   local status
 
-  log "Submitting $label for notarization"
-  if ! /usr/bin/xcrun notarytool submit "$artifact" \
-    --keychain-profile "$NOTARY_PROFILE" \
-    --wait \
-    --timeout 30m \
-    --output-format json >"$result_path"; then
-    die "notarytool failed while submitting $label"
+  expected_name="$(basename "$artifact")"
+  if [[ -n "$NOTARY_SUBMISSION_ID" ]]; then
+    LAST_SUBMISSION_ID="$NOTARY_SUBMISSION_ID"
+    log "Resuming notarization submission $LAST_SUBMISSION_ID"
+  else
+    log "Submitting $label for notarization"
+    if ! /usr/bin/xcrun notarytool submit "$artifact" \
+      --keychain-profile "$NOTARY_PROFILE" \
+      --no-wait \
+      --output-format json >"$result_path"; then
+      die "notarytool failed while submitting $label"
+    fi
+    LAST_SUBMISSION_ID="$(/usr/bin/plutil -extract id raw "$result_path")"
+    log "Notarization submission ID: $LAST_SUBMISSION_ID"
   fi
 
-  LAST_SUBMISSION_ID="$(/usr/bin/plutil -extract id raw "$result_path")"
-  status="$(/usr/bin/plutil -extract status raw "$result_path")"
+  if ! /usr/bin/xcrun notarytool info \
+    "$LAST_SUBMISSION_ID" \
+    --keychain-profile "$NOTARY_PROFILE" \
+    --output-format json >"$info_path"; then
+    die "could not read notarization submission $LAST_SUBMISSION_ID"
+  fi
+  submission_name="$(/usr/bin/plutil -extract name raw "$info_path")"
+  [[ "$submission_name" == "$expected_name" ]] \
+    || die "submission $LAST_SUBMISSION_ID is for '$submission_name', not '$expected_name'"
+  status="$(/usr/bin/plutil -extract status raw "$info_path")"
+
+  if [[ "$status" == "In Progress" ]]; then
+    log "Waiting up to $NOTARY_TIMEOUT for notarization"
+    if /usr/bin/xcrun notarytool wait \
+      "$LAST_SUBMISSION_ID" \
+      --keychain-profile "$NOTARY_PROFILE" \
+      --timeout "$NOTARY_TIMEOUT" \
+      --output-format json >"$result_path"; then
+      status="$(/usr/bin/plutil -extract status raw "$result_path")"
+    else
+      /usr/bin/xcrun notarytool info \
+        "$LAST_SUBMISSION_ID" \
+        --keychain-profile "$NOTARY_PROFILE" \
+        --output-format json >"$info_path" || true
+      status="$(/usr/bin/plutil -extract status raw "$info_path" 2>/dev/null || true)"
+      if [[ "$status" == "In Progress" ]]; then
+        die "notarization is still in progress; rerun with --notary-submission-id $LAST_SUBMISSION_ID"
+      fi
+    fi
+  fi
+
   if [[ "$status" != "Accepted" ]]; then
     /usr/bin/xcrun notarytool log \
       "$LAST_SUBMISSION_ID" \
       "$log_path" \
       --keychain-profile "$NOTARY_PROFILE" >/dev/null 2>&1 || true
     [[ ! -f "$log_path" ]] || cat "$log_path" >&2
-    die "notarization of $label finished with status '$status'"
+    die "notarization of $label finished with status '${status:-unknown}'"
   fi
 }
 
