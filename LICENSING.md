@@ -18,13 +18,14 @@ Receiving a separate commercial license does not reduce the rights already grant
 
 ## Official Binary Distributions
 
-Official binaries signed or distributed by Chengdu Quanzhan Technology Co., Ltd may be licensed separately from the public source code:
+Official binaries signed or distributed by Chengdu Quanzhan Technology Co., Ltd may use GPL v3 or may be licensed separately from the public source code. The license file bundled with the exact artifact identifies which terms apply:
 
+- An official GitHub release containing `COPYING.txt` is distributed under `GPL-3.0-only` and links to its corresponding source tag.
 - An App Store build is governed by the end-user license presented through the App Store, normally [Apple's Standard EULA](https://www.apple.com/legal/macapps/stdeula/) unless a custom EULA is shown for that distribution.
-- A direct Developer ID distribution must include the separate end-user license that applies to that exact artifact.
+- A separately licensed Developer ID distribution includes `EULA.txt` with the terms that apply to that exact artifact.
 - A locally built or independently distributed GPL version remains governed by GPL v3 and must not be presented as an official company build.
 
-The repository does not contain a production commercial EULA. The direct-release tooling requires maintainers to supply an approved binary EULA from outside the source repository before creating an official Developer ID artifact.
+The repository does not contain a production commercial EULA. The direct-release tooling requires an explicit license mode. GPL mode bundles the repository license; EULA mode requires maintainers to supply an approved binary EULA from outside the source repository.
 
 ## Earlier Versions
 

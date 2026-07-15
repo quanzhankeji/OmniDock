@@ -1,6 +1,6 @@
 # Releasing OmniDock
 
-OmniDock is currently distributed as source code only. This document describes the maintainer release paths without embedding signing identities, account details, credentials, or machine-specific paths.
+This document describes the maintainer release paths without embedding signing identities, account details, credentials, or machine-specific paths.
 
 ## Preflight
 
@@ -13,7 +13,7 @@ swift test -Xswiftc -warnings-as-errors
 
 The generated Xcode project intentionally does not contain a development team. Contributors who need a signed Xcode build select their own team locally in Xcode. Do not commit account-specific signing changes.
 
-The repository source is licensed under `GPL-3.0-only`. Official company binaries use separate end-user terms under the dual-licensing model in `LICENSING.md`. Never treat the repository `LICENSE` file as the EULA for an official separately licensed binary.
+The repository source is licensed under `GPL-3.0-only`. An official GitHub binary may use the same GPL terms, while other company binaries may use separate end-user terms under the dual-licensing model in `LICENSING.md`. Never treat the repository `LICENSE` file as the EULA for a separately licensed binary.
 
 For an unsigned Universal build, use the shared `OmniDock` scheme with signing disabled and both `arm64` and `x86_64` architectures enabled. Verify the executable with `lipo` and confirm that the asset catalog, privacy manifest, and English and Simplified Chinese localizations are present in the app bundle.
 
@@ -25,11 +25,13 @@ The direct-distribution script requires a Developer ID Application identity with
 ./script/release.sh \
   --version <marketing-version> \
   --build <build-number> \
-  --notary-profile <keychain-profile> \
-  --binary-license </secure/path/to/approved-eula.txt>
+  --license-mode gpl \
+  --notary-profile <keychain-profile>
 ```
 
-The binary EULA must be an approved, nonempty file stored outside the source repository. The script refuses the GPL source license as a substitute, records the EULA digest without recording its private path, and installs the EULA as `EULA.txt` in the app bundle.
+GPL mode installs the repository license as `COPYING.txt` and records both the source and binary license as `GPL-3.0-only` in the release manifest.
+
+For a separately licensed Developer ID release, use `--license-mode eula --binary-license </secure/path/to/approved-eula.txt>`. The EULA must be an approved, nonempty file stored outside the source repository. The script refuses the GPL source license as a substitute, records the EULA digest without recording its private path, and installs the EULA as `EULA.txt`.
 
 The script refuses a dirty worktree, builds a Universal 2 executable, creates and validates its dSYM, signs the app with the hardened runtime and a secure timestamp, submits the app for notarization, staples the accepted ticket, and verifies Gatekeeper assessment. It produces a ZIP of the stapled app, a dSYM ZIP, a release manifest, and SHA256 checksums under `dist/release/`.
 

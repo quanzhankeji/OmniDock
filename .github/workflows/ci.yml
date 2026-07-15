@@ -27,6 +27,10 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Validate release tooling
+        run: |
+          bash -n script/release.sh
+          ./script/release.sh --help | grep -q -- '--license-mode <gpl|eula>'
       - name: Verify generated project
         run: ./script/generate_xcode_project.py --check
       - name: Validate App Store metadata inputs

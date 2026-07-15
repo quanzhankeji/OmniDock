@@ -8,10 +8,12 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 VERSION=""
 BUILD_NUMBER=""
+LICENSE_MODE=""
 NOTARY_PROFILE="${OMNIDOCK_NOTARY_PROFILE:-}"
 SIGN_IDENTITY="${OMNIDOCK_SIGN_IDENTITY:-}"
 BINARY_LICENSE_PATH="${OMNIDOCK_BINARY_LICENSE:-}"
 BINARY_LICENSE_SHA256=""
+BUNDLED_LICENSE_NAME=""
 OUTPUT_ROOT="${OMNIDOCK_RELEASE_DIR:-$ROOT_DIR/dist/release}"
 WORK_DIR=""
 BUILT_BINARY=""
@@ -21,15 +23,16 @@ usage() {
   cat <<'USAGE'
 Usage:
   ./script/release.sh --version <marketing-version> --build <build-number> \
-    --notary-profile <keychain-profile> --binary-license <path> [options]
+    --license-mode <gpl|eula> --notary-profile <keychain-profile> [options]
 
 Required:
   --version <version>             CFBundleShortVersionString, for example 1.0
   --build <number>               Positive integer CFBundleVersion
+  --license-mode <gpl|eula>      Binary distribution license
   --notary-profile <profile>     notarytool Keychain profile name
-  --binary-license <path>        Approved EULA for the direct binary
 
 Options:
+  --binary-license <path>        Approved EULA; required only for eula mode
   --signing-identity <identity>  Developer ID Application identity
   --output-dir <directory>       Release output root (default: dist/release)
   -h, --help                     Show this help
@@ -74,6 +77,11 @@ while [[ $# -gt 0 ]]; do
       BUILD_NUMBER="$2"
       shift 2
       ;;
+    --license-mode)
+      [[ $# -ge 2 ]] || die "--license-mode requires a value"
+      LICENSE_MODE="$2"
+      shift 2
+      ;;
     --notary-profile)
       [[ $# -ge 2 ]] || die "--notary-profile requires a value"
       NOTARY_PROFILE="$2"
@@ -106,21 +114,12 @@ done
 
 [[ -n "$VERSION" ]] || die "--version is required"
 [[ -n "$BUILD_NUMBER" ]] || die "--build is required"
+[[ -n "$LICENSE_MODE" ]] || die "--license-mode is required"
 [[ -n "$NOTARY_PROFILE" ]] || die "--notary-profile or OMNIDOCK_NOTARY_PROFILE is required"
-[[ -n "$BINARY_LICENSE_PATH" ]] \
-  || die "--binary-license or OMNIDOCK_BINARY_LICENSE is required"
 [[ "$VERSION" =~ ^[0-9]+([.][0-9]+){1,2}$ ]] \
   || die "version must contain two or three dot-separated integers"
 [[ "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] \
   || die "build number must be a positive integer"
-[[ -f "$BINARY_LICENSE_PATH" && -s "$BINARY_LICENSE_PATH" ]] \
-  || die "binary license must be a nonempty file: $BINARY_LICENSE_PATH"
-BINARY_LICENSE_PATH="$(cd "$(dirname "$BINARY_LICENSE_PATH")" && pwd -P)/$(basename "$BINARY_LICENSE_PATH")"
-case "$BINARY_LICENSE_PATH" in
-  "$ROOT_DIR"/*)
-    die "binary license must be stored outside the source repository"
-    ;;
-esac
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
@@ -155,10 +154,35 @@ for required_file in \
   "$ROOT_DIR/Sources/OmniDockCore/Resources/zh-Hans.lproj/InfoPlist.strings"; do
   [[ -f "$required_file" ]] || die "required release input is missing: $required_file"
 done
-BINARY_LICENSE_SHA256="$(/usr/bin/shasum -a 256 "$BINARY_LICENSE_PATH" | /usr/bin/awk '{ print $1 }')"
 SOURCE_LICENSE_SHA256="$(/usr/bin/shasum -a 256 "$ROOT_DIR/LICENSE" | /usr/bin/awk '{ print $1 }')"
-[[ "$BINARY_LICENSE_SHA256" != "$SOURCE_LICENSE_SHA256" ]] \
-  || die "binary EULA must not be the GPL source license"
+case "$LICENSE_MODE" in
+  gpl)
+    [[ -z "$BINARY_LICENSE_PATH" ]] \
+      || die "--binary-license is not used with GPL distribution"
+    BINARY_LICENSE_PATH="$ROOT_DIR/LICENSE"
+    BINARY_LICENSE_SHA256="$SOURCE_LICENSE_SHA256"
+    BUNDLED_LICENSE_NAME="COPYING.txt"
+    ;;
+  eula)
+    [[ -n "$BINARY_LICENSE_PATH" ]] \
+      || die "--binary-license or OMNIDOCK_BINARY_LICENSE is required for eula mode"
+    [[ -f "$BINARY_LICENSE_PATH" && -s "$BINARY_LICENSE_PATH" ]] \
+      || die "binary license must be a nonempty file: $BINARY_LICENSE_PATH"
+    BINARY_LICENSE_PATH="$(cd "$(dirname "$BINARY_LICENSE_PATH")" && pwd -P)/$(basename "$BINARY_LICENSE_PATH")"
+    case "$BINARY_LICENSE_PATH" in
+      "$ROOT_DIR"/*)
+        die "binary license must be stored outside the source repository"
+        ;;
+    esac
+    BINARY_LICENSE_SHA256="$(/usr/bin/shasum -a 256 "$BINARY_LICENSE_PATH" | /usr/bin/awk '{ print $1 }')"
+    [[ "$BINARY_LICENSE_SHA256" != "$SOURCE_LICENSE_SHA256" ]] \
+      || die "binary EULA must not be the GPL source license"
+    BUNDLED_LICENSE_NAME="EULA.txt"
+    ;;
+  *)
+    die "license mode must be 'gpl' or 'eula'"
+    ;;
+esac
 [[ -d "$ROOT_DIR/Resources/AppIcon.iconset" ]] \
   || die "required release input is missing: $ROOT_DIR/Resources/AppIcon.iconset"
 
@@ -322,7 +346,7 @@ log "Assembling app resources"
   "$ROOT_DIR/Resources/AppIcon.iconset" \
   -o "$APP_RESOURCES/AppIcon.icns"
 /usr/bin/ditto "$ROOT_DIR/Resources/PrivacyInfo.xcprivacy" "$APP_RESOURCES/PrivacyInfo.xcprivacy"
-/usr/bin/ditto "$BINARY_LICENSE_PATH" "$APP_RESOURCES/EULA.txt"
+/usr/bin/ditto "$BINARY_LICENSE_PATH" "$APP_RESOURCES/$BUNDLED_LICENSE_NAME"
 for localization_dir in "$ROOT_DIR"/Sources/OmniDockCore/Resources/*.lproj; do
   [[ -d "$localization_dir" ]] || continue
   /usr/bin/ditto "$localization_dir" "$APP_RESOURCES/$(basename "$localization_dir")"
@@ -449,7 +473,7 @@ verify_bundle_resources() {
     "$contents/Info.plist" \
     "$contents/MacOS/$APP_NAME" \
     "$resources/AppIcon.icns" \
-    "$resources/EULA.txt" \
+    "$resources/$BUNDLED_LICENSE_NAME" \
     "$resources/PrivacyInfo.xcprivacy" \
     "$resources/en.lproj/AppStrings.strings" \
     "$resources/en.lproj/InfoPlist.strings" \
@@ -573,7 +597,14 @@ SDK_VERSION="$(/usr/bin/xcrun --sdk macosx --show-sdk-version)"
 /usr/bin/plutil -insert distribution -string developer-id "$MANIFEST_PATH"
 /usr/bin/plutil -insert licensing -dictionary "$MANIFEST_PATH"
 /usr/bin/plutil -insert licensing.source -string GPL-3.0-only "$MANIFEST_PATH"
-/usr/bin/plutil -insert licensing.binaryEULASHA256 -string "$BINARY_LICENSE_SHA256" "$MANIFEST_PATH"
+/usr/bin/plutil -insert licensing.mode -string "$LICENSE_MODE" "$MANIFEST_PATH"
+/usr/bin/plutil -insert licensing.bundledFile -string "$BUNDLED_LICENSE_NAME" "$MANIFEST_PATH"
+if [[ "$LICENSE_MODE" == "gpl" ]]; then
+  /usr/bin/plutil -insert licensing.binary -string GPL-3.0-only "$MANIFEST_PATH"
+else
+  /usr/bin/plutil -insert licensing.binary -string separate-eula "$MANIFEST_PATH"
+  /usr/bin/plutil -insert licensing.binaryEULASHA256 -string "$BINARY_LICENSE_SHA256" "$MANIFEST_PATH"
+fi
 /usr/bin/plutil -insert hardenedRuntime -bool true "$MANIFEST_PATH"
 /usr/bin/plutil -insert architectures -array "$MANIFEST_PATH"
 /usr/bin/plutil -insert architectures.0 -string arm64 "$MANIFEST_PATH"

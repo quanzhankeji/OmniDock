@@ -21,9 +21,11 @@ OmniDock does not include analytics, advertising SDKs, or third-party packages. 
 - Input Monitoring permission for Dock click detection on macOS versions that require it
 - Screen Recording permission for window thumbnails, including live images and one-time static snapshots
 
-## Build And Run
+## Download
 
-OmniDock is currently distributed as source code only. No official signed app download is published from this repository.
+Official releases are available from [GitHub Releases](https://github.com/quanzhankeji/OmniDock/releases/latest). The Universal app ZIP supports both Apple silicon and Intel Macs, is signed with Developer ID, and is notarized by Apple. GitHub also provides ZIP and TAR.GZ archives of the corresponding source code for each release.
+
+## Build And Run
 
 ```bash
 ./script/build_and_run.sh
@@ -83,6 +85,6 @@ Report potential vulnerabilities through the private process in [SECURITY.md](SE
 
 ## Licensing
 
-The public source code is licensed under GNU GPL version 3 only (`GPL-3.0-only`). Official App Store and Developer ID binaries may be offered under separate end-user terms by Chengdu Quanzhan Technology Co., Ltd. See [LICENSING.md](LICENSING.md) for the dual-licensing model and treatment of earlier MIT-licensed versions.
+The public source code is licensed under GNU GPL version 3 only (`GPL-3.0-only`). Official GitHub release binaries are also distributed under GPL v3. App Store and other Developer ID binaries may be offered under separate end-user terms by Chengdu Quanzhan Technology Co., Ltd. See [LICENSING.md](LICENSING.md) for the dual-licensing model and treatment of earlier MIT-licensed versions.
 
 The GPL source license does not grant rights to the OmniDock name, logo, or app icon. See [TRADEMARKS.md](TRADEMARKS.md).
