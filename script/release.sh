@@ -642,7 +642,7 @@ SWIFT_TOOLCHAIN="$(/usr/bin/swift --version | /usr/bin/awk 'NR == 1 { print; exi
 XCODE_TOOLCHAIN="$(/usr/bin/xcodebuild -version | /usr/bin/awk 'NR == 1 { first = $0 } NR == 2 { print first " " $0 }')"
 SDK_VERSION="$(/usr/bin/xcrun --sdk macosx --show-sdk-version)"
 
-/usr/bin/plutil -create json "$MANIFEST_PATH"
+/usr/bin/plutil -create xml1 "$MANIFEST_PATH"
 /usr/bin/plutil -insert schemaVersion -integer 1 "$MANIFEST_PATH"
 /usr/bin/plutil -insert appName -string "$APP_NAME" "$MANIFEST_PATH"
 /usr/bin/plutil -insert bundleIdentifier -string "$BUNDLE_ID" "$MANIFEST_PATH"
