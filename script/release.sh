@@ -20,6 +20,7 @@ OUTPUT_ROOT="${OMNIDOCK_RELEASE_DIR:-$ROOT_DIR/dist/release}"
 WORK_DIR=""
 BUILT_BINARY=""
 LAST_SUBMISSION_ID=""
+RELEASE_SUCCEEDED=0
 
 usage() {
   cat <<'USAGE'
@@ -65,7 +66,11 @@ log() {
 
 cleanup() {
   if [[ -n "$WORK_DIR" && -d "$WORK_DIR" ]]; then
-    rm -rf "$WORK_DIR"
+    if [[ "$RELEASE_SUCCEEDED" -eq 1 ]]; then
+      rm -rf "$WORK_DIR"
+    else
+      echo "release: preserving failed work directory: $WORK_DIR" >&2
+    fi
   fi
 }
 
@@ -700,6 +705,7 @@ mkdir -p "$RELEASE_DIR"
 /usr/bin/ditto "$MANIFEST_PATH" "$RELEASE_DIR/$(basename "$MANIFEST_PATH")"
 /usr/bin/ditto "$CHECKSUM_PATH" "$RELEASE_DIR/$(basename "$CHECKSUM_PATH")"
 
+RELEASE_SUCCEEDED=1
 log "Release artifacts are ready in $RELEASE_DIR"
 for artifact in "$RELEASE_DIR"/*; do
   echo "  $(basename "$artifact")"
