@@ -25,6 +25,13 @@ OmniDock does not include analytics, advertising SDKs, or third-party packages. 
 
 Official releases are available from [GitHub Releases](https://github.com/quanzhankeji/OmniDock/releases/latest). The Universal app ZIP supports both Apple silicon and Intel Macs, is signed with Developer ID, and is notarized by Apple. GitHub also provides ZIP and TAR.GZ archives of the corresponding source code for each release.
 
+To install with Homebrew:
+
+```bash
+brew tap quanzhankeji/tap
+brew install --cask omnidock
+```
+
 ## Build And Run
 
 ```bash
