@@ -29,11 +29,18 @@ The direct-distribution script requires a Developer ID Application identity with
   --notary-profile <keychain-profile>
 ```
 
-GPL mode installs the repository license as `COPYING.txt` and records both the source and binary license as `GPL-3.0-only` in the release manifest.
+GPL mode installs the repository license as `COPYING.txt` and records both the source and binary license as `GPL-3.0-only` in the private release manifest.
 
 For a separately licensed Developer ID release, use `--license-mode eula --binary-license </secure/path/to/approved-eula.txt>`. The EULA must be an approved, nonempty file stored outside the source repository. The script refuses the GPL source license as a substitute, records the EULA digest without recording its private path, and installs the EULA as `EULA.txt`.
 
-The script refuses a dirty worktree, builds a Universal 2 executable, creates and validates its dSYM, signs the app with the hardened runtime and a secure timestamp, submits the app for notarization, staples the accepted ticket, and verifies Gatekeeper assessment. It produces a ZIP of the stapled app, a dSYM ZIP, a release manifest, and SHA256 checksums under `dist/release/`.
+The script refuses a dirty worktree, builds a Universal 2 executable, creates and validates its dSYM, signs the app with the hardened runtime and a secure timestamp, submits the app for notarization, staples the accepted ticket, and verifies Gatekeeper assessment. It then creates, signs, notarizes, and staples a DMG.
+
+Each release is split into two output directories:
+
+- `public/` contains only `OmniDock-<version>.dmg` and `OmniDock-<version>.zip`. These are the binary assets uploaded to GitHub Releases.
+- `private/` contains the dSYM, release manifest, and SHA-256 records. Retain these for diagnostics and release traceability; do not upload them as public Release assets.
+
+GitHub automatically adds source ZIP and TAR.GZ archives for the release tag. They do not need to be generated or uploaded by the release script.
 
 Notarization can occasionally outlast the local wait period. The service continues processing after a timeout. Resume that exact release from the same source commit, version, build, license mode, and signing identity without uploading a duplicate:
 
@@ -48,7 +55,9 @@ Notarization can occasionally outlast the local wait period. The service continu
 
 The script verifies that the existing submission's archive name matches the rebuilt candidate before waiting and stapling. Use `--notary-timeout <duration>` to override the default two-hour wait. If the rebuilt signature does not match the accepted ticket, stapling fails and the script stops rather than silently creating another submission.
 
-The script does not create a DMG, publish a release, upload source, or modify Git history.
+If DMG notarization times out independently, resume it with `--dmg-notary-submission-id <submission-uuid>`.
+
+The script does not publish a release, upload source, or modify Git history.
 
 ## Xcode Archives
 
