@@ -11,6 +11,7 @@ BUILD_NUMBER=""
 LICENSE_MODE=""
 NOTARY_PROFILE="${OMNIDOCK_NOTARY_PROFILE:-}"
 NOTARY_SUBMISSION_ID="${OMNIDOCK_NOTARY_SUBMISSION_ID:-}"
+DMG_NOTARY_SUBMISSION_ID="${OMNIDOCK_DMG_NOTARY_SUBMISSION_ID:-}"
 NOTARY_TIMEOUT="${OMNIDOCK_NOTARY_TIMEOUT:-2h}"
 SIGN_IDENTITY="${OMNIDOCK_SIGN_IDENTITY:-}"
 BINARY_LICENSE_PATH="${OMNIDOCK_BINARY_LICENSE:-}"
@@ -38,6 +39,8 @@ Options:
   --binary-license <path>        Approved EULA; required only for eula mode
   --signing-identity <identity>  Developer ID Application identity
   --notary-submission-id <uuid> Resume an existing submission; do not upload again
+  --dmg-notary-submission-id <uuid>
+                                 Resume an existing DMG submission
   --notary-timeout <duration>    Maximum wait time (default: 2h)
   --output-dir <directory>       Release output root (default: dist/release)
   -h, --help                     Show this help
@@ -45,6 +48,7 @@ Options:
 Environment equivalents:
   OMNIDOCK_NOTARY_PROFILE
   OMNIDOCK_NOTARY_SUBMISSION_ID
+  OMNIDOCK_DMG_NOTARY_SUBMISSION_ID
   OMNIDOCK_NOTARY_TIMEOUT
   OMNIDOCK_SIGN_IDENTITY
   OMNIDOCK_BINARY_LICENSE
@@ -108,6 +112,11 @@ while [[ $# -gt 0 ]]; do
       NOTARY_SUBMISSION_ID="$2"
       shift 2
       ;;
+    --dmg-notary-submission-id)
+      [[ $# -ge 2 ]] || die "--dmg-notary-submission-id requires a value"
+      DMG_NOTARY_SUBMISSION_ID="$2"
+      shift 2
+      ;;
     --notary-timeout)
       [[ $# -ge 2 ]] || die "--notary-timeout requires a value"
       NOTARY_TIMEOUT="$2"
@@ -147,13 +156,17 @@ if [[ -n "$NOTARY_SUBMISSION_ID" ]]; then
   [[ "$NOTARY_SUBMISSION_ID" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$ ]] \
     || die "notary submission ID must be a UUID"
 fi
+if [[ -n "$DMG_NOTARY_SUBMISSION_ID" ]]; then
+  [[ "$DMG_NOTARY_SUBMISSION_ID" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$ ]] \
+    || die "DMG notary submission ID must be a UUID"
+fi
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
 }
 
 for command_name in \
-  awk codesign date ditto dsymutil dwarfdump git iconutil lipo plutil \
+  awk codesign date ditto dsymutil dwarfdump git hdiutil iconutil lipo ln plutil \
   security shasum spctl stat strip swift xattr xcodebuild xcrun; do
   require_command "$command_name"
 done
@@ -261,8 +274,11 @@ if ! /usr/bin/xcrun notarytool history \
   die "notarytool could not authenticate with Keychain profile '$NOTARY_PROFILE'"
 fi
 
-ARTIFACT_BASE="$APP_NAME-$VERSION-build-$BUILD_NUMBER"
+PUBLIC_ARTIFACT_BASE="$APP_NAME-$VERSION"
+PRIVATE_ARTIFACT_BASE="$APP_NAME-$VERSION-build-$BUILD_NUMBER"
 RELEASE_DIR="$OUTPUT_ROOT/$VERSION-$BUILD_NUMBER"
+PUBLIC_RELEASE_DIR="$RELEASE_DIR/public"
+PRIVATE_RELEASE_DIR="$RELEASE_DIR/private"
 [[ ! -e "$RELEASE_DIR" ]] \
   || die "release output already exists: $RELEASE_DIR"
 
@@ -274,11 +290,13 @@ APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 DSYM_BUNDLE="$WORK_DIR/$APP_NAME.app.dSYM"
-DSYM_ZIP="$WORK_DIR/$ARTIFACT_BASE.dSYM.zip"
-APP_NOTARY_ZIP="$WORK_DIR/$ARTIFACT_BASE-notary.zip"
-APP_ZIP="$WORK_DIR/$ARTIFACT_BASE.zip"
-MANIFEST_PATH="$WORK_DIR/$ARTIFACT_BASE-manifest.json"
-CHECKSUM_PATH="$WORK_DIR/$ARTIFACT_BASE-SHA256SUMS"
+DSYM_ZIP="$WORK_DIR/$PRIVATE_ARTIFACT_BASE.dSYM.zip"
+APP_NOTARY_ZIP="$WORK_DIR/$PRIVATE_ARTIFACT_BASE-notary.zip"
+APP_ZIP="$WORK_DIR/$PUBLIC_ARTIFACT_BASE.zip"
+DMG_PATH="$WORK_DIR/$PUBLIC_ARTIFACT_BASE.dmg"
+DMG_STAGING_DIR="$WORK_DIR/dmg-root"
+MANIFEST_PATH="$WORK_DIR/$PRIVATE_ARTIFACT_BASE-manifest.json"
+CHECKSUM_PATH="$WORK_DIR/$PRIVATE_ARTIFACT_BASE-SHA256SUMS"
 
 log "Running release source checks"
 "$ROOT_DIR/script/generate_xcode_project.py" --check
@@ -548,6 +566,8 @@ verify_signed_app() {
 notarize() {
   local artifact="$1"
   local label="$2"
+  local resume_id="$3"
+  local resume_option="$4"
   local result_path="$WORK_DIR/$label-notary-result.json"
   local info_path="$WORK_DIR/$label-notary-info.json"
   local log_path="$WORK_DIR/$label-notary-log.json"
@@ -556,8 +576,8 @@ notarize() {
   local status
 
   expected_name="$(basename "$artifact")"
-  if [[ -n "$NOTARY_SUBMISSION_ID" ]]; then
-    LAST_SUBMISSION_ID="$NOTARY_SUBMISSION_ID"
+  if [[ -n "$resume_id" ]]; then
+    LAST_SUBMISSION_ID="$resume_id"
     log "Resuming notarization submission $LAST_SUBMISSION_ID"
   else
     log "Submitting $label for notarization"
@@ -597,7 +617,7 @@ notarize() {
         --output-format json >"$info_path" || true
       status="$(/usr/bin/plutil -extract status raw "$info_path" 2>/dev/null || true)"
       if [[ "$status" == "In Progress" ]]; then
-        die "notarization is still in progress; rerun with --notary-submission-id $LAST_SUBMISSION_ID"
+        die "notarization is still in progress; rerun with $resume_option $LAST_SUBMISSION_ID"
       fi
     fi
   fi
@@ -626,21 +646,54 @@ log "Clearing extended attributes and signing app"
 verify_signed_app "$APP_BUNDLE"
 
 /usr/bin/ditto -c -k --keepParent "$APP_BUNDLE" "$APP_NOTARY_ZIP"
-notarize "$APP_NOTARY_ZIP" app
+notarize "$APP_NOTARY_ZIP" app "$NOTARY_SUBMISSION_ID" --notary-submission-id
 APP_SUBMISSION_ID="$LAST_SUBMISSION_ID"
 /usr/bin/xcrun stapler staple -v "$APP_BUNDLE"
 /usr/bin/xcrun stapler validate -v "$APP_BUNDLE"
 verify_signed_app "$APP_BUNDLE"
 /usr/sbin/spctl --assess --type execute --verbose=4 "$APP_BUNDLE"
 
-log "Creating app and dSYM archives, manifest, and checksums"
+log "Creating public ZIP and private dSYM archive"
 [[ "$(git -C "$ROOT_DIR" rev-parse HEAD)" == "$SOURCE_COMMIT" ]] \
   || die "source commit changed while the release was being built"
 [[ -z "$(git -C "$ROOT_DIR" status --porcelain=v1 --untracked-files=all)" ]] \
   || die "worktree changed while the release was being built"
 /usr/bin/ditto -c -k --keepParent "$APP_BUNDLE" "$APP_ZIP"
 /usr/bin/ditto -c -k --keepParent "$DSYM_BUNDLE" "$DSYM_ZIP"
+
+log "Creating, signing, and notarizing DMG"
+mkdir -p "$DMG_STAGING_DIR"
+/usr/bin/ditto "$APP_BUNDLE" "$DMG_STAGING_DIR/$APP_NAME.app"
+/bin/ln -s /Applications "$DMG_STAGING_DIR/Applications"
+/usr/bin/hdiutil create \
+  -volname "$APP_NAME" \
+  -srcfolder "$DMG_STAGING_DIR" \
+  -format UDZO \
+  -ov \
+  "$DMG_PATH" >/dev/null
+/usr/bin/codesign \
+  --force \
+  --timestamp \
+  --sign "$SIGN_IDENTITY" \
+  "$DMG_PATH"
+/usr/bin/codesign --verify --verbose=4 "$DMG_PATH"
+/usr/bin/hdiutil verify "$DMG_PATH" >/dev/null
+notarize "$DMG_PATH" dmg "$DMG_NOTARY_SUBMISSION_ID" --dmg-notary-submission-id
+DMG_SUBMISSION_ID="$LAST_SUBMISSION_ID"
+/usr/bin/xcrun stapler staple -v "$DMG_PATH"
+/usr/bin/xcrun stapler validate -v "$DMG_PATH"
+/usr/bin/codesign --verify --verbose=4 "$DMG_PATH"
+/usr/bin/hdiutil verify "$DMG_PATH" >/dev/null
+/usr/sbin/spctl \
+  --assess \
+  --type open \
+  --context context:primary-signature \
+  --verbose=4 \
+  "$DMG_PATH"
+
+log "Creating private manifest and checksums"
 APP_SHA256="$(/usr/bin/shasum -a 256 "$APP_ZIP" | /usr/bin/awk '{ print $1 }')"
+DMG_SHA256="$(/usr/bin/shasum -a 256 "$DMG_PATH" | /usr/bin/awk '{ print $1 }')"
 DSYM_SHA256="$(/usr/bin/shasum -a 256 "$DSYM_ZIP" | /usr/bin/awk '{ print $1 }')"
 BUILT_AT="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 SWIFT_TOOLCHAIN="$(/usr/bin/swift --version | /usr/bin/awk 'NR == 1 { print; exit }')"
@@ -677,6 +730,7 @@ fi
 /usr/bin/plutil -insert architectures.1 -string x86_64 "$MANIFEST_PATH"
 /usr/bin/plutil -insert notarization -dictionary "$MANIFEST_PATH"
 /usr/bin/plutil -insert notarization.appSubmissionId -string "$APP_SUBMISSION_ID" "$MANIFEST_PATH"
+/usr/bin/plutil -insert notarization.dmgSubmissionId -string "$DMG_SUBMISSION_ID" "$MANIFEST_PATH"
 /usr/bin/plutil -insert artifacts -array "$MANIFEST_PATH"
 /usr/bin/plutil -insert artifacts.0 -dictionary "$MANIFEST_PATH"
 /usr/bin/plutil -insert artifacts.0.name -string "$(basename "$APP_ZIP")" "$MANIFEST_PATH"
@@ -684,10 +738,15 @@ fi
 /usr/bin/plutil -insert artifacts.0.sha256 -string "$APP_SHA256" "$MANIFEST_PATH"
 /usr/bin/plutil -insert artifacts.0.bytes -integer "$(/usr/bin/stat -f '%z' "$APP_ZIP")" "$MANIFEST_PATH"
 /usr/bin/plutil -insert artifacts.1 -dictionary "$MANIFEST_PATH"
-/usr/bin/plutil -insert artifacts.1.name -string "$(basename "$DSYM_ZIP")" "$MANIFEST_PATH"
-/usr/bin/plutil -insert artifacts.1.kind -string dsym "$MANIFEST_PATH"
-/usr/bin/plutil -insert artifacts.1.sha256 -string "$DSYM_SHA256" "$MANIFEST_PATH"
-/usr/bin/plutil -insert artifacts.1.bytes -integer "$(/usr/bin/stat -f '%z' "$DSYM_ZIP")" "$MANIFEST_PATH"
+/usr/bin/plutil -insert artifacts.1.name -string "$(basename "$DMG_PATH")" "$MANIFEST_PATH"
+/usr/bin/plutil -insert artifacts.1.kind -string dmg "$MANIFEST_PATH"
+/usr/bin/plutil -insert artifacts.1.sha256 -string "$DMG_SHA256" "$MANIFEST_PATH"
+/usr/bin/plutil -insert artifacts.1.bytes -integer "$(/usr/bin/stat -f '%z' "$DMG_PATH")" "$MANIFEST_PATH"
+/usr/bin/plutil -insert artifacts.2 -dictionary "$MANIFEST_PATH"
+/usr/bin/plutil -insert artifacts.2.name -string "$(basename "$DSYM_ZIP")" "$MANIFEST_PATH"
+/usr/bin/plutil -insert artifacts.2.kind -string dsym "$MANIFEST_PATH"
+/usr/bin/plutil -insert artifacts.2.sha256 -string "$DSYM_SHA256" "$MANIFEST_PATH"
+/usr/bin/plutil -insert artifacts.2.bytes -integer "$(/usr/bin/stat -f '%z' "$DSYM_ZIP")" "$MANIFEST_PATH"
 /usr/bin/plutil -convert json -r "$MANIFEST_PATH"
 /usr/bin/plutil -convert xml1 -o /dev/null "$MANIFEST_PATH"
 
@@ -695,18 +754,25 @@ fi
   cd "$WORK_DIR"
   /usr/bin/shasum -a 256 \
     "$(basename "$APP_ZIP")" \
+    "$(basename "$DMG_PATH")" \
     "$(basename "$DSYM_ZIP")" \
     "$(basename "$MANIFEST_PATH")" >"$(basename "$CHECKSUM_PATH")"
 )
 
-mkdir -p "$RELEASE_DIR"
-/usr/bin/ditto "$APP_ZIP" "$RELEASE_DIR/$(basename "$APP_ZIP")"
-/usr/bin/ditto "$DSYM_ZIP" "$RELEASE_DIR/$(basename "$DSYM_ZIP")"
-/usr/bin/ditto "$MANIFEST_PATH" "$RELEASE_DIR/$(basename "$MANIFEST_PATH")"
-/usr/bin/ditto "$CHECKSUM_PATH" "$RELEASE_DIR/$(basename "$CHECKSUM_PATH")"
+mkdir -p "$PUBLIC_RELEASE_DIR" "$PRIVATE_RELEASE_DIR"
+/usr/bin/ditto "$APP_ZIP" "$PUBLIC_RELEASE_DIR/$(basename "$APP_ZIP")"
+/usr/bin/ditto "$DMG_PATH" "$PUBLIC_RELEASE_DIR/$(basename "$DMG_PATH")"
+/usr/bin/ditto "$DSYM_ZIP" "$PRIVATE_RELEASE_DIR/$(basename "$DSYM_ZIP")"
+/usr/bin/ditto "$MANIFEST_PATH" "$PRIVATE_RELEASE_DIR/$(basename "$MANIFEST_PATH")"
+/usr/bin/ditto "$CHECKSUM_PATH" "$PRIVATE_RELEASE_DIR/$(basename "$CHECKSUM_PATH")"
 
 RELEASE_SUCCEEDED=1
 log "Release artifacts are ready in $RELEASE_DIR"
-for artifact in "$RELEASE_DIR"/*; do
-  echo "  $(basename "$artifact")"
+echo "  Public GitHub assets:"
+for artifact in "$PUBLIC_RELEASE_DIR"/*; do
+  echo "    $(basename "$artifact")"
+done
+echo "  Private release records:"
+for artifact in "$PRIVATE_RELEASE_DIR"/*; do
+  echo "    $(basename "$artifact")"
 done

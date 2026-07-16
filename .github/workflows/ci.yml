@@ -31,6 +31,7 @@ jobs:
         run: |
           bash -n script/release.sh
           ./script/release.sh --help | grep -q -- '--license-mode <gpl|eula>'
+          ./script/release.sh --help | grep -q -- '--dmg-notary-submission-id <uuid>'
       - name: Verify generated project
         run: ./script/generate_xcode_project.py --check
       - name: Validate App Store metadata inputs
