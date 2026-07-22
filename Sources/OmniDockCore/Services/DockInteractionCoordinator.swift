@@ -100,6 +100,15 @@ private final class RetainedStaticPreviewCaptureSession: PreviewCaptureSession {
     func stop() {}
 }
 
+struct DockPreviewHoverSuppressionPolicy {
+    static func shouldSuspend(
+        commandTabPreviewIsActive: Bool,
+        windowCycleIsActive: Bool
+    ) -> Bool {
+        commandTabPreviewIsActive || windowCycleIsActive
+    }
+}
+
 @MainActor
 public final class DockInteractionCoordinator {
     private let settings: SettingsStore
@@ -131,6 +140,7 @@ public final class DockInteractionCoordinator {
     private var lastPreviewWindowValidationAt: Date?
     private var isClickMonitoringSuspended = false
     private var isCommandTabPreviewActive = false
+    private var isWindowCycleActive = false
     private var powerStateObserver: NSObjectProtocol?
     private let proxyOwnerStore: DockProxyOwnerStore
     private let proxyTargetRouter: DockProxyTargetRouter
@@ -259,6 +269,19 @@ public final class DockInteractionCoordinator {
         }
         isCommandTabPreviewActive = isActive
         if isActive {
+            hidePreview()
+            hoverTarget = nil
+            hoverBeganAt = nil
+        }
+    }
+
+    public func setWindowCycleActive(_ isActive: Bool) {
+        guard isWindowCycleActive != isActive else {
+            return
+        }
+        isWindowCycleActive = isActive
+        if isActive {
+            // The switcher temporarily owns the shared preview panel.
             hidePreview()
             hoverTarget = nil
             hoverBeganAt = nil
@@ -408,7 +431,10 @@ public final class DockInteractionCoordinator {
     }
 
     private func handleHoverTick() {
-        guard !isCommandTabPreviewActive else {
+        guard !DockPreviewHoverSuppressionPolicy.shouldSuspend(
+            commandTabPreviewIsActive: isCommandTabPreviewActive,
+            windowCycleIsActive: isWindowCycleActive
+        ) else {
             return
         }
         let point = NSEvent.mouseLocation

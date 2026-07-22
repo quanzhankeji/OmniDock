@@ -89,6 +89,12 @@ final class ShortcutRecorderView: NSControl {
         }
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateDisplay()
+        updateAppearance()
+    }
+
     private func setup() {
         wantsLayer = true
         translatesAutoresizingMaskIntoConstraints = false
@@ -163,14 +169,16 @@ final class ShortcutRecorderView: NSControl {
         } else {
             label.stringValue = AppStrings.text(.hotkeyRecord)
         }
-        label.textColor = isEnabled ? .labelColor : .disabledControlTextColor
+        let palette = OmniDockTheme.palette(for: effectiveAppearance)
+        label.textColor = isEnabled ? palette.primaryText : palette.disabledText
     }
 
     private func updateAppearance() {
         layer?.cornerRadius = 6
         layer?.borderWidth = isRecording ? 1.5 : 1
-        layer?.borderColor = (isRecording ? NSColor.controlAccentColor : NSColor.separatorColor).cgColor
-        layer?.backgroundColor = (isEnabled ? NSColor.textBackgroundColor : NSColor.controlBackgroundColor).cgColor
+        let palette = OmniDockTheme.palette(for: effectiveAppearance)
+        layer?.borderColor = (isRecording ? palette.accent : palette.separator).cgColor
+        layer?.backgroundColor = (isEnabled ? palette.surface : palette.raisedSurface).cgColor
     }
 }
 

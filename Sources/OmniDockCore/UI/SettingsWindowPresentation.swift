@@ -43,13 +43,17 @@ final class PermissionStatusView: NSControl {
 
     func update(isGranted: Bool) {
         self.isGranted = isGranted
-        dotView.layer?.backgroundColor = (isGranted ? NSColor.systemGreen : NSColor.systemGray).cgColor
         let status = isGranted ? AppStrings.text(.permissionGranted) : AppStrings.text(.permissionNotGranted)
         label.stringValue = AppStrings.format(.permissionStatusFormat, kind.title, status)
-        label.textColor = isGranted ? .secondaryLabelColor : .labelColor
         toolTip = isGranted ? nil : AppStrings.format(.permissionOpenTooltip, kind.title)
+        applyTheme()
         needsDisplay = true
         window?.invalidateCursorRects(for: self)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyTheme()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -92,6 +96,14 @@ final class PermissionStatusView: NSControl {
             label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
             label.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
+
+        applyTheme()
+    }
+
+    private func applyTheme() {
+        let palette = OmniDockTheme.palette(for: effectiveAppearance)
+        dotView.layer?.backgroundColor = (isGranted ? palette.success : palette.neutral).cgColor
+        label.textColor = isGranted ? palette.secondaryText : palette.primaryText
     }
 }
 
@@ -120,7 +132,6 @@ final class AppHotkeyRowView: NSView {
 
     private func setup() {
         wantsLayer = true
-        layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.7).cgColor
         layer?.cornerRadius = 8
         translatesAutoresizingMaskIntoConstraints = false
 
@@ -194,6 +205,20 @@ final class AppHotkeyRowView: NSView {
             removeButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
             removeButton.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
+
+        applyTheme()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyTheme()
+    }
+
+    private func applyTheme() {
+        layer?.backgroundColor = OmniDockTheme.palette(for: effectiveAppearance)
+            .raisedSurface
+            .withAlphaComponent(0.88)
+            .cgColor
     }
 
     private var isAvailable: Bool {

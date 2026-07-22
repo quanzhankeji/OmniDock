@@ -6,6 +6,7 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
     private let permissionService: PermissionService
     private let coordinator: DockInteractionCoordinator
     private let hotkeyRegistrationStatus: AppHotkeyRegistrationStatusStore
+    private let windowCycleRegistrationStatus: WindowCycleRegistrationStatusStore
     private let presentationCoordinator: ApplicationPresentationCoordinator
     private let onPermissionGateRequired: (PermissionFeature) -> Void
     private let onOpenPermissionOnboarding: () -> Void
@@ -16,16 +17,18 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
         permissionService: permissionService,
         coordinator: coordinator,
         hotkeyRegistrationStatus: hotkeyRegistrationStatus,
+        windowCycleRegistrationStatus: windowCycleRegistrationStatus,
         presentationCoordinator: presentationCoordinator,
         onPermissionGateRequired: onPermissionGateRequired,
         onOpenPermissionOnboarding: onOpenPermissionOnboarding
     )
 
-    public convenience init(
+    convenience init(
         settings: SettingsStore,
         permissionService: PermissionService,
         coordinator: DockInteractionCoordinator,
         hotkeyRegistrationStatus: AppHotkeyRegistrationStatusStore,
+        windowCycleRegistrationStatus: WindowCycleRegistrationStatusStore? = nil,
         onPermissionGateRequired: @escaping (PermissionFeature) -> Void,
         onOpenPermissionOnboarding: @escaping () -> Void = {}
     ) {
@@ -34,6 +37,8 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
             permissionService: permissionService,
             coordinator: coordinator,
             hotkeyRegistrationStatus: hotkeyRegistrationStatus,
+            windowCycleRegistrationStatus: windowCycleRegistrationStatus
+                ?? WindowCycleRegistrationStatusStore(),
             presentationCoordinator: ApplicationPresentationCoordinator(),
             onPermissionGateRequired: onPermissionGateRequired,
             onOpenPermissionOnboarding: onOpenPermissionOnboarding
@@ -45,6 +50,7 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
         permissionService: PermissionService,
         coordinator: DockInteractionCoordinator,
         hotkeyRegistrationStatus: AppHotkeyRegistrationStatusStore,
+        windowCycleRegistrationStatus: WindowCycleRegistrationStatusStore,
         presentationCoordinator: ApplicationPresentationCoordinator,
         onPermissionGateRequired: @escaping (PermissionFeature) -> Void,
         onOpenPermissionOnboarding: @escaping () -> Void
@@ -53,6 +59,7 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
         self.permissionService = permissionService
         self.coordinator = coordinator
         self.hotkeyRegistrationStatus = hotkeyRegistrationStatus
+        self.windowCycleRegistrationStatus = windowCycleRegistrationStatus
         self.presentationCoordinator = presentationCoordinator
         self.onPermissionGateRequired = onPermissionGateRequired
         self.onOpenPermissionOnboarding = onOpenPermissionOnboarding

@@ -1,17 +1,44 @@
 import AppKit
-import ApplicationServices
 import CoreImage
 import ScreenCaptureKit
 
+enum ShareableContentReusePolicy {
+    static func canReuse(
+        capturedAt: Date,
+        now: Date = Date(),
+        maximumAge: TimeInterval
+    ) -> Bool {
+        let age = now.timeIntervalSince(capturedAt)
+        return age >= 0 && age <= maximumAge
+    }
+}
+
 public final class ScreenCapturePreviewService {
+    private struct CachedShareableContent {
+        let content: SCShareableContent
+        let capturedAt: Date
+    }
+
+    private static let shareableContentCacheLifetime: TimeInterval = 0.75
+
     private let ciContext = CIContext()
+    private let windowInventory: WindowInventoryService?
     private let snapshotCache = PreviewSnapshotCache()
     private let snapshotRequests = PreviewCaptureRequestRegistry<any PreviewCaptureSession> { session in
         session.stop()
     }
     private var snapshotCleanupWorkItem: DispatchWorkItem?
+    private var cachedShareableContent: CachedShareableContent?
+    private var pendingShareableContentCompletions: [(SCShareableContent?, Error?) -> Void] = []
+    private var isLoadingShareableContent = false
 
-    public init() {}
+    public convenience init() {
+        self.init(windowInventory: nil)
+    }
+
+    init(windowInventory: WindowInventoryService?) {
+        self.windowInventory = windowInventory
+    }
 
     func cachedSnapshotWindows(for target: DockAppTarget) -> [PreviewWindowInfo] {
         snapshotCache.windows(for: target.processIdentifier)
@@ -44,6 +71,9 @@ public final class ScreenCapturePreviewService {
 
     func removeCachedSnapshot(matching window: PreviewWindowInfo) {
         dispatchPrecondition(condition: .onQueue(.main))
+        MainActor.assumeIsolated {
+            windowInventory?.remove(window)
+        }
         snapshotCache.removeWindow(
             processIdentifier: window.processIdentifier,
             matching: window
@@ -53,6 +83,7 @@ public final class ScreenCapturePreviewService {
     func clearAllCachedSnapshots() {
         dispatchPrecondition(condition: .onQueue(.main))
         snapshotCache.clearAll()
+        cachedShareableContent = nil
         snapshotCleanupWorkItem?.cancel()
         snapshotCleanupWorkItem = nil
         snapshotRequests.clearAll()
@@ -104,7 +135,7 @@ public final class ScreenCapturePreviewService {
             finish()
         }
 
-        loadWindows(for: target) { [weak self] bundle in
+        loadWindows(for: target, allowsInventoryReuse: false) { [weak self] bundle in
             guard let self, self.snapshotRequests.isCurrent(request) else {
                 return
             }
@@ -153,30 +184,59 @@ public final class ScreenCapturePreviewService {
     }
 
     func loadWindows(for target: DockAppTarget, completion: @escaping (PreviewWindowSnapshot) -> Void) {
-        SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { [self] content, error in
+        loadWindows(for: target, allowsInventoryReuse: true, completion: completion)
+    }
+
+    private func loadWindows(
+        for target: DockAppTarget,
+        allowsInventoryReuse: Bool,
+        completion: @escaping (PreviewWindowSnapshot) -> Void
+    ) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        if allowsInventoryReuse,
+           let snapshot = MainActor.assumeIsolated({
+               windowInventory?.previewSnapshot(for: target)
+           }) {
+            completion(snapshot)
+            return
+        }
+
+        let inventoryRequestRevision = MainActor.assumeIsolated {
+            windowInventory?.beginSnapshotRequest(for: target)
+        }
+
+        shareableContent { [weak self] content, error in
+            guard let self else {
+                return
+            }
+
             // WindowServer may retain closed surfaces. Sample AX as late as possible so
             // only currently interactive windows can authorize offscreen capture rows.
-            let axWindows = PreviewWindowCatalog.stableDisplayOrder(loadAXWindows(for: target))
+            let axWindows = PreviewWindowCatalog.stableDisplayOrder(self.loadAXWindows(for: target))
             let unminimizedAXWindows = axWindows.filter { !$0.isMinimized }
             if let error {
-                DispatchQueue.main.async {
-                    completion(PreviewWindowSnapshot(
-                        windows: axWindows,
-                        captureWindows: [:],
-                        message: AppStrings.format(.previewReadFailure, error.localizedDescription)
-                    ))
-                }
+                self.completeWindowLoad(PreviewWindowSnapshot(
+                    windows: axWindows,
+                    captureWindows: [:],
+                    message: AppStrings.format(.previewReadFailure, error.localizedDescription)
+                ),
+                for: target,
+                inventoryRequestRevision: inventoryRequestRevision,
+                completion: completion
+                )
                 return
             }
 
             guard let content else {
-                DispatchQueue.main.async {
-                    completion(PreviewWindowSnapshot(
-                        windows: axWindows,
-                        captureWindows: [:],
-                        message: AppStrings.text(.previewNoContent)
-                    ))
-                }
+                self.completeWindowLoad(PreviewWindowSnapshot(
+                    windows: axWindows,
+                    captureWindows: [:],
+                    message: AppStrings.text(.previewNoContent)
+                ),
+                for: target,
+                inventoryRequestRevision: inventoryRequestRevision,
+                completion: completion
+                )
                 return
             }
 
@@ -223,14 +283,70 @@ public final class ScreenCapturePreviewService {
                 axWindows: axWindows,
                 shareableWindows: shareableWindows
             )
+            self.completeWindowLoad(PreviewWindowSnapshot(
+                windows: windows,
+                captureWindows: captureWindows,
+                message: windows.isEmpty ? AppStrings.text(.previewNoNormalWindow) : nil
+            ),
+            for: target,
+            inventoryRequestRevision: inventoryRequestRevision,
+            completion: completion
+            )
+        }
+    }
+
+    private func shareableContent(
+        completion: @escaping (SCShareableContent?, Error?) -> Void
+    ) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        if let cachedShareableContent,
+           ShareableContentReusePolicy.canReuse(
+                capturedAt: cachedShareableContent.capturedAt,
+                maximumAge: Self.shareableContentCacheLifetime
+           ) {
+            completion(cachedShareableContent.content, nil)
+            return
+        }
+
+        pendingShareableContentCompletions.append(completion)
+        guard !isLoadingShareableContent else {
+            return
+        }
+        isLoadingShareableContent = true
+        SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { [weak self] content, error in
             DispatchQueue.main.async {
-                completion(PreviewWindowSnapshot(
-                    windows: windows,
-                    captureWindows: captureWindows,
-                    message: windows.isEmpty ? AppStrings.text(.previewNoNormalWindow) : nil
-                ))
+                guard let self else {
+                    return
+                }
+                self.isLoadingShareableContent = false
+                if let content {
+                    self.cachedShareableContent = CachedShareableContent(
+                        content: content,
+                        capturedAt: Date()
+                    )
+                }
+                let completions = self.pendingShareableContentCompletions
+                self.pendingShareableContentCompletions.removeAll()
+                completions.forEach { $0(content, error) }
             }
         }
+    }
+
+    private func completeWindowLoad(
+        _ snapshot: PreviewWindowSnapshot,
+        for target: DockAppTarget,
+        inventoryRequestRevision: UInt64?,
+        completion: @escaping (PreviewWindowSnapshot) -> Void
+    ) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        MainActor.assumeIsolated {
+            windowInventory?.seed(
+                snapshot,
+                for: target,
+                requestRevision: inventoryRequestRevision
+            )
+        }
+        completion(snapshot)
     }
 
     func startLiveCaptureSessions(
@@ -357,33 +473,10 @@ public final class ScreenCapturePreviewService {
         appName: String?,
         target: DockAppTarget
     ) -> [PreviewWindowInfo] {
-        let appElement = AXUIElementCreateApplication(processIdentifier)
-        var rawValue: CFTypeRef?
-        let error = AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &rawValue)
-        guard error == .success, let windows = rawValue as? [AXUIElement] else {
-            return []
-        }
-
-        return windows.enumerated().compactMap { index, window -> PreviewWindowInfo? in
-            let role = stringAttribute(kAXRoleAttribute, from: window)
-            let subrole = stringAttribute(kAXSubroleAttribute, from: window)
-            let title = stringAttribute(kAXTitleAttribute, from: window)
-            guard WindowFiltering.shouldIncludeAXPreviewWindow(role: role, subrole: subrole, title: title) else {
-                return nil
-            }
-
-            let windowID = intAttribute("AXWindowNumber", from: window).map { CGWindowID($0) }
-            let fallbackID = "ax-\(processIdentifier)-\(index)-\(title ?? appName ?? target.localizedName)"
-            return PreviewWindowInfo(
-                id: windowID.map { "ax-\($0)" } ?? fallbackID,
-                windowID: windowID,
-                processIdentifier: processIdentifier,
-                appName: appName ?? target.localizedName,
-                title: title ?? appName ?? target.localizedName,
-                frame: windowFrame(from: window),
-                isMinimized: boolAttribute(kAXMinimizedAttribute, from: window) ?? false
-            )
-        }
+        AccessibilityPreviewWindowReader.windows(
+            for: processIdentifier,
+            appName: appName ?? target.localizedName
+        )
     }
 
     private func scheduleSnapshotCacheCleanup() {
@@ -425,70 +518,4 @@ public final class ScreenCapturePreviewService {
         )
     }
 
-    private func stringAttribute(_ attribute: String, from element: AXUIElement) -> String? {
-        var rawValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &rawValue) == .success else {
-            return nil
-        }
-        return rawValue as? String
-    }
-
-    private func intAttribute(_ attribute: String, from element: AXUIElement) -> Int? {
-        var rawValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &rawValue) == .success else {
-            return nil
-        }
-        if let number = rawValue as? NSNumber {
-            return number.intValue
-        }
-        return rawValue as? Int
-    }
-
-    private func boolAttribute(_ attribute: String, from element: AXUIElement) -> Bool? {
-        var rawValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &rawValue) == .success else {
-            return nil
-        }
-        return rawValue as? Bool
-    }
-
-    private func windowFrame(from element: AXUIElement) -> CGRect {
-        let origin = pointAttribute(kAXPositionAttribute, from: element) ?? .zero
-        let size = sizeAttribute(kAXSizeAttribute, from: element) ?? .zero
-        return CGRect(origin: origin, size: size)
-    }
-
-    private func pointAttribute(_ attribute: String, from element: AXUIElement) -> CGPoint? {
-        var rawValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &rawValue) == .success,
-              let rawValue,
-              CFGetTypeID(rawValue) == AXValueGetTypeID()
-        else {
-            return nil
-        }
-
-        let value = rawValue as! AXValue
-        var point = CGPoint.zero
-        guard AXValueGetValue(value, .cgPoint, &point) else {
-            return nil
-        }
-        return point
-    }
-
-    private func sizeAttribute(_ attribute: String, from element: AXUIElement) -> CGSize? {
-        var rawValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &rawValue) == .success,
-              let rawValue,
-              CFGetTypeID(rawValue) == AXValueGetTypeID()
-        else {
-            return nil
-        }
-
-        let value = rawValue as! AXValue
-        var size = CGSize.zero
-        guard AXValueGetValue(value, .cgSize, &size) else {
-            return nil
-        }
-        return size
-    }
 }

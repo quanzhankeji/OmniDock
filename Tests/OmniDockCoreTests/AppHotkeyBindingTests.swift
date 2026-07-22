@@ -313,6 +313,17 @@ final class AppHotkeyBindingTests: XCTestCase {
         XCTAssertEqual(failure.message, AppStrings.text(.hotkeyRegistrationOccupied))
     }
 
+    func testCarbonEventRoutingDoesNotConsumeAnotherRegistryEvent() {
+        XCTAssertEqual(
+            CarbonHotkeyEventRouting.result(handled: false),
+            OSStatus(eventNotHandledErr)
+        )
+        XCTAssertEqual(
+            CarbonHotkeyEventRouting.result(handled: true),
+            noErr
+        )
+    }
+
     @MainActor
     func testRegistrationStatusStoreStoresAndClearsWarnings() {
         let id = UUID()

@@ -4,7 +4,13 @@
 "languageChinese" = "简体中文";
 "languageEnglish" = "English";
 
-"tabSettings" = "设置";
+"appearanceTitle" = "外观";
+"appearanceDetail" = "选择 OmniDock 预览和窗口使用的浅色或深色外观。";
+"appearanceSystem" = "跟随系统";
+"appearanceLight" = "浅色";
+"appearanceDark" = "深色";
+
+"tabPreview" = "预览";
 "tabHotkeys" = "快捷键";
 "menuSettings" = "设置";
 "menuHotkeys" = "快捷键";
@@ -27,6 +33,9 @@
 "settingsDockPreviewDetail" = "鼠标停在 Dock 应用图标上时显示窗口预览。";
 "settingsCommandTabPreviewTitle" = "Command-Tab 预览";
 "settingsCommandTabPreviewDetail" = "在 macOS Command-Tab 切换器当前应用图标上方显示静态窗口预览。";
+"settingsWindowCycleTitle" = "Alt Tab 预览";
+"settingsWindowCycleDetail" = "使用 Option-Tab 在窗口之间切换；切换器使用静态预览。";
+"settingsWindowCycleUnavailable" = "无法注册 Alt Tab，可能已被 macOS 或其他应用占用。";
 "settingsLivePreviewTitle" = "实时预览";
 "settingsLivePreviewDetail" = "持续刷新预览画面；关闭后只显示静态预览，减少性能消耗。";
 "settingsDockClickTitle" = "Dock 图标隐藏/唤起";
@@ -51,7 +60,7 @@
 "onboardingSubtitle" = "OmniDock 需要少量系统权限来控制 Dock 点击、窗口预览和快捷键唤起。";
 "onboardingPrivacyNote" = "所有处理都在本机完成。OmniDock 不记录键盘输入，不上传屏幕内容。";
 "onboardingAccessibilityPurpose" = "识别 Dock 图标，唤起、隐藏和聚焦窗口。";
-"onboardingInputMonitoringPurpose" = "检测轻点 Dock 图标，不记录键盘输入。若列表为空，请点 + 添加 OmniDock。";
+"onboardingInputMonitoringPurpose" = "检测轻点 Dock 图标，并且只在窗口切换器打开期间检测 Option-Tab；OmniDock 不记录或保存输入文字。";
 "onboardingScreenRecordingPurpose" = "生成 Dock 窗口缩略图，包括实时画面和一次性静态截图，只用于本机预览。若列表为空，请点 + 添加 OmniDock。";
 "onboardingStatusReady" = "已准备就绪";
 "onboardingStatusNeedsPermissions" = "请完成以下授权";
@@ -112,3 +121,4 @@
 "previewStreamStop" = "预览流停止：%@";
 "previewStaticFailureWithReason" = "静态预览生成失败：%@";
 "previewStaticFailure" = "静态预览生成失败";
+"previewWindowContentUnavailable" = "无法获取预览内容";

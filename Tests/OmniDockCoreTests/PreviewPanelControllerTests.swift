@@ -4,6 +4,41 @@ import XCTest
 
 @MainActor
 final class PreviewPanelControllerTests: XCTestCase {
+    func testIndependentSwitcherGridKeepsItsCardsForMetadataOnlyUpdates() {
+        let current = [previewInfo()]
+        let renamed = [previewInfo(title: "Updated title")]
+
+        XCTAssertFalse(
+            WindowCyclePresentationPolicy.needsGridRebuild(
+                current: current,
+                replacement: renamed
+            )
+        )
+    }
+
+    func testIndependentSwitcherGridRebuildsWhenWindowOrderOrGeometryChanges() {
+        let first = previewInfo(id: "one", windowID: 1)
+        let second = previewInfo(id: "two", windowID: 2)
+        let resized = previewInfo(
+            id: "one",
+            windowID: 1,
+            frame: CGRect(x: 0, y: 0, width: 1000, height: 600)
+        )
+
+        XCTAssertTrue(
+            WindowCyclePresentationPolicy.needsGridRebuild(
+                current: [first, second],
+                replacement: [second, first]
+            )
+        )
+        XCTAssertTrue(
+            WindowCyclePresentationPolicy.needsGridRebuild(
+                current: [first],
+                replacement: [resized]
+            )
+        )
+    }
+
     func testWindowFocusEndsPreviewLifecycleBeforeRequestingFocus() {
         let info = previewInfo()
         var events: [String] = []
@@ -402,7 +437,8 @@ final class PreviewPanelControllerTests: XCTestCase {
         id: String = "window-1",
         windowID: CGWindowID = 42,
         processIdentifier: pid_t = 123,
-        title: String = "Document"
+        title: String = "Document",
+        frame: CGRect = CGRect(x: 0, y: 0, width: 1200, height: 800)
     ) -> PreviewWindowInfo {
         PreviewWindowInfo(
             id: id,
@@ -410,7 +446,7 @@ final class PreviewPanelControllerTests: XCTestCase {
             processIdentifier: processIdentifier,
             appName: "Example",
             title: title,
-            frame: CGRect(x: 0, y: 0, width: 1200, height: 800),
+            frame: frame,
             isMinimized: false
         )
     }

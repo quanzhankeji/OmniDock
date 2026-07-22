@@ -33,7 +33,10 @@ final class PreviewThumbnailView: NSView {
     var onFileDragEntered: ((PreviewWindowInfo) -> Void)?
 
     private static let dragThreshold: CGFloat = 5
+    private static let applicationIconSize: CGFloat = 16
     private let imageView = NSImageView()
+    private let applicationIconView = NSImageView()
+    private let applicationField = NSTextField(labelWithString: "")
     private let titleField = NSTextField(labelWithString: "")
     private let placeholderField = NSTextField(labelWithString: "")
     private let closeButton = PreviewCloseButtonView(frame: .zero)
@@ -43,13 +46,27 @@ final class PreviewThumbnailView: NSView {
     private var mouseDownLocationInWindow: CGPoint?
     private var lastDragLocationInWindow: CGPoint?
     private var isDraggingPreviewList = false
+    private var isSelected = false
+    private let showsApplicationIdentity: Bool
 
     var preferredTileSize: CGSize {
-        PreviewLayoutCalculator.tileSize(forContentAspectRatio: contentAspectRatio)
+        let baseSize = PreviewLayoutCalculator.tileSize(forContentAspectRatio: contentAspectRatio)
+        guard showsApplicationIdentity else {
+            return baseSize
+        }
+        return CGSize(width: baseSize.width, height: baseSize.height + 24)
     }
 
-    init(info: PreviewWindowInfo) {
+    var displaysApplicationIdentity: Bool {
+        showsApplicationIdentity
+            && !applicationIconView.isHidden
+            && !applicationField.isHidden
+            && !applicationField.stringValue.isEmpty
+    }
+
+    init(info: PreviewWindowInfo, showsApplicationIdentity: Bool = false) {
         self.info = info
+        self.showsApplicationIdentity = showsApplicationIdentity
         self.contentAspectRatio = PreviewLayoutCalculator.contentAspectRatio(for: info.frame)
         super.init(frame: CGRect(origin: .zero, size: PreviewLayoutCalculator.tileSize(for: info.frame)))
         setup()
@@ -74,6 +91,7 @@ final class PreviewThumbnailView: NSView {
         let previousSize = preferredTileSize
         self.info = info
         titleField.stringValue = info.title
+        refreshApplicationIdentity()
 
         if let image = info.staticPreviewImage {
             imageView.image = image
@@ -91,6 +109,11 @@ final class PreviewThumbnailView: NSView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyTheme()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -163,7 +186,24 @@ final class PreviewThumbnailView: NSView {
 
     override func layout() {
         super.layout()
-        titleField.frame = CGRect(x: 8, y: 8, width: bounds.width - 16, height: 18)
+        if showsApplicationIdentity {
+            let iconSize: CGFloat = applicationIconView.isHidden ? 0 : Self.applicationIconSize
+            applicationIconView.frame = CGRect(
+                x: 52,
+                y: bounds.height - 25,
+                width: iconSize,
+                height: iconSize
+            )
+            applicationField.frame = CGRect(
+                x: 52 + iconSize + (iconSize > 0 ? 5 : 0),
+                y: bounds.height - 26,
+                width: bounds.width - 60 - iconSize - (iconSize > 0 ? 5 : 0),
+                height: 18
+            )
+            titleField.frame = CGRect(x: 8, y: 7, width: bounds.width - 16, height: 18)
+        } else {
+            titleField.frame = CGRect(x: 8, y: 8, width: bounds.width - 16, height: 18)
+        }
         imageView.frame = imageFrame(in: bounds)
         placeholderField.frame = imageView.frame.insetBy(dx: 10, dy: 10)
         quitButton.frame = CGRect(x: 12, y: bounds.height - 24, width: 13, height: 13)
@@ -194,14 +234,20 @@ final class PreviewThumbnailView: NSView {
         closeButton.setExternalHover(action == .closeWindow(identity))
     }
 
+    func setSelected(_ isSelected: Bool) {
+        guard self.isSelected != isSelected else {
+            return
+        }
+        self.isSelected = isSelected
+        updateTileAppearance()
+    }
+
     private func setup() {
         registerForDraggedTypes(PreviewFileDragDetector.supportedTypes)
 
         wantsLayer = true
         layer?.cornerRadius = 8
-        layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.82).cgColor
-        layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.5).cgColor
-        layer?.borderWidth = 1
+        updateTileAppearance()
         layer?.shadowColor = NSColor.black.cgColor
         layer?.shadowOpacity = 0.16
         layer?.shadowRadius = 8
@@ -223,13 +269,19 @@ final class PreviewThumbnailView: NSView {
         placeholderField.alignment = .center
         placeholderField.maximumNumberOfLines = 2
         placeholderField.font = .systemFont(ofSize: 12, weight: .medium)
-        placeholderField.textColor = .secondaryLabelColor
         placeholderField.isHidden = placeholderField.stringValue.isEmpty || info.staticPreviewImage != nil
 
         titleField.stringValue = info.title
         titleField.lineBreakMode = .byTruncatingTail
         titleField.font = .systemFont(ofSize: 12, weight: .medium)
-        titleField.textColor = .labelColor
+
+        applicationIconView.imageScaling = .scaleProportionallyUpOrDown
+        applicationIconView.imageAlignment = .alignCenter
+        applicationIconView.isHidden = !showsApplicationIdentity
+        applicationField.lineBreakMode = .byTruncatingTail
+        applicationField.font = .systemFont(ofSize: 12, weight: .medium)
+        applicationField.isHidden = !showsApplicationIdentity
+        refreshApplicationIdentity()
         closeButton.onClose = { [weak self] in
             guard let self else {
                 return
@@ -245,9 +297,30 @@ final class PreviewThumbnailView: NSView {
 
         addSubview(imageView)
         addSubview(placeholderField)
+        addSubview(applicationIconView)
+        addSubview(applicationField)
         addSubview(titleField)
         addSubview(closeButton)
         addSubview(quitButton)
+        applyTheme()
+    }
+
+    private func updateTileAppearance() {
+        let palette = OmniDockTheme.palette(for: effectiveAppearance)
+        layer?.backgroundColor = palette.surface.withAlphaComponent(0.88).cgColor
+        layer?.borderColor = (isSelected
+            ? palette.selection.withAlphaComponent(0.95)
+            : palette.separator.withAlphaComponent(0.7)
+        ).cgColor
+        layer?.borderWidth = isSelected ? 2 : 1
+    }
+
+    private func applyTheme() {
+        let palette = OmniDockTheme.palette(for: effectiveAppearance)
+        placeholderField.textColor = palette.secondaryText
+        titleField.textColor = palette.primaryText
+        applicationField.textColor = palette.secondaryText
+        updateTileAppearance()
     }
 
     private func updateContentAspectRatio(from image: NSImage) {
@@ -255,6 +328,17 @@ final class PreviewThumbnailView: NSView {
             return
         }
         contentAspectRatio = image.size.width / image.size.height
+    }
+
+    private func refreshApplicationIdentity() {
+        guard showsApplicationIdentity else {
+            return
+        }
+        let application = NSRunningApplication(processIdentifier: info.processIdentifier)
+        applicationField.stringValue = application?.localizedName ?? info.appName
+        applicationIconView.image = application?.icon
+            ?? NSImage(named: NSImage.applicationIconName)
+        applicationIconView.isHidden = false
     }
 
     private func actionHitTarget(
@@ -270,7 +354,14 @@ final class PreviewThumbnailView: NSView {
     }
 
     private func imageFrame(in bounds: CGRect) -> CGRect {
-        let maxFrame = CGRect(x: 8, y: 32, width: bounds.width - 16, height: bounds.height - 40)
+        let footerHeight: CGFloat = showsApplicationIdentity ? 28 : 40
+        let headerHeight: CGFloat = showsApplicationIdentity ? 28 : 0
+        let maxFrame = CGRect(
+            x: 8,
+            y: footerHeight,
+            width: bounds.width - 16,
+            height: bounds.height - footerHeight - headerHeight - 8
+        )
         let fittedWidth = min(maxFrame.width, maxFrame.height * contentAspectRatio)
         let x = maxFrame.midX - fittedWidth / 2
         return CGRect(x: x, y: maxFrame.minY, width: fittedWidth, height: maxFrame.height)
@@ -325,6 +416,11 @@ class PreviewThumbnailActionButtonView: NSControl {
         layer?.cornerRadius = bounds.width / 2
         glyphLayer.frame = bounds
         glyphLayer.path = glyphPath(in: bounds.insetBy(dx: 3.4, dy: 3.4))
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance(animated: false)
     }
 
     override func updateTrackingAreas() {
@@ -405,6 +501,7 @@ class PreviewThumbnailActionButtonView: NSControl {
         layer?.backgroundColor = backgroundColor.cgColor
         layer?.borderColor = borderColor.cgColor
         layer?.borderWidth = 0.7
+        glyphLayer.strokeColor = glyphColor.cgColor
         setGlyphOpacity((externalHover ?? isPointerInside) ? 1 : 0, animated: animated)
     }
 
@@ -421,34 +518,32 @@ class PreviewThumbnailActionButtonView: NSControl {
     }
 
     private var backgroundColor: NSColor {
+        let palette = OmniDockTheme.palette(for: effectiveAppearance)
         switch kind {
         case .closeWindow:
-            if isPressed {
-                return NSColor(calibratedRed: 0.82, green: 0.14, blue: 0.12, alpha: 1)
-            }
-            return NSColor(calibratedRed: 1.0, green: 0.35, blue: 0.31, alpha: 1)
+            return isPressed ? palette.destructivePressed : palette.destructive
         case .quitApplication:
-            return isPressed
-                ? NSColor(calibratedWhite: 0.56, alpha: 1)
-                : NSColor(calibratedWhite: 0.72, alpha: 1)
+            return isPressed ? palette.quietActionPressed : palette.quietAction
         }
     }
 
     private var borderColor: NSColor {
+        let palette = OmniDockTheme.palette(for: effectiveAppearance)
         switch kind {
         case .closeWindow:
-            NSColor(calibratedRed: 0.70, green: 0.08, blue: 0.07, alpha: 0.85)
+            return palette.destructiveBorder
         case .quitApplication:
-            NSColor(calibratedWhite: 0.48, alpha: 0.78)
+            return palette.quietActionBorder
         }
     }
 
     private var glyphColor: NSColor {
+        let palette = OmniDockTheme.palette(for: effectiveAppearance)
         switch kind {
         case .closeWindow:
-            NSColor(calibratedRed: 0.42, green: 0.04, blue: 0.03, alpha: 0.9)
+            return palette.destructiveGlyph
         case .quitApplication:
-            NSColor(calibratedWhite: 0.18, alpha: 0.9)
+            return palette.quietActionGlyph
         }
     }
 

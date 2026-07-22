@@ -4,6 +4,7 @@ import CoreGraphics
 public enum PreviewAnchorKind: Hashable {
     case dock
     case commandTab
+    case windowCycle
 }
 
 public struct DockAppTarget: Equatable {

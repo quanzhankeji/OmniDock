@@ -8,6 +8,7 @@
 /* Begin PBXBuildFile section */
 		00E67EAF8D1F0480F1E0F8AA /* OmniDockMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E3B92A97B3D6988F4B42F5E /* OmniDockMain.swift */; };
 		0E7ADBE745AB6F60EE674170 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7A7DED8B7FC805B7B9D9624 /* AppDelegate.swift */; };
+		D4ED1E90E64A329F70087940 /* AppAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12703A6B33AD1DCF8080FC73 /* AppAppearance.swift */; };
 		2145A12C734E8EC3CE14C5B4 /* AppHotkeyBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = B18F9E45D6B0D0F72B6296F5 /* AppHotkeyBinding.swift */; };
 		350841FA8C54AC4970114FFE /* AppLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78CC0AEA502E82DF49D99A06 /* AppLanguage.swift */; };
 		A75D0D534051023B5E7A00B0 /* DockAppTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C32CE50C290DAC1E3808587 /* DockAppTarget.swift */; };
@@ -48,12 +49,15 @@
 		7E87BF8DD63A697ADDCE030B /* SystemHotkeyConflictChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = A35F128B3A3E745F97A3D97F /* SystemHotkeyConflictChecker.swift */; };
 		DB61CE48CAFF64060EBAD6AD /* WindowControlPolicies.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67FB45DE5A706ACD37EA391D /* WindowControlPolicies.swift */; };
 		4A1F0124BC7683D80ABB93FB /* WindowControlService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F35C9782DD9C01A55D3D2BD /* WindowControlService.swift */; };
+		0253BDD35777A7AFE97F616E /* WindowCycleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4603BBDE86DBBB9D01B3CB11 /* WindowCycleService.swift */; };
 		FAAEEC974BABA0B6A433F675 /* WindowFiltering.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1997E504C411BA05460BBEBB /* WindowFiltering.swift */; };
+		347430DBF8ACA48593ADE9BB /* WindowInventoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 236B7CCCF870D1DD05A010A4 /* WindowInventoryService.swift */; };
 		F9268A0DC93009A53816864A /* WindowOperationGeneration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D6DBAA062C905D55EECF74C /* WindowOperationGeneration.swift */; };
 		15B1392080010FA380E8A05A /* ApplicationMainMenuController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD796E055589DC2A24C438B3 /* ApplicationMainMenuController.swift */; };
 		ACC329CCA36B682B1C13F6F2 /* ApplicationPickerIconLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4C0C527186341931A5D33A /* ApplicationPickerIconLoader.swift */; };
 		50BDFA5890FCEE29216A091D /* ApplicationPickerWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F7B3B90E6D3D55F71A15F07 /* ApplicationPickerWindowController.swift */; };
 		A8862B835526D889CF75F05D /* ApplicationSelectionCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 562101DBA24FFAD470D3FB59 /* ApplicationSelectionCatalog.swift */; };
+		4B25A6E2CCE956FCA6803215 /* OmniDockTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B27BA2F9693182C1AD68617 /* OmniDockTheme.swift */; };
 		2E5446BE6F842A50575D5658 /* PermissionOnboardingWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE1FB8E57F55CD535BC669CD /* PermissionOnboardingWindowController.swift */; };
 		A08FE851F96BDB9A4AADBFDC /* PreviewLayoutCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1AF691FED19F9D41F836BBF /* PreviewLayoutCalculator.swift */; };
 		875C6CD89117F968B0132D41 /* PreviewPanelController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D16719ED5E2F7952F4979DD1 /* PreviewPanelController.swift */; };
@@ -78,6 +82,7 @@
 		89D260D4B56B123247E82F3D /* OmniDock.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "OmniDock.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3E3B92A97B3D6988F4B42F5E /* OmniDockMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDock/OmniDockMain.swift"; sourceTree = SOURCE_ROOT; };
 		D7A7DED8B7FC805B7B9D9624 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/AppDelegate.swift"; sourceTree = SOURCE_ROOT; };
+		12703A6B33AD1DCF8080FC73 /* AppAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Models/AppAppearance.swift"; sourceTree = SOURCE_ROOT; };
 		B18F9E45D6B0D0F72B6296F5 /* AppHotkeyBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Models/AppHotkeyBinding.swift"; sourceTree = SOURCE_ROOT; };
 		78CC0AEA502E82DF49D99A06 /* AppLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Models/AppLanguage.swift"; sourceTree = SOURCE_ROOT; };
 		9C32CE50C290DAC1E3808587 /* DockAppTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Models/DockAppTarget.swift"; sourceTree = SOURCE_ROOT; };
@@ -118,12 +123,15 @@
 		A35F128B3A3E745F97A3D97F /* SystemHotkeyConflictChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/SystemHotkeyConflictChecker.swift"; sourceTree = SOURCE_ROOT; };
 		67FB45DE5A706ACD37EA391D /* WindowControlPolicies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowControlPolicies.swift"; sourceTree = SOURCE_ROOT; };
 		0F35C9782DD9C01A55D3D2BD /* WindowControlService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowControlService.swift"; sourceTree = SOURCE_ROOT; };
+		4603BBDE86DBBB9D01B3CB11 /* WindowCycleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowCycleService.swift"; sourceTree = SOURCE_ROOT; };
 		1997E504C411BA05460BBEBB /* WindowFiltering.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowFiltering.swift"; sourceTree = SOURCE_ROOT; };
+		236B7CCCF870D1DD05A010A4 /* WindowInventoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowInventoryService.swift"; sourceTree = SOURCE_ROOT; };
 		8D6DBAA062C905D55EECF74C /* WindowOperationGeneration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowOperationGeneration.swift"; sourceTree = SOURCE_ROOT; };
 		BD796E055589DC2A24C438B3 /* ApplicationMainMenuController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/ApplicationMainMenuController.swift"; sourceTree = SOURCE_ROOT; };
 		5B4C0C527186341931A5D33A /* ApplicationPickerIconLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/ApplicationPickerIconLoader.swift"; sourceTree = SOURCE_ROOT; };
 		6F7B3B90E6D3D55F71A15F07 /* ApplicationPickerWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/ApplicationPickerWindowController.swift"; sourceTree = SOURCE_ROOT; };
 		562101DBA24FFAD470D3FB59 /* ApplicationSelectionCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/ApplicationSelectionCatalog.swift"; sourceTree = SOURCE_ROOT; };
+		5B27BA2F9693182C1AD68617 /* OmniDockTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/OmniDockTheme.swift"; sourceTree = SOURCE_ROOT; };
 		DE1FB8E57F55CD535BC669CD /* PermissionOnboardingWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/PermissionOnboardingWindowController.swift"; sourceTree = SOURCE_ROOT; };
 		F1AF691FED19F9D41F836BBF /* PreviewLayoutCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/PreviewLayoutCalculator.swift"; sourceTree = SOURCE_ROOT; };
 		D16719ED5E2F7952F4979DD1 /* PreviewPanelController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/PreviewPanelController.swift"; sourceTree = SOURCE_ROOT; };
@@ -185,6 +193,7 @@
 			children = (
 				3E3B92A97B3D6988F4B42F5E /* OmniDockMain.swift */,
 				D7A7DED8B7FC805B7B9D9624 /* AppDelegate.swift */,
+				12703A6B33AD1DCF8080FC73 /* AppAppearance.swift */,
 				B18F9E45D6B0D0F72B6296F5 /* AppHotkeyBinding.swift */,
 				78CC0AEA502E82DF49D99A06 /* AppLanguage.swift */,
 				9C32CE50C290DAC1E3808587 /* DockAppTarget.swift */,
@@ -225,12 +234,15 @@
 				A35F128B3A3E745F97A3D97F /* SystemHotkeyConflictChecker.swift */,
 				67FB45DE5A706ACD37EA391D /* WindowControlPolicies.swift */,
 				0F35C9782DD9C01A55D3D2BD /* WindowControlService.swift */,
+				4603BBDE86DBBB9D01B3CB11 /* WindowCycleService.swift */,
 				1997E504C411BA05460BBEBB /* WindowFiltering.swift */,
+				236B7CCCF870D1DD05A010A4 /* WindowInventoryService.swift */,
 				8D6DBAA062C905D55EECF74C /* WindowOperationGeneration.swift */,
 				BD796E055589DC2A24C438B3 /* ApplicationMainMenuController.swift */,
 				5B4C0C527186341931A5D33A /* ApplicationPickerIconLoader.swift */,
 				6F7B3B90E6D3D55F71A15F07 /* ApplicationPickerWindowController.swift */,
 				562101DBA24FFAD470D3FB59 /* ApplicationSelectionCatalog.swift */,
+				5B27BA2F9693182C1AD68617 /* OmniDockTheme.swift */,
 				DE1FB8E57F55CD535BC669CD /* PermissionOnboardingWindowController.swift */,
 				F1AF691FED19F9D41F836BBF /* PreviewLayoutCalculator.swift */,
 				D16719ED5E2F7952F4979DD1 /* PreviewPanelController.swift */,
@@ -374,6 +386,7 @@
 			files = (
 				00E67EAF8D1F0480F1E0F8AA /* OmniDockMain.swift in Sources */,
 				0E7ADBE745AB6F60EE674170 /* AppDelegate.swift in Sources */,
+				D4ED1E90E64A329F70087940 /* AppAppearance.swift in Sources */,
 				2145A12C734E8EC3CE14C5B4 /* AppHotkeyBinding.swift in Sources */,
 				350841FA8C54AC4970114FFE /* AppLanguage.swift in Sources */,
 				A75D0D534051023B5E7A00B0 /* DockAppTarget.swift in Sources */,
@@ -414,12 +427,15 @@
 				7E87BF8DD63A697ADDCE030B /* SystemHotkeyConflictChecker.swift in Sources */,
 				DB61CE48CAFF64060EBAD6AD /* WindowControlPolicies.swift in Sources */,
 				4A1F0124BC7683D80ABB93FB /* WindowControlService.swift in Sources */,
+				0253BDD35777A7AFE97F616E /* WindowCycleService.swift in Sources */,
 				FAAEEC974BABA0B6A433F675 /* WindowFiltering.swift in Sources */,
+				347430DBF8ACA48593ADE9BB /* WindowInventoryService.swift in Sources */,
 				F9268A0DC93009A53816864A /* WindowOperationGeneration.swift in Sources */,
 				15B1392080010FA380E8A05A /* ApplicationMainMenuController.swift in Sources */,
 				ACC329CCA36B682B1C13F6F2 /* ApplicationPickerIconLoader.swift in Sources */,
 				50BDFA5890FCEE29216A091D /* ApplicationPickerWindowController.swift in Sources */,
 				A8862B835526D889CF75F05D /* ApplicationSelectionCatalog.swift in Sources */,
+				4B25A6E2CCE956FCA6803215 /* OmniDockTheme.swift in Sources */,
 				2E5446BE6F842A50575D5658 /* PermissionOnboardingWindowController.swift in Sources */,
 				A08FE851F96BDB9A4AADBFDC /* PreviewLayoutCalculator.swift in Sources */,
 				875C6CD89117F968B0132D41 /* PreviewPanelController.swift in Sources */,

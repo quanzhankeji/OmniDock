@@ -9,6 +9,7 @@ OmniDock is a local macOS menu bar utility that makes Dock window switching fast
 - Optionally use minimize/restore instead of hide/show for repeated Dock clicks.
 - Click a preview thumbnail to focus that exact window.
 - Drag a file over a preview thumbnail to raise that window and continue dropping the file.
+- Optionally switch between individual windows with Alt-Tab (Option-Tab), using static previews and the same close and quit controls.
 - Assign per-app global shortcuts to launch, bring forward, or hide apps with the same toggle behavior.
 - Avoid browser tab navigation shortcuts so those shortcuts stay with the browser.
 
@@ -18,7 +19,7 @@ OmniDock does not include analytics, advertising SDKs, or third-party packages. 
 
 - macOS 12.3 or later
 - Accessibility permission for Dock hit testing and window control
-- Input Monitoring permission for Dock click detection on macOS versions that require it
+- Input Monitoring permission for Dock click detection and the optional Alt-Tab window switcher
 - Screen Recording permission for window thumbnails, including live images and one-time static snapshots
 
 ## Download

@@ -1,6 +1,8 @@
 import AppKit
 import Carbon.HIToolbox
 
+private let configuredAppHotkeyEventSignature: OSType = 0x4F44484B // "ODHK"
+
 @MainActor
 public final class AppHotkeyService {
     private let settings: SettingsStore
@@ -209,7 +211,6 @@ final class CarbonHotkeyRegistry {
         let binding: AppHotkeyBinding
     }
 
-    private static let eventSignature = fourCharacterCode("ODHK")
     private var handlerReference: EventHandlerRef?
     private var registeredHotkeys: [UInt32: RegisteredHotkey] = [:]
     private var nextHotkeyID: UInt32 = 1
@@ -281,7 +282,7 @@ final class CarbonHotkeyRegistry {
         nextHotkeyID = nextHotkeyID == UInt32.max ? 1 : nextHotkeyID + 1
 
         var hotkeyID = EventHotKeyID()
-        hotkeyID.signature = Self.eventSignature
+        hotkeyID.signature = configuredAppHotkeyEventSignature
         hotkeyID.id = id
 
         var reference: EventHotKeyRef?
@@ -303,13 +304,14 @@ final class CarbonHotkeyRegistry {
         return nil
     }
 
-    fileprivate func handleHotkey(id: EventHotKeyID) {
-        guard id.signature == Self.eventSignature,
+    fileprivate func handleHotkey(id: EventHotKeyID) -> Bool {
+        guard id.signature == configuredAppHotkeyEventSignature,
               let registeredHotkey = registeredHotkeys[id.id]
         else {
-            return
+            return false
         }
         onTrigger?(registeredHotkey.binding)
+        return true
     }
 
     static func carbonModifierFlags(for rawFlags: UInt) -> UInt32 {
@@ -331,11 +333,6 @@ final class CarbonHotkeyRegistry {
         return carbonFlags
     }
 
-    private static func fourCharacterCode(_ string: String) -> OSType {
-        string.utf8.reduce(0) { result, character in
-            (result << 8) + OSType(character)
-        }
-    }
 }
 
 private let carbonHotkeyEventHandler: EventHandlerUPP = { _, event, userData in
@@ -363,5 +360,15 @@ private let carbonHotkeyEventHandler: EventHandlerUPP = { _, event, userData in
     Task { @MainActor in
         registry.handleHotkey(id: hotkeyID)
     }
-    return noErr
+    // The application event target is shared with other Carbon shortcuts.
+    // Do not consume events whose signature belongs to another registry.
+    return CarbonHotkeyEventRouting.result(
+        handled: hotkeyID.signature == configuredAppHotkeyEventSignature
+    )
+}
+
+enum CarbonHotkeyEventRouting {
+    static func result(handled: Bool) -> OSStatus {
+        handled ? noErr : OSStatus(eventNotHandledErr)
+    }
 }

@@ -82,6 +82,7 @@ final class PermissionOnboardingWindowController: NSWindowController, NSWindowDe
     private var isApplicationTerminating = false
     private var sessionState = PermissionOnboardingSessionState()
     private var renderedLanguage: AppLanguage.Resolved?
+    private var isRefreshingPermissionState = false
 
     init(
         settings: SettingsStore,
@@ -115,6 +116,7 @@ final class PermissionOnboardingWindowController: NSWindowController, NSWindowDe
         super.init(window: window)
         window.delegate = self
         window.contentView = makeContentView()
+        applyTheme(to: window)
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(settingsChanged),
@@ -146,6 +148,7 @@ final class PermissionOnboardingWindowController: NSWindowController, NSWindowDe
         }
         let generation = sessionState.beginVisibleSession()
         presentationCoordinator.present(.permissionOnboarding)
+        applyTheme(to: window)
         refreshLocalizedText()
         refresh(for: generation)
         startPolling(for: generation)
@@ -191,7 +194,7 @@ final class PermissionOnboardingWindowController: NSWindowController, NSWindowDe
     private func makeContentView() -> NSView {
         let root = NSView()
         root.wantsLayer = true
-        root.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        root.layer?.backgroundColor = OmniDockTheme.palette().canvas.cgColor
 
         let stack = NSStackView()
         stack.orientation = .vertical
@@ -273,13 +276,22 @@ final class PermissionOnboardingWindowController: NSWindowController, NSWindowDe
     }
 
     @objc private func settingsChanged() {
-        guard renderedLanguage != AppLocalization.currentResolvedLanguage else {
-            return
+        if let window {
+            applyTheme(to: window)
         }
-        refreshLocalizedText()
+        if renderedLanguage != AppLocalization.currentResolvedLanguage {
+            refreshLocalizedText()
+        }
         if let generation = sessionState.visibleGeneration {
             refresh(for: generation)
         }
+    }
+
+    private func applyTheme(to window: NSWindow) {
+        OmniDockTheme.applyCurrentAppearance(to: window)
+        window.contentView?.layer?.backgroundColor = OmniDockTheme.palette(
+            for: window.appearance ?? window.effectiveAppearance
+        ).canvas.cgColor
     }
 
     private func startPolling(for generation: PermissionOnboardingSessionState.Generation) {
@@ -300,9 +312,13 @@ final class PermissionOnboardingWindowController: NSWindowController, NSWindowDe
     }
 
     private func refresh(for generation: PermissionOnboardingSessionState.Generation) {
-        guard sessionState.acceptsRefresh(for: generation) else {
+        guard sessionState.acceptsRefresh(for: generation),
+              !isRefreshingPermissionState
+        else {
             return
         }
+        isRefreshingPermissionState = true
+        defer { isRefreshingPermissionState = false }
 
         let snapshot = permissionService.snapshot()
         let didChange = snapshot != lastSnapshot
@@ -419,6 +435,8 @@ private final class PermissionCardView: NSView {
     private let titleLabel = NSTextField(labelWithString: "")
     private let detailLabel = NSTextField(wrappingLabelWithString: "")
     private let button = NSButton(title: "", target: nil, action: nil)
+    private var isGranted = false
+    private var isHighlighted = false
 
     init(kind: PermissionKind) {
         self.kind = kind
@@ -431,20 +449,24 @@ private final class PermissionCardView: NSView {
     }
 
     func update(isGranted: Bool, isHighlighted: Bool) {
+        self.isGranted = isGranted
+        self.isHighlighted = isHighlighted
         titleLabel.stringValue = kind.title
         detailLabel.stringValue = AppStrings.onboardingPurpose(kind)
         button.title = isGranted ? AppStrings.text(.onboardingEnabled) : AppStrings.text(.onboardingGoEnable)
         button.isEnabled = !isGranted
-        dot.layer?.backgroundColor = (isGranted ? NSColor.systemGreen : NSColor.systemGray).cgColor
-        layer?.borderColor = (isHighlighted && !isGranted ? NSColor.controlAccentColor : NSColor.separatorColor).cgColor
+        applyTheme()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyTheme()
     }
 
     private func setup() {
         wantsLayer = true
         layer?.cornerRadius = 8
         layer?.borderWidth = 1
-        layer?.borderColor = NSColor.separatorColor.cgColor
-        layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
 
         dot.wantsLayer = true
         dot.layer?.cornerRadius = 5
@@ -488,6 +510,17 @@ private final class PermissionCardView: NSView {
             button.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
             button.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
+
+        applyTheme()
+    }
+
+    private func applyTheme() {
+        let palette = OmniDockTheme.palette(for: effectiveAppearance)
+        layer?.backgroundColor = palette.raisedSurface.cgColor
+        layer?.borderColor = (isHighlighted && !isGranted ? palette.accent : palette.separator).cgColor
+        dot.layer?.backgroundColor = (isGranted ? palette.success : palette.neutral).cgColor
+        titleLabel.textColor = palette.primaryText
+        detailLabel.textColor = palette.secondaryText
     }
 
     @objc private func request(_ sender: NSButton) {

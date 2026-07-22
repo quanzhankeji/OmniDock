@@ -6,6 +6,8 @@ public final class SettingsStore {
     private enum Key: String {
         case showDockPreviews = "showDockPreviews"
         case showCommandTabPreviews = "showCommandTabPreviews"
+        // Keep the original storage name so existing installations retain their choice.
+        case windowCycleEnabled = "independentWindowSwitcherEnabled"
         case liveDockPreviewsEnabled = "liveDockPreviewsEnabled"
         case livePreviewWindowLimit = "livePreviewWindowLimit"
         case toggleAppVisibilityOnDockClick = "toggleAppVisibilityOnDockClick"
@@ -14,6 +16,7 @@ public final class SettingsStore {
         case hotkeyAssignments = "hotkeyAssignments"
         case minimizeOnRepeatedDockClick = "minimizeOnRepeatedDockClick"
         case appLanguage = "appLanguage"
+        case appAppearance = "appAppearance"
         case permissionOnboardingCompleted = "permissionOnboardingCompleted"
         case permissionOnboardingSkipped = "permissionOnboardingSkipped"
         case pendingPermissionFeatures = "pendingPermissionFeatures"
@@ -37,14 +40,17 @@ public final class SettingsStore {
         defaults.register(defaults: [
             Key.showDockPreviews.rawValue: true,
             Key.showCommandTabPreviews.rawValue: true,
+            Key.windowCycleEnabled.rawValue: false,
             Key.liveDockPreviewsEnabled.rawValue: true,
             Key.livePreviewWindowLimit.rawValue: min(6, max(0, livePreviewLimitProvider())),
             Key.hotkeysEnabled.rawValue: true,
             Key.appLanguage.rawValue: AppLanguage.system.rawValue,
+            Key.appAppearance.rawValue: AppAppearance.system.rawValue,
             Key.permissionOnboardingCompleted.rawValue: false,
             Key.permissionOnboardingSkipped.rawValue: false
         ])
         AppLocalization.configure(language: appLanguage)
+        OmniDockTheme.configure(appearance: appAppearance)
     }
 
     public var showDockPreviews: Bool {
@@ -60,6 +66,11 @@ public final class SettingsStore {
             return value
         }
         set { set(newValue, for: .showCommandTabPreviews) }
+    }
+
+    public var windowCycleEnabled: Bool {
+        get { defaults.bool(forKey: Key.windowCycleEnabled.rawValue) }
+        set { set(newValue, for: .windowCycleEnabled) }
     }
 
     public var liveDockPreviewsEnabled: Bool {
@@ -127,6 +138,22 @@ public final class SettingsStore {
         set {
             defaults.set(newValue.rawValue, forKey: Key.appLanguage.rawValue)
             AppLocalization.configure(language: newValue)
+            NotificationCenter.default.post(name: Self.changedNotification, object: self)
+        }
+    }
+
+    public var appAppearance: AppAppearance {
+        get {
+            guard let value = defaults.string(forKey: Key.appAppearance.rawValue),
+                  let appearance = AppAppearance(rawValue: value)
+            else {
+                return .system
+            }
+            return appearance
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.appAppearance.rawValue)
+            OmniDockTheme.configure(appearance: newValue)
             NotificationCenter.default.post(name: Self.changedNotification, object: self)
         }
     }

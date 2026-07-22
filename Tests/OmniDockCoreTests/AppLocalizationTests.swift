@@ -117,6 +117,13 @@ final class AppLocalizationTests: XCTestCase {
         }
     }
 
+    func testAppearanceLabelsAreLocalized() {
+        XCTAssertEqual(AppLocalization.text(.appearanceTitle, language: .en), "Appearance")
+        XCTAssertEqual(AppLocalization.text(.appearanceDark, language: .en), "Dark")
+        XCTAssertEqual(AppLocalization.text(.appearanceTitle, language: .zhHans), "外观")
+        XCTAssertEqual(AppLocalization.text(.appearanceDark, language: .zhHans), "深色")
+    }
+
     func testScreenRecordingDisclosuresMentionLiveAndStaticThumbnails() {
         let expectations: [(AppLanguage.Resolved, [String])] = [
             (.en, ["live images", "one-time static snapshots"]),

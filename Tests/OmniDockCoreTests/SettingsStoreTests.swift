@@ -15,6 +15,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(store.minimizeWindowsOnDockClickInsteadOfHide)
         XCTAssertTrue(store.hotkeysEnabled)
         XCTAssertEqual(store.appLanguage, .system)
+        XCTAssertEqual(store.appAppearance, .system)
         XCTAssertFalse(store.permissionOnboardingCompleted)
         XCTAssertFalse(store.permissionOnboardingSkipped)
         XCTAssertTrue(store.pendingPermissionFeatures.isEmpty)
@@ -34,6 +35,7 @@ final class SettingsStoreTests: XCTestCase {
         store.minimizeWindowsOnDockClickInsteadOfHide = true
         store.hotkeysEnabled = false
         store.appLanguage = .en
+        store.appAppearance = .dark
         store.permissionOnboardingCompleted = true
         store.permissionOnboardingSkipped = true
         store.pendingPermissionFeatures = [.dockClick, .dockPreview]
@@ -58,6 +60,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(reloaded.minimizeWindowsOnDockClickInsteadOfHide)
         XCTAssertFalse(reloaded.hotkeysEnabled)
         XCTAssertEqual(reloaded.appLanguage, .en)
+        XCTAssertEqual(reloaded.appAppearance, .dark)
         XCTAssertTrue(reloaded.permissionOnboardingCompleted)
         XCTAssertTrue(reloaded.permissionOnboardingSkipped)
         XCTAssertEqual(reloaded.pendingPermissionFeatures, [.dockClick, .dockPreview])

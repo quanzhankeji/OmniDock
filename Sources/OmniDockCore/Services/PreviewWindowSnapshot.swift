@@ -25,6 +25,13 @@ enum PreviewWindowIdentity: Hashable {
         }
         return windowID
     }
+
+    var processIdentifier: pid_t {
+        switch self {
+        case let .window(processIdentifier, _), let .transient(processIdentifier, _):
+            return processIdentifier
+        }
+    }
 }
 
 struct PreviewWindowPresentation: Hashable {

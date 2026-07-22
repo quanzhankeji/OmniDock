@@ -60,6 +60,26 @@ final class PreviewThumbnailViewTests: XCTestCase {
         XCTAssertLessThan(quitButton.frame.midX, closeButton.frame.midX)
     }
 
+    func testIndependentSwitcherTileShowsApplicationAndWindowInformation() {
+        let tile = PreviewThumbnailView(
+            info: previewInfo(),
+            showsApplicationIdentity: true
+        )
+        tile.layoutSubtreeIfNeeded()
+        let labels = tile.subviews.compactMap { $0 as? NSTextField }.map(\.stringValue)
+        let applicationLabel = tile.subviews
+            .compactMap { $0 as? NSTextField }
+            .first { $0.stringValue == "Example Browser" }
+        let windowLabel = tile.subviews
+            .compactMap { $0 as? NSTextField }
+            .first { $0.stringValue == "Start Page" }
+
+        XCTAssertTrue(labels.contains("Example Browser"))
+        XCTAssertTrue(labels.contains("Start Page"))
+        XCTAssertTrue(tile.displaysApplicationIdentity)
+        XCTAssertGreaterThan(applicationLabel?.frame.minY ?? 0, windowLabel?.frame.maxY ?? .greatestFiniteMagnitude)
+    }
+
     func testCommandTabHoverShowsOnlyTheHoveredActionGlyph() throws {
         let info = previewInfo()
         let tile = PreviewThumbnailView(info: info)
@@ -115,8 +135,8 @@ final class PreviewThumbnailViewTests: XCTestCase {
             id: "window-1",
             windowID: 1,
             processIdentifier: 123,
-            appName: "Safari",
-            title: "起始页",
+            appName: "Example Browser",
+            title: "Start Page",
             frame: CGRect(x: 0, y: 0, width: 1200, height: 800),
             isMinimized: false
         )
