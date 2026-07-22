@@ -29,6 +29,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
     private var hotkeysContentView: NSView?
     private var languagePopupButton: NSPopUpButton?
     private var previewSwitch: NSSwitch?
+    private var commandTabPreviewSwitch: NSSwitch?
     private var livePreviewSwitch: NSSwitch?
     private var livePreviewLimitField: NSTextField?
     private var livePreviewLimitStepper: NSStepper?
@@ -132,6 +133,8 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         }
         refreshLanguageControl()
         previewSwitch?.state = settings.showDockPreviews ? .on : .off
+        commandTabPreviewSwitch?.state = settings.showCommandTabPreviews ? .on : .off
+        commandTabPreviewSwitch?.isEnabled = settings.showDockPreviews
         livePreviewSwitch?.state = settings.liveDockPreviewsEnabled ? .on : .off
         livePreviewSwitch?.isEnabled = settings.showDockPreviews
         refreshLivePreviewLimitControls()
@@ -176,7 +179,19 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
             settings.showDockPreviews = false
         }
         livePreviewSwitch?.isEnabled = settings.showDockPreviews
+        commandTabPreviewSwitch?.isEnabled = settings.showDockPreviews
         refreshLivePreviewLimitControls()
+    }
+
+    @objc private func toggleCommandTabPreview(_ sender: NSSwitch) {
+        if sender.state == .on {
+            guard canEnable(.dockPreview, sender: sender) else {
+                return
+            }
+            settings.showCommandTabPreviews = true
+        } else {
+            settings.showCommandTabPreviews = false
+        }
     }
 
     @objc private func toggleLivePreview(_ sender: NSSwitch) {
@@ -323,7 +338,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
 
     private func makeWindow() -> NSWindow {
         let window = NSWindow(
-            contentRect: CGRect(x: 0, y: 0, width: 560, height: 500),
+            contentRect: CGRect(x: 0, y: 0, width: 560, height: 550),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -341,6 +356,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         permissionViews.removeAll()
         languagePopupButton = nil
         previewSwitch = nil
+        commandTabPreviewSwitch = nil
         livePreviewSwitch = nil
         livePreviewLimitField = nil
         livePreviewLimitStepper = nil
@@ -428,6 +444,16 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
             title: AppStrings.text(.settingsDockPreviewTitle),
             detail: AppStrings.text(.settingsDockPreviewDetail),
             control: previewSwitch
+        ))
+
+        let commandTabPreviewSwitch = NSSwitch()
+        commandTabPreviewSwitch.target = self
+        commandTabPreviewSwitch.action = #selector(toggleCommandTabPreview(_:))
+        self.commandTabPreviewSwitch = commandTabPreviewSwitch
+        toggles.addArrangedSubview(makeIndentedSettingRow(
+            title: AppStrings.text(.settingsCommandTabPreviewTitle),
+            detail: AppStrings.text(.settingsCommandTabPreviewDetail),
+            control: commandTabPreviewSwitch
         ))
 
         let livePreviewSwitch = NSSwitch()

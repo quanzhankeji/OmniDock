@@ -21,6 +21,15 @@ public final class ScreenCapturePreviewService {
         snapshotCache.windows(for: processIdentifier)
     }
 
+    func storeCachedSnapshotWindows(
+        _ windows: [PreviewWindowInfo],
+        for processIdentifier: pid_t
+    ) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        snapshotCache.store(processIdentifier: processIdentifier, windows: windows)
+        scheduleSnapshotCacheCleanup()
+    }
+
     func clearCachedSnapshots(for target: DockAppTarget) {
         dispatchPrecondition(condition: .onQueue(.main))
         snapshotCache.clear(processIdentifier: target.processIdentifier)

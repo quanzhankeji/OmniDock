@@ -40,9 +40,32 @@ private struct AXWindowQueryResult {
     let succeeded: Bool
 }
 
+private final class ApplicationQuitCompletionState {
+    private var didFinish = false
+    private let completion: (Bool) -> Void
+    var terminationObserver: NSObjectProtocol?
+
+    init(completion: @escaping (Bool) -> Void) {
+        self.completion = completion
+    }
+
+    func finish(_ didTerminate: Bool) {
+        guard !didFinish else {
+            return
+        }
+        didFinish = true
+        if let terminationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(terminationObserver)
+            self.terminationObserver = nil
+        }
+        completion(didTerminate)
+    }
+}
+
 public final class WindowControlService {
     private static let closeVerificationInterval: TimeInterval = 0.1
     private static let closeVerificationAttempts = 8
+    private static let quitVerificationTimeout: TimeInterval = 1.5
 
     private var rememberedWindowTargets: [pid_t: RememberedWindowTarget] = [:]
     private let operationTracker = WindowOperationGenerationTracker()
@@ -687,6 +710,45 @@ public final class WindowControlService {
             attemptsRemaining: Self.closeVerificationAttempts - 1,
             completion: completion
         )
+    }
+
+    @discardableResult
+    public func quitApplication(
+        processIdentifier: pid_t,
+        completion: @escaping (Bool) -> Void
+    ) -> Bool {
+        _ = operationTracker.begin(.quit, for: processIdentifier)
+        guard let application = NSRunningApplication(processIdentifier: processIdentifier) else {
+            DispatchQueue.main.async {
+                completion(true)
+            }
+            return true
+        }
+        guard application.terminate() else {
+            return false
+        }
+
+        let completionState = ApplicationQuitCompletionState(completion: completion)
+        completionState.terminationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didTerminateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { notification in
+            guard let terminatedApplication = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication,
+                  terminatedApplication.processIdentifier == processIdentifier
+            else {
+                return
+            }
+            completionState.finish(true)
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.quitVerificationTimeout) {
+            completionState.finish(
+                NSRunningApplication(processIdentifier: processIdentifier) == nil
+            )
+        }
+        return true
     }
 
     private func beginWindowClose(

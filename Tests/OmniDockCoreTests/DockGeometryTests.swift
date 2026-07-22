@@ -90,6 +90,32 @@ final class DockGeometryTests: XCTestCase {
         ))
     }
 
+    func testEventTapFrameConversionPreservesFramesOnAnOffsetDisplay() throws {
+        let inventory = DockScreenInventory(
+            screens: [
+                DockScreenInventoryItem(
+                    displayIdentifier: 1,
+                    appKitFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900),
+                    eventTapFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
+                ),
+                DockScreenInventoryItem(
+                    displayIdentifier: 2,
+                    appKitFrame: CGRect(x: 0, y: 900, width: 1_440, height: 900),
+                    eventTapFrame: CGRect(x: 0, y: -900, width: 1_440, height: 900)
+                )
+            ],
+            mainAppKitFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        )
+        let appKitFrame = CGRect(x: 120, y: 1_100, width: 320, height: 180)
+
+        let eventTapFrame = try XCTUnwrap(
+            inventory.eventTapFrame(fromAppKitFrame: appKitFrame)
+        )
+
+        XCTAssertEqual(eventTapFrame, CGRect(x: 120, y: -380, width: 320, height: 180))
+        XCTAssertEqual(inventory.appKitFrame(fromEventTapFrame: eventTapFrame), appKitFrame)
+    }
+
     func testInfersOrientationFromDockItemFrameOnOffsetScreens() {
         let dockGeometry = DockGeometry()
         let leftScreen = CGRect(x: -1728, y: 200, width: 1728, height: 1117)

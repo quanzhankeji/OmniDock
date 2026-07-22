@@ -7,6 +7,7 @@ final class SettingsStoreTests: XCTestCase {
         let store = SettingsStore(defaults: defaults, livePreviewLimitProvider: { 8 })
 
         XCTAssertTrue(store.showDockPreviews)
+        XCTAssertTrue(store.showCommandTabPreviews)
         XCTAssertTrue(store.liveDockPreviewsEnabled)
         XCTAssertEqual(store.livePreviewWindowLimit, 6)
         XCTAssertEqual(store.livePreviewWindowLimitMaximum, 8)
@@ -26,6 +27,7 @@ final class SettingsStoreTests: XCTestCase {
         let store = SettingsStore(defaults: defaults, livePreviewLimitProvider: { 8 })
 
         store.showDockPreviews = false
+        store.showCommandTabPreviews = false
         store.liveDockPreviewsEnabled = false
         store.livePreviewWindowLimit = 4
         store.toggleAppVisibilityOnDockClick = false
@@ -49,6 +51,7 @@ final class SettingsStoreTests: XCTestCase {
 
         let reloaded = SettingsStore(defaults: defaults, livePreviewLimitProvider: { 8 })
         XCTAssertFalse(reloaded.showDockPreviews)
+        XCTAssertFalse(reloaded.showCommandTabPreviews)
         XCTAssertFalse(reloaded.liveDockPreviewsEnabled)
         XCTAssertEqual(reloaded.livePreviewWindowLimit, 4)
         XCTAssertFalse(reloaded.toggleAppVisibilityOnDockClick)
@@ -101,6 +104,7 @@ final class SettingsStoreTests: XCTestCase {
         let store = SettingsStore(defaults: defaults, livePreviewLimitProvider: { 8 })
 
         store.showDockPreviews = false
+        store.showCommandTabPreviews = false
         store.liveDockPreviewsEnabled = false
         store.toggleAppVisibilityOnDockClick = false
         store.hotkeysEnabled = false
@@ -109,6 +113,7 @@ final class SettingsStoreTests: XCTestCase {
         store.enablePermissionBackedDefaultsAfterOnboarding()
 
         XCTAssertTrue(store.showDockPreviews)
+        XCTAssertTrue(store.showCommandTabPreviews)
         XCTAssertTrue(store.liveDockPreviewsEnabled)
         XCTAssertTrue(store.toggleAppVisibilityOnDockClick)
         XCTAssertTrue(store.hotkeysEnabled)

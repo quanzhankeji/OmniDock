@@ -25,6 +25,8 @@
 
 "settingsDockPreviewTitle" = "Show Dock Window Previews";
 "settingsDockPreviewDetail" = "Show window previews when the pointer rests on Dock app icons.";
+"settingsCommandTabPreviewTitle" = "Command-Tab Previews";
+"settingsCommandTabPreviewDetail" = "Show static window previews above the app selected in the macOS Command-Tab switcher.";
 "settingsLivePreviewTitle" = "Live Previews";
 "settingsLivePreviewDetail" = "Continuously refresh preview images; turn this off to show static previews and reduce performance use.";
 "settingsDockClickTitle" = "Dock Icon Hide / Show";
@@ -100,6 +102,8 @@
 "previewHiddenNoStatic" = "Hidden\nNo static preview";
 "previewMinimizedClickRestore" = "Minimized\nClick to restore";
 "previewCloseWindow" = "Close window";
+"previewQuitApplication" = "Quit application";
+"previewQuitFailed" = "Unable to quit this application";
 "previewReadFailure" = "Unable to read window previews: %@";
 "previewNoContent" = "No window preview content available";
 "previewNoNormalWindow" = "No normal windows to preview";

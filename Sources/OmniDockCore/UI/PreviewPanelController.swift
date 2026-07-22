@@ -7,14 +7,24 @@ typealias PreviewWindowCloseRequest = (
     CGWindowID?,
     @escaping (Bool) -> Void
 ) -> Void
+typealias PreviewApplicationQuitRequest = (pid_t, @escaping (Bool) -> Void) -> Bool
 
 @MainActor
 public final class PreviewPanelController {
     var onWindowClosed: ((PreviewWindowInfo) -> Void)?
     var onPreviewLifecycleEndRequested: (() -> Void)?
+    var onApplicationQuitRequested: ((pid_t) -> Void)?
+    var onCommandTabButtonTargetsChanged: (() -> Void)?
+
+    private struct PresentationHandler {
+        let onLifecycleEndRequested: () -> Void
+        let onWindowClosed: (PreviewWindowInfo) -> Void
+        let onApplicationQuitRequested: (pid_t) -> Void
+    }
 
     private let requestWindowFocus: PreviewWindowFocusRequest
     private let requestWindowClose: PreviewWindowCloseRequest
+    private let requestApplicationQuit: PreviewApplicationQuitRequest
     private var panel: NSPanel?
     private var thumbnailViews: [CGWindowID: PreviewThumbnailView] = [:]
     private var thumbnailViewsByIdentity: [PreviewWindowIdentity: PreviewThumbnailView] = [:]
@@ -27,7 +37,10 @@ public final class PreviewPanelController {
     private var currentTarget: DockAppTarget?
     private var currentWindows: [PreviewWindowInfo] = []
     private var pendingWindowCloseIdentities: Set<PreviewWindowIdentity> = []
+    private var pendingApplicationQuitProcessIdentifiers: Set<pid_t> = []
     private var targetGeneration: UInt64 = 0
+
+    private var presentationHandlers: [PreviewAnchorKind: PresentationHandler] = [:]
 
     public convenience init(windowControlService: WindowControlService) {
         self.init(
@@ -45,16 +58,37 @@ public final class PreviewPanelController {
                     windowID: windowID,
                     completion: completion
                 )
+            },
+            requestApplicationQuit: { processIdentifier, completion in
+                windowControlService.quitApplication(
+                    processIdentifier: processIdentifier,
+                    completion: completion
+                )
             }
         )
     }
 
     init(
         requestWindowFocus: @escaping PreviewWindowFocusRequest,
-        requestWindowClose: @escaping PreviewWindowCloseRequest
+        requestWindowClose: @escaping PreviewWindowCloseRequest,
+        requestApplicationQuit: @escaping PreviewApplicationQuitRequest = { _, _ in false }
     ) {
         self.requestWindowFocus = requestWindowFocus
         self.requestWindowClose = requestWindowClose
+        self.requestApplicationQuit = requestApplicationQuit
+    }
+
+    func setPresentationHandler(
+        for anchorKind: PreviewAnchorKind,
+        onLifecycleEndRequested: @escaping () -> Void,
+        onWindowClosed: @escaping (PreviewWindowInfo) -> Void,
+        onApplicationQuitRequested: @escaping (pid_t) -> Void = { _ in }
+    ) {
+        presentationHandlers[anchorKind] = PresentationHandler(
+            onLifecycleEndRequested: onLifecycleEndRequested,
+            onWindowClosed: onWindowClosed,
+            onApplicationQuitRequested: onApplicationQuitRequested
+        )
     }
 
     public func show(target: DockAppTarget, windows: [PreviewWindowInfo], message: String?) {
@@ -71,6 +105,7 @@ public final class PreviewPanelController {
         panel.setFrame(frame, display: true)
         rebuildContent(target: target, windows: visibleWindows, message: message)
         panel.orderFrontRegardless()
+        notifyCommandTabButtonTargetsChanged()
     }
 
     func update(target: DockAppTarget, windows: [PreviewWindowInfo], message: String?) {
@@ -121,6 +156,7 @@ public final class PreviewPanelController {
         rebuildWindowIDIndex()
         panel.setFrame(panelFrame(target: target, windows: windows), display: true)
         layoutScrollableContent()
+        notifyCommandTabButtonTargetsChanged()
     }
 
     public func updatePreview(windowID: CGWindowID, image: NSImage) {
@@ -182,6 +218,7 @@ public final class PreviewPanelController {
         currentWindows = []
         panel?.orderOut(nil)
         panel?.contentView = nil
+        notifyCommandTabButtonTargetsChanged()
     }
 
     public var frame: CGRect? {
@@ -200,6 +237,52 @@ public final class PreviewPanelController {
             return false
         }
         return panel.frame.insetBy(dx: -8, dy: -8).contains(point)
+    }
+
+    func commandTabButtonHitTargets() -> [PreviewThumbnailActionHitTarget] {
+        guard currentTarget?.previewAnchorKind == .commandTab,
+              let panel,
+              panel.isVisible
+        else {
+            return []
+        }
+
+        panel.contentView?.layoutSubtreeIfNeeded()
+        return thumbnailViewsByIdentity.values.flatMap { tile in
+            tile.actionButtonHitTargets(in: panel)
+        }
+    }
+
+    func performCommandTabAction(_ action: PreviewThumbnailAction) {
+        guard currentTarget?.previewAnchorKind == .commandTab else {
+            return
+        }
+
+        switch action {
+        case let .closeWindow(identity):
+            guard let window = currentWindows.first(where: {
+                PreviewWindowIdentity($0) == identity
+            }) else {
+                return
+            }
+            closeWindowFromPreview(window)
+        case let .quitApplication(processIdentifier):
+            guard let window = currentWindows.first(where: {
+                $0.processIdentifier == processIdentifier
+            }) else {
+                return
+            }
+            quitApplicationFromPreview(window)
+        }
+    }
+
+    func setCommandTabHoveredAction(_ action: PreviewThumbnailAction?) {
+        guard currentTarget?.previewAnchorKind == .commandTab else {
+            return
+        }
+        thumbnailViewsByIdentity.values.forEach { tile in
+            tile.setCommandTabHoveredAction(action)
+        }
     }
 
     private func makePanel() -> NSPanel {
@@ -311,7 +394,14 @@ public final class PreviewPanelController {
     }
 
     func focusWindowAndHidePreview(_ info: PreviewWindowInfo) {
-        onPreviewLifecycleEndRequested?()
+        let presentationHandler = currentTarget.flatMap {
+            presentationHandlers[$0.previewAnchorKind]
+        }
+        if let presentationHandler {
+            presentationHandler.onLifecycleEndRequested()
+        } else {
+            onPreviewLifecycleEndRequested?()
+        }
         hide()
         requestWindowFocus(info.processIdentifier, info.title, info.windowID)
     }
@@ -325,6 +415,7 @@ public final class PreviewPanelController {
         }
         let requestTargetIdentifier = target.dockTileIdentifier
         let requestGeneration = targetGeneration
+        let presentationHandler = presentationHandlers[target.previewAnchorKind]
 
         requestWindowClose(
             info.processIdentifier,
@@ -337,9 +428,37 @@ public final class PreviewPanelController {
                     identity: identity,
                     didDisappear: didDisappear,
                     requestTargetIdentifier: requestTargetIdentifier,
-                    requestGeneration: requestGeneration
+                    requestGeneration: requestGeneration,
+                    presentationHandler: presentationHandler
                 )
             }
+        }
+    }
+
+    func quitApplicationFromPreview(_ info: PreviewWindowInfo) {
+        guard pendingApplicationQuitProcessIdentifiers.insert(info.processIdentifier).inserted else {
+            return
+        }
+
+        let requestTargetIdentifier = currentTarget?.dockTileIdentifier
+        let requestGeneration = targetGeneration
+        let presentationHandler = currentTarget.flatMap {
+            presentationHandlers[$0.previewAnchorKind]
+        }
+        guard requestApplicationQuit(info.processIdentifier, { [weak self] didTerminate in
+            Task { @MainActor [weak self] in
+                self?.completeApplicationQuit(
+                    processIdentifier: info.processIdentifier,
+                    didTerminate: didTerminate,
+                    requestTargetIdentifier: requestTargetIdentifier,
+                    requestGeneration: requestGeneration,
+                    presentationHandler: presentationHandler
+                )
+            }
+        }) else {
+            pendingApplicationQuitProcessIdentifiers.remove(info.processIdentifier)
+            showTransientMessage(AppStrings.text(.previewQuitFailed))
+            return
         }
     }
 
@@ -363,7 +482,8 @@ public final class PreviewPanelController {
         identity: PreviewWindowIdentity,
         didDisappear: Bool,
         requestTargetIdentifier: String,
-        requestGeneration: UInt64
+        requestGeneration: UInt64,
+        presentationHandler: PresentationHandler?
     ) {
         guard pendingWindowCloseIdentities.remove(identity) != nil else {
             return
@@ -378,9 +498,45 @@ public final class PreviewPanelController {
             return
         }
 
-        onWindowClosed?(info)
+        if let presentationHandler {
+            presentationHandler.onWindowClosed(info)
+        } else {
+            onWindowClosed?(info)
+        }
         if belongsToCurrentPresentation {
             removeThumbnail(for: info)
+        }
+    }
+
+    private func completeApplicationQuit(
+        processIdentifier: pid_t,
+        didTerminate: Bool,
+        requestTargetIdentifier: String?,
+        requestGeneration: UInt64,
+        presentationHandler: PresentationHandler?
+    ) {
+        guard pendingApplicationQuitProcessIdentifiers.remove(processIdentifier) != nil else {
+            return
+        }
+
+        let belongsToCurrentPresentation = requestGeneration == targetGeneration
+            && currentTarget?.dockTileIdentifier == requestTargetIdentifier
+        guard didTerminate else {
+            if belongsToCurrentPresentation {
+                showTransientMessage(AppStrings.text(.previewQuitFailed))
+            }
+            return
+        }
+
+        if let presentationHandler {
+            presentationHandler.onApplicationQuitRequested(processIdentifier)
+            presentationHandler.onLifecycleEndRequested()
+        } else {
+            onApplicationQuitRequested?(processIdentifier)
+            onPreviewLifecycleEndRequested?()
+        }
+        if belongsToCurrentPresentation {
+            hide()
         }
     }
 
@@ -416,6 +572,11 @@ public final class PreviewPanelController {
         panel.setFrame(frame, display: true, animate: animated)
         layoutScrollableContent()
         panel.contentView?.needsLayout = true
+        notifyCommandTabButtonTargetsChanged()
+    }
+
+    private func notifyCommandTabButtonTargetsChanged() {
+        onCommandTabButtonTargetsChanged?()
     }
 
     private func layoutScrollableContent() {
@@ -487,11 +648,17 @@ public final class PreviewPanelController {
         let anchor = target.previewAnchorPoint
         let screen = NSScreen.screens.first(where: { $0.frame.contains(anchor) }) ?? NSScreen.main
         let screenFrame = screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
-        let orientation = DockGeometry().inferredOrientation(
-            dockItemFrame: target.dockItemFrame,
-            anchor: anchor,
-            screenFrame: screen?.frame ?? screenFrame
-        )
+        let orientation: DockOrientation
+        switch target.previewAnchorKind {
+        case .dock:
+            orientation = DockGeometry().inferredOrientation(
+                dockItemFrame: target.dockItemFrame,
+                anchor: anchor,
+                screenFrame: screen?.frame ?? screenFrame
+            )
+        case .commandTab:
+            orientation = .bottom
+        }
         return PreviewLayoutCalculator.panelFrame(
             tileSizes: windows.map { window in
                 thumbnailViewsByIdentity[PreviewWindowIdentity(window)]?.preferredTileSize
@@ -518,6 +685,9 @@ public final class PreviewPanelController {
         }
         tile.onClose = { [weak self] info in
             self?.closeWindowFromPreview(info)
+        }
+        tile.onQuit = { [weak self] info in
+            self?.quitApplicationFromPreview(info)
         }
         thumbnailViewsByIdentity[identity] = tile
         if let windowID = info.windowID {

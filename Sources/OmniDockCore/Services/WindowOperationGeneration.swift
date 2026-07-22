@@ -7,6 +7,7 @@ enum WindowOperationIntent: Equatable {
     case focus
     case open
     case close
+    case quit
 }
 
 struct WindowOperationToken: Equatable {

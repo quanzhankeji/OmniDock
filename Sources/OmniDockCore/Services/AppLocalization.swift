@@ -28,6 +28,8 @@ enum AppStringKey: String, CaseIterable {
 
     case settingsDockPreviewTitle
     case settingsDockPreviewDetail
+    case settingsCommandTabPreviewTitle
+    case settingsCommandTabPreviewDetail
     case settingsLivePreviewTitle
     case settingsLivePreviewDetail
     case settingsDockClickTitle
@@ -103,6 +105,8 @@ enum AppStringKey: String, CaseIterable {
     case previewHiddenNoStatic
     case previewMinimizedClickRestore
     case previewCloseWindow
+    case previewQuitApplication
+    case previewQuitFailed
     case previewReadFailure
     case previewNoContent
     case previewNoNormalWindow

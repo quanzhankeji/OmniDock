@@ -5,6 +5,7 @@ public final class SettingsStore {
 
     private enum Key: String {
         case showDockPreviews = "showDockPreviews"
+        case showCommandTabPreviews = "showCommandTabPreviews"
         case liveDockPreviewsEnabled = "liveDockPreviewsEnabled"
         case livePreviewWindowLimit = "livePreviewWindowLimit"
         case toggleAppVisibilityOnDockClick = "toggleAppVisibilityOnDockClick"
@@ -35,6 +36,7 @@ public final class SettingsStore {
         migrateLegacyMinimizePreferenceIfNeeded()
         defaults.register(defaults: [
             Key.showDockPreviews.rawValue: true,
+            Key.showCommandTabPreviews.rawValue: true,
             Key.liveDockPreviewsEnabled.rawValue: true,
             Key.livePreviewWindowLimit.rawValue: min(6, max(0, livePreviewLimitProvider())),
             Key.hotkeysEnabled.rawValue: true,
@@ -48,6 +50,16 @@ public final class SettingsStore {
     public var showDockPreviews: Bool {
         get { defaults.bool(forKey: Key.showDockPreviews.rawValue) }
         set { set(newValue, for: .showDockPreviews) }
+    }
+
+    public var showCommandTabPreviews: Bool {
+        get {
+            guard let value = defaults.object(forKey: Key.showCommandTabPreviews.rawValue) as? Bool else {
+                return true
+            }
+            return value
+        }
+        set { set(newValue, for: .showCommandTabPreviews) }
     }
 
     public var liveDockPreviewsEnabled: Bool {
@@ -194,6 +206,7 @@ public final class SettingsStore {
 
     public func enablePermissionBackedDefaultsAfterOnboarding() {
         defaults.set(true, forKey: Key.showDockPreviews.rawValue)
+        defaults.set(true, forKey: Key.showCommandTabPreviews.rawValue)
         defaults.set(true, forKey: Key.liveDockPreviewsEnabled.rawValue)
         defaults.set(true, forKey: Key.toggleAppVisibilityOnDockClick.rawValue)
         defaults.set(true, forKey: Key.hotkeysEnabled.rawValue)

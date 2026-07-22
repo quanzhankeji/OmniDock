@@ -29,6 +29,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         previewService: previewService,
         previewPanelController: previewPanelController
     )
+    private lazy var cmdTabPreviewService = CmdTabPreviewService(
+        settings: settings,
+        permissionService: permissionService,
+        previewService: previewService,
+        previewPanelController: previewPanelController,
+        onActivityChanged: { [weak self] isActive in
+            self?.coordinator.setCommandTabPreviewActive(isActive)
+        }
+    )
     private lazy var statusMenuController = StatusMenuController(
         settings: settings,
         permissionService: permissionService,
@@ -81,6 +90,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         applicationMainMenuController.install()
         statusMenuController.install()
         coordinator.start()
+        cmdTabPreviewService.start()
         hotkeyService.start()
         showPermissionOnboardingIfNeeded()
     }
@@ -88,6 +98,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     public func applicationWillTerminate(_ notification: Notification) {
         NotificationCenter.default.removeObserver(self)
         hotkeyService.stop()
+        cmdTabPreviewService.stop()
         coordinator.stop()
         previewPanelController.hide()
     }

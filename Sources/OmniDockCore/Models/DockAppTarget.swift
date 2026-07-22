@@ -1,6 +1,11 @@
 import AppKit
 import CoreGraphics
 
+public enum PreviewAnchorKind: Hashable {
+    case dock
+    case commandTab
+}
+
 public struct DockAppTarget: Equatable {
     public let processIdentifier: pid_t
     public let bundleIdentifier: String?
@@ -9,6 +14,7 @@ public struct DockAppTarget: Equatable {
     public let hitPoint: CGPoint
     public let dockItemFrame: CGRect?
     public let dockTileIdentifierOverride: String?
+    public let previewAnchorKind: PreviewAnchorKind
     private let dockTileIdentityProcessIdentifier: pid_t
 
     public var previewAnchorPoint: CGPoint {
@@ -36,7 +42,8 @@ public struct DockAppTarget: Equatable {
         dockElementTitle: String,
         hitPoint: CGPoint,
         dockItemFrame: CGRect? = nil,
-        dockTileIdentifierOverride: String? = nil
+        dockTileIdentifierOverride: String? = nil,
+        previewAnchorKind: PreviewAnchorKind = .dock
     ) {
         self.init(
             processIdentifier: processIdentifier,
@@ -46,6 +53,7 @@ public struct DockAppTarget: Equatable {
             hitPoint: hitPoint,
             dockItemFrame: dockItemFrame,
             dockTileIdentifierOverride: dockTileIdentifierOverride,
+            previewAnchorKind: previewAnchorKind,
             dockTileIdentityProcessIdentifier: processIdentifier
         )
     }
@@ -58,6 +66,7 @@ public struct DockAppTarget: Equatable {
         hitPoint: CGPoint,
         dockItemFrame: CGRect?,
         dockTileIdentifierOverride: String?,
+        previewAnchorKind: PreviewAnchorKind,
         dockTileIdentityProcessIdentifier: pid_t
     ) {
         self.processIdentifier = processIdentifier
@@ -67,6 +76,7 @@ public struct DockAppTarget: Equatable {
         self.hitPoint = hitPoint
         self.dockItemFrame = dockItemFrame
         self.dockTileIdentifierOverride = dockTileIdentifierOverride
+        self.previewAnchorKind = previewAnchorKind
         self.dockTileIdentityProcessIdentifier = dockTileIdentityProcessIdentifier
     }
 
@@ -83,6 +93,7 @@ public struct DockAppTarget: Equatable {
             hitPoint: hitPoint,
             dockItemFrame: dockItemFrame,
             dockTileIdentifierOverride: dockTileIdentifierOverride,
+            previewAnchorKind: previewAnchorKind,
             dockTileIdentityProcessIdentifier: dockTileIdentityProcessIdentifier
         )
     }

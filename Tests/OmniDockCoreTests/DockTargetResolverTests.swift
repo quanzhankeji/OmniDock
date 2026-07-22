@@ -36,6 +36,39 @@ final class DockTargetResolverTests: XCTestCase {
         )
     }
 
+    func testScreenInventoryConvertsTopLeftGlobalFramesAcrossVerticalDisplays() throws {
+        let inventory = DockScreenInventory(
+            screens: [
+                DockScreenInventoryItem(
+                    displayIdentifier: 1,
+                    appKitFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900),
+                    eventTapFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
+                ),
+                DockScreenInventoryItem(
+                    displayIdentifier: 2,
+                    appKitFrame: CGRect(x: 0, y: 900, width: 1_440, height: 900),
+                    eventTapFrame: CGRect(x: 0, y: -900, width: 1_440, height: 900)
+                ),
+                DockScreenInventoryItem(
+                    displayIdentifier: 3,
+                    appKitFrame: CGRect(x: 0, y: -900, width: 1_440, height: 900),
+                    eventTapFrame: CGRect(x: 0, y: 900, width: 1_440, height: 900)
+                )
+            ],
+            mainAppKitFrame: CGRect(x: 0, y: 0, width: 1_440, height: 900)
+        )
+
+        let upper = try XCTUnwrap(inventory.appKitFrame(
+            fromEventTapFrame: CGRect(x: 100, y: -800, width: 40, height: 50)
+        ))
+        let lower = try XCTUnwrap(inventory.appKitFrame(
+            fromEventTapFrame: CGRect(x: 100, y: 1_000, width: 40, height: 50)
+        ))
+
+        XCTAssertEqual(upper, CGRect(x: 100, y: 1_650, width: 40, height: 50))
+        XCTAssertEqual(lower, CGRect(x: 100, y: -150, width: 40, height: 50))
+    }
+
     func testMatchingApplicationUsesDockItemTitle() {
         let app = DockRunningApplicationCandidate(
             processIdentifier: 101,
