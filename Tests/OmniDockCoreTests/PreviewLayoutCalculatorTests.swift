@@ -148,4 +148,39 @@ final class PreviewLayoutCalculatorTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(size.width, 160)
         XCTAssertGreaterThanOrEqual(size.height, 100)
     }
+
+    func testIndependentSwitcherUsesMultipleRowsForAWindowSetThatDoesNotFitOneRow() {
+        let screen = CGRect(x: 0, y: 0, width: 1_200, height: 800)
+        let metrics = PreviewLayoutCalculator.windowCycleGridMetrics(
+            tileSizes: Array(repeating: PreviewLayoutCalculator.tileSize, count: 7),
+            screenFrame: screen
+        )
+
+        XCTAssertGreaterThan(metrics.columnCount, 1)
+        XCTAssertGreaterThan(metrics.rowCount, 1)
+        XCTAssertEqual(metrics.columnWidths.count, metrics.columnCount)
+        XCTAssertLessThanOrEqual(metrics.viewportSize.width, screen.width - PreviewLayoutCalculator.edgeInset * 2)
+        XCTAssertLessThanOrEqual(metrics.viewportSize.height, screen.height - PreviewLayoutCalculator.edgeInset * 2)
+    }
+
+    func testIndependentSwitcherCapsViewportHeightButKeepsTheFullGridScrollable() {
+        let screen = CGRect(x: 0, y: 0, width: 1_200, height: 800)
+        let metrics = PreviewLayoutCalculator.windowCycleGridMetrics(
+            tileSizes: Array(repeating: PreviewLayoutCalculator.tileSize, count: 30),
+            screenFrame: screen
+        )
+
+        XCTAssertGreaterThan(metrics.contentSize.height, metrics.viewportSize.height)
+        XCTAssertGreaterThan(metrics.rowCount, 3)
+    }
+
+    func testIndependentSwitcherWrapsLargeWindowSetsOnWideDisplays() {
+        let metrics = PreviewLayoutCalculator.windowCycleGridMetrics(
+            tileSizes: Array(repeating: PreviewLayoutCalculator.tileSize, count: 10),
+            screenFrame: CGRect(x: 0, y: 0, width: 3_840, height: 2_160)
+        )
+
+        XCTAssertEqual(metrics.columnCount, 7)
+        XCTAssertEqual(metrics.rowCount, 2)
+    }
 }

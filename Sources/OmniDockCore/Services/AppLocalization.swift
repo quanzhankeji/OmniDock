@@ -6,8 +6,13 @@ enum AppStringKey: String, CaseIterable {
     case languageSystem
     case languageChinese
     case languageEnglish
+    case appearanceTitle
+    case appearanceDetail
+    case appearanceSystem
+    case appearanceLight
+    case appearanceDark
 
-    case tabSettings
+    case tabPreview
     case tabHotkeys
     case menuSettings
     case menuHotkeys
@@ -30,6 +35,9 @@ enum AppStringKey: String, CaseIterable {
     case settingsDockPreviewDetail
     case settingsCommandTabPreviewTitle
     case settingsCommandTabPreviewDetail
+    case settingsWindowCycleTitle
+    case settingsWindowCycleDetail
+    case settingsWindowCycleUnavailable
     case settingsLivePreviewTitle
     case settingsLivePreviewDetail
     case settingsDockClickTitle
@@ -115,6 +123,7 @@ enum AppStringKey: String, CaseIterable {
     case previewStreamStop
     case previewStaticFailureWithReason
     case previewStaticFailure
+    case previewWindowContentUnavailable
 }
 
 enum AppLocalization {

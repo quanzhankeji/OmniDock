@@ -3,6 +3,8 @@ import Foundation
 public enum PermissionFeature: String, CaseIterable, Hashable {
     case dockClick
     case dockPreview
+    // Preserve pending onboarding requests saved by earlier builds.
+    case windowCycle = "independentWindowSwitcher"
     case hotkeys
 
     public var requiredPermissions: [PermissionKind] {
@@ -11,6 +13,8 @@ public enum PermissionFeature: String, CaseIterable, Hashable {
             return [.accessibility, .inputMonitoring]
         case .dockPreview:
             return [.accessibility, .screenRecording]
+        case .windowCycle:
+            return [.accessibility, .screenRecording, .inputMonitoring]
         case .hotkeys:
             return [.accessibility]
         }
@@ -59,6 +63,7 @@ public enum PermissionFeatureGate {
            !isSatisfied(for: .dockPreview, in: snapshot) {
             settings.showDockPreviews = false
             settings.liveDockPreviewsEnabled = false
+            settings.windowCycleEnabled = false
             disabled.append(.dockPreview)
         } else if settings.liveDockPreviewsEnabled,
                   !isSatisfied(for: .dockPreview, in: snapshot) {
@@ -70,6 +75,12 @@ public enum PermissionFeatureGate {
            !isSatisfied(for: .hotkeys, in: snapshot) {
             settings.hotkeysEnabled = false
             disabled.append(.hotkeys)
+        }
+
+        if settings.windowCycleEnabled,
+           !isSatisfied(for: .windowCycle, in: snapshot) {
+            settings.windowCycleEnabled = false
+            disabled.append(.windowCycle)
         }
 
         return disabled
@@ -96,6 +107,9 @@ public enum PermissionFeatureGate {
             case .dockPreview:
                 settings.showDockPreviews = true
                 settings.liveDockPreviewsEnabled = true
+            case .windowCycle:
+                settings.showDockPreviews = true
+                settings.windowCycleEnabled = true
             case .hotkeys:
                 settings.hotkeysEnabled = true
             }

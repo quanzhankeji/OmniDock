@@ -9,6 +9,23 @@ typealias PreviewWindowCloseRequest = (
 ) -> Void
 typealias PreviewApplicationQuitRequest = (pid_t, @escaping (Bool) -> Void) -> Bool
 
+enum WindowCyclePresentationPolicy {
+    static func needsGridRebuild(
+        current: [PreviewWindowInfo],
+        replacement: [PreviewWindowInfo]
+    ) -> Bool {
+        guard current.count == replacement.count else {
+            return true
+        }
+        return zip(current, replacement).contains { currentWindow, replacementWindow in
+            let currentIdentity = PreviewWindowIdentity(currentWindow)
+            let replacementIdentity = PreviewWindowIdentity(replacementWindow)
+            return currentIdentity != replacementIdentity
+                || currentWindow.frame != replacementWindow.frame
+        }
+    }
+}
+
 @MainActor
 public final class PreviewPanelController {
     var onWindowClosed: ((PreviewWindowInfo) -> Void)?
@@ -32,13 +49,17 @@ public final class PreviewPanelController {
     private weak var scrollView: PreviewHorizontalScrollView?
     private weak var scrollDocumentView: NSView?
     private weak var stackView: NSStackView?
+    private weak var gridView: NSGridView?
+    private var gridNeedsInitialTopAlignment = false
     private var messageField: NSTextField?
     private var transientMessageWorkItem: DispatchWorkItem?
     private var currentTarget: DockAppTarget?
     private var currentWindows: [PreviewWindowInfo] = []
+    private var selectedWindowIdentity: PreviewWindowIdentity?
     private var pendingWindowCloseIdentities: Set<PreviewWindowIdentity> = []
     private var pendingApplicationQuitProcessIdentifiers: Set<pid_t> = []
     private var targetGeneration: UInt64 = 0
+    private var themeObserver: NSObjectProtocol?
 
     private var presentationHandlers: [PreviewAnchorKind: PresentationHandler] = [:]
 
@@ -76,6 +97,21 @@ public final class PreviewPanelController {
         self.requestWindowFocus = requestWindowFocus
         self.requestWindowClose = requestWindowClose
         self.requestApplicationQuit = requestApplicationQuit
+        themeObserver = NotificationCenter.default.addObserver(
+            forName: OmniDockTheme.changedNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshTheme()
+            }
+        }
+    }
+
+    deinit {
+        if let themeObserver {
+            NotificationCenter.default.removeObserver(themeObserver)
+        }
     }
 
     func setPresentationHandler(
@@ -102,6 +138,7 @@ public final class PreviewPanelController {
 
         let panel = panel ?? makePanel()
         self.panel = panel
+        OmniDockTheme.applyCurrentAppearance(to: panel)
         panel.setFrame(frame, display: true)
         rebuildContent(target: target, windows: visibleWindows, message: message)
         panel.orderFrontRegardless()
@@ -112,9 +149,23 @@ public final class PreviewPanelController {
         guard currentTarget?.isSameDockTile(as: target) == true,
               !currentWindows.isEmpty,
               !windows.isEmpty,
-              let panel,
-              let stackView
+              let panel
         else {
+            show(target: target, windows: windows, message: message)
+            return
+        }
+
+        if target.previewAnchorKind == .windowCycle {
+            updateWindowCycle(
+                target: target,
+                windows: windows,
+                message: message,
+                panel: panel
+            )
+            return
+        }
+
+        guard let stackView else {
             show(target: target, windows: windows, message: message)
             return
         }
@@ -154,6 +205,44 @@ public final class PreviewPanelController {
 
         currentWindows = windows
         rebuildWindowIDIndex()
+        applySelection()
+        panel.setFrame(panelFrame(target: target, windows: windows), display: true)
+        layoutScrollableContent()
+        notifyCommandTabButtonTargetsChanged()
+    }
+
+    private func updateWindowCycle(
+        target: DockAppTarget,
+        windows: [PreviewWindowInfo],
+        message: String?,
+        panel: NSPanel
+    ) {
+        guard let gridView,
+              WindowCyclePresentationPolicy.needsGridRebuild(
+                current: currentWindows,
+                replacement: windows
+              ) == false
+        else {
+            show(target: target, windows: windows, message: message)
+            return
+        }
+
+        currentTarget = target
+        currentWindows = windows
+        for window in windows {
+            let identity = PreviewWindowIdentity(window)
+            guard let tile = thumbnailViewsByIdentity[identity] else {
+                show(target: target, windows: windows, message: message)
+                return
+            }
+            _ = tile.update(info: window)
+        }
+
+        // The grid's dimensions are stable when identities and source frames are
+        // unchanged. Avoid rebuilding every card during background reconciliation.
+        gridView.needsLayout = true
+        rebuildWindowIDIndex()
+        applySelection()
         panel.setFrame(panelFrame(target: target, windows: windows), display: true)
         layoutScrollableContent()
         notifyCommandTabButtonTargetsChanged()
@@ -172,6 +261,16 @@ public final class PreviewPanelController {
         constraints.width.constant = tile.preferredTileSize.width
         constraints.height.constant = tile.preferredTileSize.height
         resizePanelForRemainingThumbnails(animated: false)
+    }
+
+    func setSelectedWindow(_ info: PreviewWindowInfo?) {
+        let selectedIdentity = info.map(PreviewWindowIdentity.init)
+        guard selectedWindowIdentity != selectedIdentity else {
+            return
+        }
+        selectedWindowIdentity = selectedIdentity
+        applySelection()
+        scrollSelectedWindowIntoViewIfNeeded()
     }
 
     public func showTransientMessage(_ message: String) {
@@ -211,11 +310,14 @@ public final class PreviewPanelController {
         scrollView = nil
         scrollDocumentView = nil
         stackView = nil
+        gridView = nil
+        gridNeedsInitialTopAlignment = false
         transientMessageWorkItem?.cancel()
         transientMessageWorkItem = nil
         messageField = nil
         currentTarget = nil
         currentWindows = []
+        selectedWindowIdentity = nil
         panel?.orderOut(nil)
         panel?.contentView = nil
         notifyCommandTabButtonTargetsChanged()
@@ -298,6 +400,7 @@ public final class PreviewPanelController {
         panel.hasShadow = false
         panel.collectionBehavior = [.canJoinAllSpaces, .transient, .ignoresCycle]
         panel.hidesOnDeactivate = false
+        OmniDockTheme.applyCurrentAppearance(to: panel)
         return panel
     }
 
@@ -308,6 +411,8 @@ public final class PreviewPanelController {
         scrollView = nil
         scrollDocumentView = nil
         stackView = nil
+        gridView = nil
+        gridNeedsInitialTopAlignment = false
         transientMessageWorkItem?.cancel()
         transientMessageWorkItem = nil
         messageField = nil
@@ -319,7 +424,7 @@ public final class PreviewPanelController {
             let label = NSTextField(labelWithString: message ?? AppStrings.text(.previewNoWindows))
             label.alignment = .center
             label.font = .systemFont(ofSize: 13, weight: .medium)
-            label.textColor = .labelColor
+            label.textColor = OmniDockTheme.palette(for: root.effectiveAppearance).primaryText
             label.maximumNumberOfLines = 3
             label.frame = root.bounds.insetBy(dx: 16, dy: 16)
             label.autoresizingMask = [.width, .height]
@@ -334,8 +439,12 @@ public final class PreviewPanelController {
             scrollView.hasHorizontalScroller = false
             scrollView.hasVerticalScroller = false
             scrollView.autohidesScrollers = true
-            scrollView.horizontalScrollElasticity = .allowed
-            scrollView.verticalScrollElasticity = .none
+            scrollView.horizontalScrollElasticity = target.previewAnchorKind == .windowCycle
+                ? .none
+                : .allowed
+            scrollView.verticalScrollElasticity = target.previewAnchorKind == .windowCycle
+                ? .allowed
+                : .none
             scrollView.allowsMagnification = false
 
             let documentView = PreviewScrollDocumentView()
@@ -345,23 +454,47 @@ public final class PreviewPanelController {
                 self?.scrollPreviewContent(deltaX: deltaX)
             }
             scrollView.documentView = documentView
-
-            let stack = NSStackView()
-            stack.orientation = .horizontal
-            stack.spacing = PreviewLayoutCalculator.gap
-            stack.alignment = .centerY
-            stack.distribution = .fill
-            stack.autoresizingMask = [.height]
-
-            for info in windows {
-                let tile = makeThumbnail(info: info)
-                stack.addArrangedSubview(tile)
-            }
-            documentView.addSubview(stack)
             root.addSubview(scrollView)
             self.scrollView = scrollView
             self.scrollDocumentView = documentView
-            self.stackView = stack
+
+            if target.previewAnchorKind == .windowCycle {
+                let layout = windowCycleGridMetrics(
+                    target: target,
+                    windows: windows
+                )
+                let rows = makeGridRows(
+                    windows: windows,
+                    columnCount: layout.columnCount
+                )
+                let grid = NSGridView(views: rows)
+                grid.rowSpacing = PreviewLayoutCalculator.gap
+                grid.columnSpacing = PreviewLayoutCalculator.gap
+                grid.xPlacement = .center
+                grid.yPlacement = .center
+                for (index, width) in layout.columnWidths.enumerated() {
+                    grid.column(at: index).width = width
+                }
+                for rowIndex in 0..<layout.rowCount {
+                    grid.row(at: rowIndex).height = layout.rowHeight
+                }
+                documentView.addSubview(grid)
+                self.gridView = grid
+                gridNeedsInitialTopAlignment = true
+            } else {
+                let stack = NSStackView()
+                stack.orientation = .horizontal
+                stack.spacing = PreviewLayoutCalculator.gap
+                stack.alignment = .centerY
+                stack.distribution = .fill
+                stack.autoresizingMask = [.height]
+
+                for info in windows {
+                    stack.addArrangedSubview(makeThumbnail(info: info))
+                }
+                documentView.addSubview(stack)
+                self.stackView = stack
+            }
             layoutScrollableContent()
         }
 
@@ -372,10 +505,11 @@ public final class PreviewPanelController {
         let field = NSTextField(labelWithString: "")
         field.alignment = .center
         field.font = .systemFont(ofSize: 12, weight: .medium)
-        field.textColor = .white
+        let palette = OmniDockTheme.palette(for: contentView.effectiveAppearance)
+        field.textColor = palette.primaryText
         field.lineBreakMode = .byTruncatingTail
         field.wantsLayer = true
-        field.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.78).cgColor
+        field.layer?.backgroundColor = palette.overlay.cgColor
         field.layer?.cornerRadius = 6
         contentView.addSubview(field, positioned: .above, relativeTo: nil)
         return field
@@ -551,6 +685,15 @@ public final class PreviewPanelController {
         }
         thumbnailSizeConstraints[identity] = nil
         currentWindows.removeAll { PreviewWindowIdentity($0) == identity }
+        if currentTarget?.previewAnchorKind == .windowCycle,
+           let currentTarget {
+            if thumbnailViewsByIdentity.isEmpty {
+                hide()
+            } else {
+                show(target: currentTarget, windows: currentWindows, message: nil)
+            }
+            return
+        }
         if let stack = tile.superview as? NSStackView {
             stack.removeArrangedSubview(tile)
         }
@@ -582,8 +725,7 @@ public final class PreviewPanelController {
     private func layoutScrollableContent() {
         guard let panel,
               let scrollView,
-              let scrollDocumentView,
-              let stackView
+              let scrollDocumentView
         else {
             return
         }
@@ -592,13 +734,53 @@ public final class PreviewPanelController {
             thumbnailViewsByIdentity[PreviewWindowIdentity(window)]?.preferredTileSize
                 ?? PreviewLayoutCalculator.tileSize(for: window.frame)
         }
-        let contentWidth = PreviewLayoutCalculator.contentWidth(for: tileSizes)
         let panelBounds = CGRect(origin: .zero, size: panel.frame.size)
+        scrollView.frame = panelBounds
+
+        if let gridView,
+           let currentTarget,
+           currentTarget.previewAnchorKind == .windowCycle {
+            let layout = windowCycleGridMetrics(
+                target: currentTarget,
+                windows: currentWindows,
+                tileSizes: tileSizes
+            )
+            let documentSize = CGSize(
+                width: max(layout.contentSize.width, panelBounds.width),
+                height: max(layout.contentSize.height, panelBounds.height)
+            )
+            scrollDocumentView.frame = CGRect(origin: .zero, size: documentSize)
+            gridView.frame = CGRect(
+                x: (documentSize.width - layout.gridSize.width) / 2,
+                y: documentSize.height - PreviewLayoutCalculator.margin - layout.gridSize.height,
+                width: layout.gridSize.width,
+                height: layout.gridSize.height
+            ).integral
+            for (index, width) in layout.columnWidths.enumerated() {
+                gridView.column(at: index).width = width
+            }
+            for rowIndex in 0..<layout.rowCount {
+                gridView.row(at: rowIndex).height = layout.rowHeight
+            }
+            if gridNeedsInitialTopAlignment {
+                let maximumY = max(0, documentSize.height - panelBounds.height)
+                scrollView.contentView.scroll(to: CGPoint(x: 0, y: maximumY))
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+                gridNeedsInitialTopAlignment = false
+            } else {
+                clampScrollPosition()
+            }
+            return
+        }
+
+        guard let stackView else {
+            return
+        }
+        let contentWidth = PreviewLayoutCalculator.contentWidth(for: tileSizes)
         let documentSize = CGSize(
             width: max(contentWidth, panelBounds.width),
             height: panelBounds.height
         )
-        scrollView.frame = panelBounds
         scrollDocumentView.frame = CGRect(origin: .zero, size: documentSize)
         stackView.frame = CGRect(
             x: PreviewLayoutCalculator.margin,
@@ -623,6 +805,46 @@ public final class PreviewPanelController {
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
+    private func scrollSelectedWindowIntoViewIfNeeded() {
+        guard currentTarget?.previewAnchorKind == .windowCycle,
+              let selectedWindowIdentity,
+              let tile = thumbnailViewsByIdentity[selectedWindowIdentity],
+              let scrollView,
+              let documentView = scrollView.documentView
+        else {
+            return
+        }
+
+        let tileFrame = tile.convert(tile.bounds, to: documentView)
+        let visibleBounds = scrollView.contentView.bounds
+        var targetOrigin = visibleBounds.origin
+        var changed = false
+        if tileFrame.minX < visibleBounds.minX {
+            targetOrigin.x = tileFrame.minX
+            changed = true
+        } else if tileFrame.maxX > visibleBounds.maxX {
+            targetOrigin.x = tileFrame.maxX - visibleBounds.width
+            changed = true
+        }
+        if tileFrame.minY < visibleBounds.minY {
+            targetOrigin.y = tileFrame.minY
+            changed = true
+        } else if tileFrame.maxY > visibleBounds.maxY {
+            targetOrigin.y = tileFrame.maxY - visibleBounds.height
+            changed = true
+        }
+        guard changed else {
+            return
+        }
+
+        let maximumX = max(0, documentView.frame.width - visibleBounds.width)
+        let maximumY = max(0, documentView.frame.height - visibleBounds.height)
+        targetOrigin.x = min(max(0, targetOrigin.x), maximumX)
+        targetOrigin.y = min(max(0, targetOrigin.y), maximumY)
+        scrollView.contentView.scroll(to: targetOrigin)
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
     private func clampScrollPosition() {
         guard let scrollView,
               let documentView = scrollView.documentView
@@ -631,10 +853,11 @@ public final class PreviewPanelController {
         }
 
         let maxX = max(0, documentView.frame.width - scrollView.contentView.bounds.width)
+        let maxY = max(0, documentView.frame.height - scrollView.contentView.bounds.height)
         let currentOrigin = scrollView.contentView.bounds.origin
         let clampedOrigin = CGPoint(
             x: min(max(0, currentOrigin.x), maxX),
-            y: currentOrigin.y
+            y: min(max(0, currentOrigin.y), maxY)
         )
         guard clampedOrigin != currentOrigin else {
             return
@@ -658,6 +881,15 @@ public final class PreviewPanelController {
             )
         case .commandTab:
             orientation = .bottom
+        case .windowCycle:
+            return PreviewLayoutCalculator.centeredPanelFrame(
+                gridMetrics: windowCycleGridMetrics(
+                    target: target,
+                    windows: windows,
+                    screenFrame: screenFrame
+                ),
+                screenFrame: screenFrame
+            )
         }
         return PreviewLayoutCalculator.panelFrame(
             tileSizes: windows.map { window in
@@ -670,9 +902,56 @@ public final class PreviewPanelController {
         )
     }
 
+    private func windowCycleGridMetrics(
+        target: DockAppTarget,
+        windows: [PreviewWindowInfo],
+        tileSizes: [CGSize]? = nil,
+        screenFrame: CGRect? = nil
+    ) -> PreviewGridMetrics {
+        let resolvedScreenFrame = screenFrame ?? previewScreenFrame(for: target)
+        let resolvedTileSizes = tileSizes ?? windows.map { window in
+            thumbnailViewsByIdentity[PreviewWindowIdentity(window)]?.preferredTileSize
+                ?? PreviewLayoutCalculator.tileSize(for: window.frame)
+        }
+        return PreviewLayoutCalculator.windowCycleGridMetrics(
+            tileSizes: resolvedTileSizes,
+            screenFrame: resolvedScreenFrame
+        )
+    }
+
+    private func previewScreenFrame(for target: DockAppTarget) -> CGRect {
+        let anchor = target.previewAnchorPoint
+        return (NSScreen.screens.first { $0.frame.contains(anchor) } ?? NSScreen.main)?.visibleFrame
+            ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
+    }
+
+    private func makeGridRows(
+        windows: [PreviewWindowInfo],
+        columnCount: Int
+    ) -> [[NSView]] {
+        guard columnCount > 0 else {
+            return []
+        }
+        let rowCount = Int(ceil(CGFloat(windows.count) / CGFloat(columnCount)))
+        return (0..<rowCount).map { rowIndex in
+            (0..<columnCount).map { columnIndex in
+                let index = rowIndex * columnCount + columnIndex
+                guard windows.indices.contains(index) else {
+                    let spacer = NSView()
+                    spacer.isHidden = true
+                    return spacer
+                }
+                return makeThumbnail(info: windows[index])
+            }
+        }
+    }
+
     private func makeThumbnail(info: PreviewWindowInfo) -> PreviewThumbnailView {
         let identity = PreviewWindowIdentity(info)
-        let tile = PreviewThumbnailView(info: info)
+        let tile = PreviewThumbnailView(
+            info: info,
+            showsApplicationIdentity: currentTarget?.previewAnchorKind == .windowCycle
+        )
         tile.translatesAutoresizingMaskIntoConstraints = false
         tile.onClick = { [weak self] info in
             self?.focusWindowAndHidePreview(info)
@@ -690,6 +969,7 @@ public final class PreviewPanelController {
             self?.quitApplicationFromPreview(info)
         }
         thumbnailViewsByIdentity[identity] = tile
+        tile.setSelected(identity == selectedWindowIdentity)
         if let windowID = info.windowID {
             thumbnailViews[windowID] = tile
         }
@@ -711,6 +991,21 @@ public final class PreviewPanelController {
             }
             return (windowID, tile)
         })
+    }
+
+    private func applySelection() {
+        thumbnailViewsByIdentity.forEach { identity, tile in
+            tile.setSelected(identity == selectedWindowIdentity)
+        }
+    }
+
+    private func refreshTheme() {
+        guard let panel else {
+            return
+        }
+        OmniDockTheme.applyCurrentAppearance(to: panel)
+        panel.contentView?.needsDisplay = true
+        panel.contentView?.subviews.forEach { $0.needsDisplay = true }
     }
 }
 

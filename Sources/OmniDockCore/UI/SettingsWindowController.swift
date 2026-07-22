@@ -1,8 +1,10 @@
 import AppKit
 
 public enum SettingsTab: Int {
-    case settings = 0
+    case preview = 0
     case hotkeys = 1
+
+    public static let settings = SettingsTab.preview
 }
 
 @MainActor
@@ -18,6 +20,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
     private let permissionService: PermissionService
     private weak var coordinator: DockInteractionCoordinator?
     private let hotkeyRegistrationStatus: AppHotkeyRegistrationStatusStore
+    private let windowCycleRegistrationStatus: WindowCycleRegistrationStatusStore
     private let presentationCoordinator: ApplicationPresentationCoordinator
     private let onPermissionGateRequired: (PermissionFeature) -> Void
     private let onOpenPermissionOnboarding: () -> Void
@@ -28,8 +31,11 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
     private var settingsContentView: NSView?
     private var hotkeysContentView: NSView?
     private var languagePopupButton: NSPopUpButton?
+    private var appearancePopupButton: NSPopUpButton?
     private var previewSwitch: NSSwitch?
     private var commandTabPreviewSwitch: NSSwitch?
+    private var windowCycleSwitch: NSSwitch?
+    private var windowCycleWarningField: NSTextField?
     private var livePreviewSwitch: NSSwitch?
     private var livePreviewLimitField: NSTextField?
     private var livePreviewLimitStepper: NSStepper?
@@ -47,11 +53,12 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
     private var selectedTab: SettingsTab = .settings
     private var renderedLanguage: AppLanguage.Resolved?
 
-    public convenience init(
+    convenience init(
         settings: SettingsStore,
         permissionService: PermissionService,
         coordinator: DockInteractionCoordinator,
         hotkeyRegistrationStatus: AppHotkeyRegistrationStatusStore,
+        windowCycleRegistrationStatus: WindowCycleRegistrationStatusStore? = nil,
         onPermissionGateRequired: @escaping (PermissionFeature) -> Void,
         onOpenPermissionOnboarding: @escaping () -> Void = {}
     ) {
@@ -60,6 +67,8 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
             permissionService: permissionService,
             coordinator: coordinator,
             hotkeyRegistrationStatus: hotkeyRegistrationStatus,
+            windowCycleRegistrationStatus: windowCycleRegistrationStatus
+                ?? WindowCycleRegistrationStatusStore(),
             presentationCoordinator: ApplicationPresentationCoordinator(),
             onPermissionGateRequired: onPermissionGateRequired,
             onOpenPermissionOnboarding: onOpenPermissionOnboarding
@@ -71,6 +80,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         permissionService: PermissionService,
         coordinator: DockInteractionCoordinator,
         hotkeyRegistrationStatus: AppHotkeyRegistrationStatusStore,
+        windowCycleRegistrationStatus: WindowCycleRegistrationStatusStore,
         presentationCoordinator: ApplicationPresentationCoordinator,
         onPermissionGateRequired: @escaping (PermissionFeature) -> Void,
         onOpenPermissionOnboarding: @escaping () -> Void
@@ -79,6 +89,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         self.permissionService = permissionService
         self.coordinator = coordinator
         self.hotkeyRegistrationStatus = hotkeyRegistrationStatus
+        self.windowCycleRegistrationStatus = windowCycleRegistrationStatus
         self.presentationCoordinator = presentationCoordinator
         self.onPermissionGateRequired = onPermissionGateRequired
         self.onOpenPermissionOnboarding = onOpenPermissionOnboarding
@@ -88,6 +99,12 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
             selector: #selector(settingsChanged),
             name: SettingsStore.changedNotification,
             object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowCycleRegistrationStatusChanged),
+            name: WindowCycleRegistrationStatusStore.changedNotification,
+            object: windowCycleRegistrationStatus
         )
         NotificationCenter.default.addObserver(
             self,
@@ -126,15 +143,24 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
     }
 
     public func refresh() {
+        if let window {
+            applyTheme(to: window)
+        }
         if let window,
            renderedLanguage != AppLocalization.currentResolvedLanguage {
             hotkeyWarnings.removeAll()
             rebuildContentView(in: window)
         }
         refreshLanguageControl()
+        refreshAppearanceControl()
         previewSwitch?.state = settings.showDockPreviews ? .on : .off
         commandTabPreviewSwitch?.state = settings.showCommandTabPreviews ? .on : .off
         commandTabPreviewSwitch?.isEnabled = settings.showDockPreviews
+        windowCycleSwitch?.state = settings.windowCycleEnabled ? .on : .off
+        windowCycleSwitch?.isEnabled = settings.showDockPreviews
+        let switcherWarning = windowCycleRegistrationStatus.warning
+        windowCycleWarningField?.stringValue = switcherWarning ?? ""
+        windowCycleWarningField?.isHidden = switcherWarning == nil || !settings.showDockPreviews
         livePreviewSwitch?.state = settings.liveDockPreviewsEnabled ? .on : .off
         livePreviewSwitch?.isEnabled = settings.showDockPreviews
         refreshLivePreviewLimitControls()
@@ -160,6 +186,10 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         displaySelectedTab()
     }
 
+    @objc private func windowCycleRegistrationStatusChanged() {
+        refresh()
+    }
+
     @objc private func changeLanguage(_ sender: NSPopUpButton) {
         guard let rawValue = sender.selectedItem?.representedObject as? String,
               let language = AppLanguage(rawValue: rawValue)
@@ -177,9 +207,11 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
             settings.showDockPreviews = true
         } else {
             settings.showDockPreviews = false
+            settings.windowCycleEnabled = false
         }
         livePreviewSwitch?.isEnabled = settings.showDockPreviews
         commandTabPreviewSwitch?.isEnabled = settings.showDockPreviews
+        windowCycleSwitch?.isEnabled = settings.showDockPreviews
         refreshLivePreviewLimitControls()
     }
 
@@ -191,6 +223,20 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
             settings.showCommandTabPreviews = true
         } else {
             settings.showCommandTabPreviews = false
+        }
+    }
+
+    @objc private func toggleWindowCycle(_ sender: NSSwitch) {
+        if sender.state == .on {
+            guard settings.showDockPreviews,
+                  canEnable(.windowCycle, sender: sender)
+            else {
+                sender.state = .off
+                return
+            }
+            settings.windowCycleEnabled = true
+        } else {
+            settings.windowCycleEnabled = false
         }
     }
 
@@ -251,6 +297,17 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
     private func refreshLanguageControl() {
         guard let popup = languagePopupButton,
               let item = popup.itemArray.first(where: { $0.representedObject as? String == settings.appLanguage.rawValue })
+        else {
+            return
+        }
+        popup.select(item)
+    }
+
+    private func refreshAppearanceControl() {
+        guard let popup = appearancePopupButton,
+              let item = popup.itemArray.first(where: {
+                  $0.representedObject as? String == settings.appAppearance.rawValue
+              })
         else {
             return
         }
@@ -328,6 +385,16 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         refresh()
     }
 
+    @objc private func changeAppearance(_ sender: NSPopUpButton) {
+        guard let rawValue = sender.selectedItem?.representedObject as? String,
+              let appearance = AppAppearance(rawValue: rawValue)
+        else {
+            refreshAppearanceControl()
+            return
+        }
+        settings.appAppearance = appearance
+    }
+
     @objc private func permissionStatusChanged() {
         refresh()
     }
@@ -349,14 +416,18 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         window.level = .normal
         window.isReleasedWhenClosed = false
         window.contentView = makeContentView()
+        applyTheme(to: window)
         return window
     }
 
     private func rebuildContentView(in window: NSWindow) {
         permissionViews.removeAll()
         languagePopupButton = nil
+        appearancePopupButton = nil
         previewSwitch = nil
         commandTabPreviewSwitch = nil
+        windowCycleSwitch = nil
+        windowCycleWarningField = nil
         livePreviewSwitch = nil
         livePreviewLimitField = nil
         livePreviewLimitStepper = nil
@@ -374,10 +445,10 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         renderedLanguage = AppLocalization.currentResolvedLanguage
         let content = NSView()
         content.wantsLayer = true
-        content.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        content.layer?.backgroundColor = OmniDockTheme.palette().canvas.cgColor
 
         let segmentedControl = NSSegmentedControl(
-            labels: [AppStrings.text(.tabSettings), AppStrings.text(.tabHotkeys)],
+            labels: [AppStrings.text(.tabPreview), AppStrings.text(.tabHotkeys)],
             trackingMode: .selectOne,
             target: self,
             action: #selector(changeTab(_:))
@@ -436,6 +507,12 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
             control: makeLanguageControl()
         ))
 
+        toggles.addArrangedSubview(makeSettingRow(
+            title: AppStrings.text(.appearanceTitle),
+            detail: AppStrings.text(.appearanceDetail),
+            control: makeAppearanceControl()
+        ))
+
         let previewSwitch = NSSwitch()
         previewSwitch.target = self
         previewSwitch.action = #selector(togglePreview(_:))
@@ -455,6 +532,25 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
             detail: AppStrings.text(.settingsCommandTabPreviewDetail),
             control: commandTabPreviewSwitch
         ))
+
+        let windowCycleSwitch = NSSwitch()
+        windowCycleSwitch.target = self
+        windowCycleSwitch.action = #selector(toggleWindowCycle(_:))
+        self.windowCycleSwitch = windowCycleSwitch
+        toggles.addArrangedSubview(makeSettingRow(
+            title: AppStrings.text(.settingsWindowCycleTitle),
+            detail: AppStrings.text(.settingsWindowCycleDetail),
+            control: windowCycleSwitch
+        ))
+
+        let switcherWarning = NSTextField(labelWithString: "")
+        switcherWarning.font = .systemFont(ofSize: 12)
+        switcherWarning.textColor = .systemRed
+        switcherWarning.lineBreakMode = .byWordWrapping
+        switcherWarning.maximumNumberOfLines = 2
+        switcherWarning.isHidden = true
+        self.windowCycleWarningField = switcherWarning
+        toggles.addArrangedSubview(makeIndentedAuxiliaryTextRow(switcherWarning))
 
         let livePreviewSwitch = NSSwitch()
         livePreviewSwitch.target = self
@@ -663,6 +759,33 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         return popup
     }
 
+    private func makeAppearanceControl() -> NSView {
+        let popup = NSPopUpButton()
+        popup.translatesAutoresizingMaskIntoConstraints = false
+        popup.target = self
+        popup.action = #selector(changeAppearance(_:))
+
+        let items: [(AppAppearance, String)] = [
+            (.system, AppStrings.text(.appearanceSystem)),
+            (.light, AppStrings.text(.appearanceLight)),
+            (.dark, AppStrings.text(.appearanceDark))
+        ]
+        for (appearance, title) in items {
+            popup.addItem(withTitle: title)
+            popup.lastItem?.representedObject = appearance.rawValue
+        }
+        appearancePopupButton = popup
+        refreshAppearanceControl()
+        return popup
+    }
+
+    private func applyTheme(to window: NSWindow) {
+        OmniDockTheme.applyCurrentAppearance(to: window)
+        window.contentView?.layer?.backgroundColor = OmniDockTheme.palette(
+            for: window.appearance ?? window.effectiveAppearance
+        ).canvas.cgColor
+    }
+
     private func makeLivePreviewControl(switch livePreviewSwitch: NSSwitch) -> NSView {
         let controlStack = NSStackView()
         controlStack.orientation = .horizontal
@@ -731,6 +854,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         labels.addArrangedSubview(detailField)
 
         control.translatesAutoresizingMaskIntoConstraints = false
+        control.setAccessibilityLabel(title)
         row.addSubview(labels)
         row.addSubview(control)
 
@@ -764,6 +888,20 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
             row.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor)
         ])
 
+        return wrapper
+    }
+
+    private func makeIndentedAuxiliaryTextRow(_ textField: NSTextField) -> NSView {
+        let wrapper = NSView()
+        wrapper.translatesAutoresizingMaskIntoConstraints = false
+        textField.translatesAutoresizingMaskIntoConstraints = false
+        wrapper.addSubview(textField)
+        NSLayoutConstraint.activate([
+            textField.leadingAnchor.constraint(equalTo: wrapper.leadingAnchor, constant: 24),
+            textField.trailingAnchor.constraint(equalTo: wrapper.trailingAnchor),
+            textField.topAnchor.constraint(equalTo: wrapper.topAnchor),
+            textField.bottomAnchor.constraint(equalTo: wrapper.bottomAnchor)
+        ])
         return wrapper
     }
 

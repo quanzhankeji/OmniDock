@@ -4,7 +4,13 @@
 "languageChinese" = "简体中文";
 "languageEnglish" = "English";
 
-"tabSettings" = "Settings";
+"appearanceTitle" = "Appearance";
+"appearanceDetail" = "Choose the light or dark appearance used by OmniDock previews and windows.";
+"appearanceSystem" = "Follow System";
+"appearanceLight" = "Light";
+"appearanceDark" = "Dark";
+
+"tabPreview" = "Preview";
 "tabHotkeys" = "Hotkeys";
 "menuSettings" = "Settings";
 "menuHotkeys" = "Hotkeys";
@@ -27,6 +33,9 @@
 "settingsDockPreviewDetail" = "Show window previews when the pointer rests on Dock app icons.";
 "settingsCommandTabPreviewTitle" = "Command-Tab Previews";
 "settingsCommandTabPreviewDetail" = "Show static window previews above the app selected in the macOS Command-Tab switcher.";
+"settingsWindowCycleTitle" = "Alt-Tab Preview";
+"settingsWindowCycleDetail" = "Switch between windows with Option-Tab. The switcher uses static previews.";
+"settingsWindowCycleUnavailable" = "Alt-Tab could not be registered. Another app or macOS is using this shortcut.";
 "settingsLivePreviewTitle" = "Live Previews";
 "settingsLivePreviewDetail" = "Continuously refresh preview images; turn this off to show static previews and reduce performance use.";
 "settingsDockClickTitle" = "Dock Icon Hide / Show";
@@ -51,7 +60,7 @@
 "onboardingSubtitle" = "OmniDock needs a few system permissions to handle Dock clicks, window previews, and app hotkeys.";
 "onboardingPrivacyNote" = "Everything stays on this Mac. OmniDock does not record keyboard input or upload screen content.";
 "onboardingAccessibilityPurpose" = "Identify Dock icons, then show, hide, and focus windows.";
-"onboardingInputMonitoringPurpose" = "Detect light clicks on Dock icons without recording keyboard input. If the list is empty, click + to add OmniDock.";
+"onboardingInputMonitoringPurpose" = "Detect light clicks on Dock icons and Option-Tab only while the window switcher is open. OmniDock does not record or save typed text.";
 "onboardingScreenRecordingPurpose" = "Create Dock window thumbnails, including live images and one-time static snapshots, for local previews. If the list is empty, click + to add OmniDock.";
 "onboardingStatusReady" = "Ready to use";
 "onboardingStatusNeedsPermissions" = "Complete the permissions below";
@@ -112,3 +121,4 @@
 "previewStreamStop" = "Preview stream stopped: %@";
 "previewStaticFailureWithReason" = "Static preview generation failed: %@";
 "previewStaticFailure" = "Static preview generation failed";
+"previewWindowContentUnavailable" = "Preview unavailable";

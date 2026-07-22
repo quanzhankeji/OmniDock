@@ -5,12 +5,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = SettingsStore()
     private let permissionService = PermissionService()
     private let hotkeyRegistrationStatus = AppHotkeyRegistrationStatusStore()
+    private let windowCycleRegistrationStatus = WindowCycleRegistrationStatusStore()
     private let presentationCoordinator = ApplicationPresentationCoordinator()
     private var permissionFeatureActivationQueue = PermissionFeatureActivationQueue()
     private var isRefreshingPermissionState = false
     private lazy var windowControlService = WindowControlService()
     private lazy var dockHitTester = DockHitTester(permissionService: permissionService)
-    private lazy var previewService = ScreenCapturePreviewService()
+    private lazy var windowInventory = WindowInventoryService()
+    private lazy var previewService = ScreenCapturePreviewService(windowInventory: windowInventory)
     private lazy var previewPanelController = PreviewPanelController(
         windowControlService: windowControlService
     )
@@ -38,11 +40,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.coordinator.setCommandTabPreviewActive(isActive)
         }
     )
+    private lazy var windowCycleService = WindowCycleService(
+        settings: settings,
+        permissionService: permissionService,
+        windowInventory: windowInventory,
+        windowControlService: windowControlService,
+        previewService: previewService,
+        previewPanelController: previewPanelController,
+        registrationStatus: windowCycleRegistrationStatus,
+        onSessionActivityChanged: { [weak self] isActive in
+            self?.coordinator.setWindowCycleActive(isActive)
+        }
+    )
     private lazy var statusMenuController = StatusMenuController(
         settings: settings,
         permissionService: permissionService,
         coordinator: coordinator,
         hotkeyRegistrationStatus: hotkeyRegistrationStatus,
+        windowCycleRegistrationStatus: windowCycleRegistrationStatus,
         presentationCoordinator: presentationCoordinator,
         onPermissionGateRequired: { [weak self] feature in
             self?.showPermissionOnboarding(for: feature, automaticallyOpenSettings: true)
@@ -89,8 +104,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         preparePermissionBackedFeaturesForLaunch()
         applicationMainMenuController.install()
         statusMenuController.install()
+        windowInventory.start()
         coordinator.start()
         cmdTabPreviewService.start()
+        windowCycleService.start()
         hotkeyService.start()
         showPermissionOnboardingIfNeeded()
     }
@@ -98,8 +115,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     public func applicationWillTerminate(_ notification: Notification) {
         NotificationCenter.default.removeObserver(self)
         hotkeyService.stop()
+        windowCycleService.stop()
         cmdTabPreviewService.stop()
         coordinator.stop()
+        windowInventory.stop()
         previewPanelController.hide()
     }
 
@@ -188,7 +207,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refreshAfterPermissionChange() {
+        windowInventory.refreshAccessibilityTracking()
         coordinator.refreshPermissionsAndMonitors()
+        windowCycleService.refreshRegistration()
     }
 
     private func maybeRelaunchIfPermissionRefreshDidNotAttach() {
