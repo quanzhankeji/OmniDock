@@ -25,6 +25,8 @@
 
 "settingsDockPreviewTitle" = "显示 Dock 窗口预览";
 "settingsDockPreviewDetail" = "鼠标停在 Dock 应用图标上时显示窗口预览。";
+"settingsCommandTabPreviewTitle" = "Command-Tab 预览";
+"settingsCommandTabPreviewDetail" = "在 macOS Command-Tab 切换器当前应用图标上方显示静态窗口预览。";
 "settingsLivePreviewTitle" = "实时预览";
 "settingsLivePreviewDetail" = "持续刷新预览画面；关闭后只显示静态预览，减少性能消耗。";
 "settingsDockClickTitle" = "Dock 图标隐藏/唤起";
@@ -100,6 +102,8 @@
 "previewHiddenNoStatic" = "已隐藏\n无静态预览";
 "previewMinimizedClickRestore" = "已最小化\n点击恢复";
 "previewCloseWindow" = "关闭窗口";
+"previewQuitApplication" = "退出应用";
+"previewQuitFailed" = "无法退出这个应用";
 "previewReadFailure" = "无法读取窗口预览：%@";
 "previewNoContent" = "没有可用的窗口预览内容";
 "previewNoNormalWindow" = "没有可预览的普通窗口";

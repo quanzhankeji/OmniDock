@@ -35,6 +35,20 @@ final class PreviewCloseButtonViewTests: XCTestCase {
         XCTAssertEqual(closeCount, 0)
     }
 
+    func testQuitButtonAcceptsFirstMouseAndInvokesQuitCallback() {
+        let button = PreviewQuitButtonView(frame: CGRect(x: 0, y: 0, width: 13, height: 13))
+        var quitCount = 0
+        button.onQuit = {
+            quitCount += 1
+        }
+
+        XCTAssertTrue(button.acceptsFirstMouse(for: nil))
+        button.mouseDown(with: mouseEvent(type: .leftMouseDown, location: CGPoint(x: 6, y: 6)))
+        button.mouseUp(with: mouseEvent(type: .leftMouseUp, location: CGPoint(x: 6, y: 6)))
+
+        XCTAssertEqual(quitCount, 1)
+    }
+
     private func mouseEvent(type: NSEvent.EventType, location: CGPoint) -> NSEvent {
         NSEvent.mouseEvent(
             with: type,

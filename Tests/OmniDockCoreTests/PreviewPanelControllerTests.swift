@@ -26,6 +26,32 @@ final class PreviewPanelControllerTests: XCTestCase {
         XCTAssertNil(controller.frame)
     }
 
+    func testCommandTabFocusUsesItsPresentationHandler() {
+        let info = previewInfo()
+        var events: [String] = []
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, _ in
+                events.append("focus")
+            },
+            requestWindowClose: { _, _, _, _ in }
+        )
+        controller.onPreviewLifecycleEndRequested = {
+            events.append("dock")
+        }
+        controller.setPresentationHandler(
+            for: .commandTab,
+            onLifecycleEndRequested: {
+                events.append("command-tab")
+            },
+            onWindowClosed: { _ in }
+        )
+        controller.show(target: commandTabTarget(), windows: [info], message: nil)
+
+        controller.focusWindowAndHidePreview(info)
+
+        XCTAssertEqual(events, ["command-tab", "focus"])
+    }
+
     func testHideReleasesInstalledPreviewContentAndPanelCanBeReused() {
         let controller = PreviewPanelController(
             requestWindowFocus: { _, _, _ in },
@@ -78,6 +104,204 @@ final class PreviewPanelControllerTests: XCTestCase {
 
         XCTAssertFalse(controller.isWindowClosePending(info))
         XCTAssertEqual(controller.displayedWindowCount, 0)
+    }
+
+    func testCommandTabCloseUsesItsPresentationHandler() async {
+        let info = previewInfo()
+        var closeCompletion: ((Bool) -> Void)?
+        var dockCloseCount = 0
+        var commandTabCloseCount = 0
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, _ in },
+            requestWindowClose: { _, _, _, completion in
+                closeCompletion = completion
+            }
+        )
+        defer { controller.hide() }
+        controller.onWindowClosed = { _ in
+            dockCloseCount += 1
+        }
+        controller.setPresentationHandler(
+            for: .commandTab,
+            onLifecycleEndRequested: {},
+            onWindowClosed: { _ in
+                commandTabCloseCount += 1
+            }
+        )
+        controller.show(target: commandTabTarget(), windows: [info], message: nil)
+
+        controller.closeWindowFromPreview(info)
+        closeCompletion?(true)
+        while controller.isWindowClosePending(info) {
+            await Task.yield()
+        }
+
+        XCTAssertEqual(commandTabCloseCount, 1)
+        XCTAssertEqual(dockCloseCount, 0)
+    }
+
+    func testConfirmedQuitUsesCurrentPresentationHandlerAndHidesPreview() async {
+        let info = previewInfo()
+        var events: [String] = []
+        var quitCompletion: ((Bool) -> Void)?
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, _ in },
+            requestWindowClose: { _, _, _, _ in },
+            requestApplicationQuit: { processIdentifier, completion in
+                events.append("quit:\(processIdentifier)")
+                quitCompletion = completion
+                return true
+            }
+        )
+        defer { controller.hide() }
+        controller.onApplicationQuitRequested = { processIdentifier in
+            events.append("dock:\(processIdentifier)")
+        }
+        controller.onPreviewLifecycleEndRequested = {
+            events.append("dock-lifecycle")
+        }
+        controller.setPresentationHandler(
+            for: .commandTab,
+            onLifecycleEndRequested: {
+                events.append("command-tab-lifecycle")
+            },
+            onWindowClosed: { _ in },
+            onApplicationQuitRequested: { processIdentifier in
+                events.append("command-tab:\(processIdentifier)")
+            }
+        )
+        controller.show(target: commandTabTarget(), windows: [info], message: nil)
+
+        controller.quitApplicationFromPreview(info)
+
+        XCTAssertEqual(events, ["quit:123"])
+        XCTAssertEqual(controller.displayedWindowCount, 1)
+        quitCompletion?(true)
+        await settleMainActor()
+
+        XCTAssertEqual(
+            events,
+            ["quit:123", "command-tab:123", "command-tab-lifecycle"]
+        )
+        XCTAssertNil(controller.frame)
+    }
+
+    func testConfirmedQuitUsesDockCallbacksWhenNoSpecialPresentationHandlerExists() async {
+        let info = previewInfo()
+        var events: [String] = []
+        var quitCompletion: ((Bool) -> Void)?
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, _ in },
+            requestWindowClose: { _, _, _, _ in },
+            requestApplicationQuit: { processIdentifier, completion in
+                events.append("quit:\(processIdentifier)")
+                quitCompletion = completion
+                return true
+            }
+        )
+        defer { controller.hide() }
+        controller.onApplicationQuitRequested = { processIdentifier in
+            events.append("dock:\(processIdentifier)")
+        }
+        controller.onPreviewLifecycleEndRequested = {
+            events.append("dock-lifecycle")
+        }
+        controller.show(target: dockTarget(), windows: [info], message: nil)
+
+        controller.quitApplicationFromPreview(info)
+
+        XCTAssertEqual(events, ["quit:123"])
+        XCTAssertEqual(controller.displayedWindowCount, 1)
+        quitCompletion?(true)
+        await settleMainActor()
+
+        XCTAssertEqual(events, ["quit:123", "dock:123", "dock-lifecycle"])
+        XCTAssertNil(controller.frame)
+    }
+
+    func testFailedQuitKeepsPreviewAndShowsFeedback() {
+        let info = previewInfo()
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, _ in },
+            requestWindowClose: { _, _, _, _ in },
+            requestApplicationQuit: { _, _ in false }
+        )
+        defer { controller.hide() }
+        controller.show(target: dockTarget(), windows: [info], message: nil)
+
+        controller.quitApplicationFromPreview(info)
+
+        XCTAssertEqual(controller.displayedWindowCount, 1)
+        XCTAssertEqual(controller.displayedMessage, AppStrings.text(.previewQuitFailed))
+    }
+
+    func testRejectedQuitConfirmationKeepsThePreviewVisible() async {
+        let info = previewInfo()
+        var quitCompletion: ((Bool) -> Void)?
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, _ in },
+            requestWindowClose: { _, _, _, _ in },
+            requestApplicationQuit: { _, completion in
+                quitCompletion = completion
+                return true
+            }
+        )
+        defer { controller.hide() }
+        controller.show(target: commandTabTarget(), windows: [info], message: nil)
+
+        controller.quitApplicationFromPreview(info)
+        quitCompletion?(false)
+        await settleMainActor()
+
+        XCTAssertEqual(controller.displayedWindowCount, 1)
+        XCTAssertEqual(controller.displayedMessage, AppStrings.text(.previewQuitFailed))
+    }
+
+    func testCommandTabActionUsesTheExactPreviewWindowIdentity() {
+        let first = previewInfo(id: "window-1", windowID: 42, title: "Same")
+        let second = previewInfo(id: "window-2", windowID: 43, title: "Same")
+        var closedWindowID: CGWindowID?
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, _ in },
+            requestWindowClose: { _, _, windowID, _ in
+                closedWindowID = windowID
+            }
+        )
+        defer { controller.hide() }
+        controller.show(target: commandTabTarget(), windows: [first, second], message: nil)
+
+        controller.performCommandTabAction(.closeWindow(PreviewWindowIdentity(second)))
+
+        XCTAssertEqual(closedWindowID, second.windowID)
+    }
+
+    func testCommandTabButtonTargetsUsePanelCoordinatesAndKeepQuitOnTheLeft() throws {
+        let info = previewInfo()
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, _ in },
+            requestWindowClose: { _, _, _, _ in }
+        )
+        defer { controller.hide() }
+        controller.show(target: commandTabTarget(), windows: [info], message: nil)
+
+        let panelFrame = try XCTUnwrap(controller.frame)
+        let targets = controller.commandTabButtonHitTargets()
+        let quitTarget = try XCTUnwrap(targets.first { target in
+            if case .quitApplication = target.action {
+                return true
+            }
+            return false
+        })
+        let closeTarget = try XCTUnwrap(targets.first { target in
+            if case .closeWindow = target.action {
+                return true
+            }
+            return false
+        })
+
+        XCTAssertTrue(panelFrame.contains(quitTarget.screenFrame))
+        XCTAssertTrue(panelFrame.contains(closeTarget.screenFrame))
+        XCTAssertLessThan(quitTarget.screenFrame.midX, closeTarget.screenFrame.midX)
     }
 
     func testFailedCloseKeepsWindowAndShowsExistingFeedback() async {
@@ -161,6 +385,19 @@ final class PreviewPanelControllerTests: XCTestCase {
         )
     }
 
+    private func commandTabTarget() -> DockAppTarget {
+        DockAppTarget(
+            processIdentifier: 123,
+            bundleIdentifier: "com.example.app",
+            localizedName: "Example",
+            dockElementTitle: "Example",
+            hitPoint: CGPoint(x: 100, y: 300),
+            dockItemFrame: CGRect(x: 72, y: 272, width: 56, height: 56),
+            dockTileIdentifierOverride: "command-tab:123",
+            previewAnchorKind: .commandTab
+        )
+    }
+
     private func previewInfo(
         id: String = "window-1",
         windowID: CGWindowID = 42,
@@ -176,5 +413,11 @@ final class PreviewPanelControllerTests: XCTestCase {
             frame: CGRect(x: 0, y: 0, width: 1200, height: 800),
             isMinimized: false
         )
+    }
+
+    private func settleMainActor() async {
+        for _ in 0 ..< 3 {
+            await Task.yield()
+        }
     }
 }

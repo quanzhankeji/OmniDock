@@ -130,6 +130,7 @@ public final class DockInteractionCoordinator {
     private var isPreviewValidationInFlight = false
     private var lastPreviewWindowValidationAt: Date?
     private var isClickMonitoringSuspended = false
+    private var isCommandTabPreviewActive = false
     private var powerStateObserver: NSObjectProtocol?
     private let proxyOwnerStore: DockProxyOwnerStore
     private let proxyTargetRouter: DockProxyTargetRouter
@@ -189,6 +190,9 @@ public final class DockInteractionCoordinator {
         previewPanelController.onPreviewLifecycleEndRequested = { [weak self] in
             self?.endPreviewLifecycleForWindowFocus()
         }
+        previewPanelController.onApplicationQuitRequested = { [weak self] processIdentifier in
+            self?.previewService.clearCachedSnapshots(for: processIdentifier)
+        }
     }
 
     public func start() {
@@ -247,6 +251,18 @@ public final class DockInteractionCoordinator {
         }
         isClickMonitoringSuspended = false
         synchronizeClickEventTap()
+    }
+
+    public func setCommandTabPreviewActive(_ isActive: Bool) {
+        guard isCommandTabPreviewActive != isActive else {
+            return
+        }
+        isCommandTabPreviewActive = isActive
+        if isActive {
+            hidePreview()
+            hoverTarget = nil
+            hoverBeganAt = nil
+        }
     }
 
     public func refreshPermissionsAndMonitors() {
@@ -392,6 +408,9 @@ public final class DockInteractionCoordinator {
     }
 
     private func handleHoverTick() {
+        guard !isCommandTabPreviewActive else {
+            return
+        }
         let point = NSEvent.mouseLocation
         let dockGeometry = DockGeometry()
         let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) ?? NSScreen.main

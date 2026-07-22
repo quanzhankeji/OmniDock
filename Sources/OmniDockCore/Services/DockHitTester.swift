@@ -38,6 +38,30 @@ struct DockScreenInventory: Equatable, Sendable {
         )
     }
 
+    func eventTapFrame(fromAppKitFrame frame: CGRect) -> CGRect? {
+        let center = CGPoint(x: frame.midX, y: frame.midY)
+        guard let screen = screens.first(where: { $0.appKitFrame.contains(center) }) else {
+            return nil
+        }
+
+        let firstCorner = DisplayCoordinateConverter.eventTapPoint(
+            fromAppKitPoint: frame.origin,
+            quartzDisplayBounds: screen.eventTapFrame,
+            appKitScreenFrame: screen.appKitFrame
+        )
+        let secondCorner = DisplayCoordinateConverter.eventTapPoint(
+            fromAppKitPoint: CGPoint(x: frame.maxX, y: frame.maxY),
+            quartzDisplayBounds: screen.eventTapFrame,
+            appKitScreenFrame: screen.appKitFrame
+        )
+        return CGRect(
+            x: min(firstCorner.x, secondCorner.x),
+            y: min(firstCorner.y, secondCorner.y),
+            width: abs(secondCorner.x - firstCorner.x),
+            height: abs(secondCorner.y - firstCorner.y)
+        )
+    }
+
     func accessibilityCandidatePoints(fromAppKitPoint point: CGPoint) -> [CGPoint] {
         var points = [point]
         if let screenFrame = screens.first(where: { $0.appKitFrame.contains(point) })?.appKitFrame

@@ -30,6 +30,53 @@ final class PreviewThumbnailViewTests: XCTestCase {
         XCTAssertEqual(tileClickCount, 0)
     }
 
+    func testQuitButtonWinsHitTestingAndDoesNotTriggerTileClick() throws {
+        let tile = PreviewThumbnailView(info: previewInfo())
+        tile.layoutSubtreeIfNeeded()
+        let quitButton = try XCTUnwrap(tile.subviews.compactMap { $0 as? PreviewQuitButtonView }.first)
+        let hitPoint = tile.convert(
+            CGPoint(x: quitButton.bounds.midX, y: quitButton.bounds.midY),
+            from: quitButton
+        )
+        var tileClickCount = 0
+        var quitCount = 0
+        tile.onClick = { _ in tileClickCount += 1 }
+        quitButton.onQuit = { quitCount += 1 }
+
+        XCTAssertTrue(tile.hitTest(hitPoint) === quitButton)
+        quitButton.mouseDown(with: mouseEvent(type: .leftMouseDown, location: hitPoint))
+        quitButton.mouseUp(with: mouseEvent(type: .leftMouseUp, location: hitPoint))
+
+        XCTAssertEqual(quitCount, 1)
+        XCTAssertEqual(tileClickCount, 0)
+    }
+
+    func testQuitButtonIsPositionedToTheLeftOfCloseButton() throws {
+        let tile = PreviewThumbnailView(info: previewInfo())
+        tile.layoutSubtreeIfNeeded()
+        let closeButton = try XCTUnwrap(tile.subviews.compactMap { $0 as? PreviewCloseButtonView }.first)
+        let quitButton = try XCTUnwrap(tile.subviews.compactMap { $0 as? PreviewQuitButtonView }.first)
+
+        XCTAssertLessThan(quitButton.frame.midX, closeButton.frame.midX)
+    }
+
+    func testCommandTabHoverShowsOnlyTheHoveredActionGlyph() throws {
+        let info = previewInfo()
+        let tile = PreviewThumbnailView(info: info)
+        let closeButton = try XCTUnwrap(tile.subviews.compactMap { $0 as? PreviewCloseButtonView }.first)
+        let quitButton = try XCTUnwrap(tile.subviews.compactMap { $0 as? PreviewQuitButtonView }.first)
+
+        tile.setCommandTabHoveredAction(.closeWindow(PreviewWindowIdentity(info)))
+
+        XCTAssertTrue(closeButton.isGlyphVisible)
+        XCTAssertFalse(quitButton.isGlyphVisible)
+
+        tile.setCommandTabHoveredAction(.quitApplication(info.processIdentifier))
+
+        XCTAssertFalse(closeButton.isGlyphVisible)
+        XCTAssertTrue(quitButton.isGlyphVisible)
+    }
+
     func testClickFiresOnMouseUpInsteadOfMouseDown() {
         let tile = PreviewThumbnailView(info: previewInfo())
         var clickCount = 0

@@ -34,10 +34,21 @@ enum DisplayCoordinateConverter {
             return point
         }
 
-        let displayBounds = CGDisplayBounds(screenNumber.uint32Value)
-        return CGPoint(
-            x: displayBounds.minX + point.x - screen.frame.minX,
-            y: displayBounds.minY + screen.frame.maxY - point.y
+        return eventTapPoint(
+            fromAppKitPoint: point,
+            quartzDisplayBounds: CGDisplayBounds(screenNumber.uint32Value),
+            appKitScreenFrame: screen.frame
+        )
+    }
+
+    static func eventTapPoint(
+        fromAppKitPoint point: CGPoint,
+        quartzDisplayBounds: CGRect,
+        appKitScreenFrame: CGRect
+    ) -> CGPoint {
+        CGPoint(
+            x: quartzDisplayBounds.minX + point.x - appKitScreenFrame.minX,
+            y: quartzDisplayBounds.minY + appKitScreenFrame.maxY - point.y
         )
     }
 

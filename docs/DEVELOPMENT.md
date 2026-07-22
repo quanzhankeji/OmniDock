@@ -33,6 +33,7 @@ Use this map before editing so changes stay narrow:
 - Preview capture uses live ScreenCaptureKit streams when enabled. A delayed static capture may provide a provisional first image, but it must not terminate the live stream; later complete stream frames replace it. Stop streams promptly when the pointer leaves the retained preview area.
 - Preview capture identity is `owner PID + CGWindowID`. Title, frame, AX order, and raw AX counts are presentation or validation metadata, not stable stream identity. Confirm an identity-set change twice before applying it; keep sessions in the intersection and start or stop only the difference.
 - Preview window actions use conservative identity matching. Thumbnail focus and close operations prefer exact window IDs, use unique titles only when AX does not expose IDs, and never guess among ambiguous windows.
+- Command-Tab preview is an adapter over the shared preview UI. Keep its event handling and coordinate conversion inside its own service; do not change shared panel configuration or Dock thumbnail interaction to support Command-Tab behavior.
 - Treat AX windows as the current interaction truth for offscreen capture rows. WindowServer may retain closed ScreenCaptureKit surfaces, so sample AX after shareable content arrives and require one-to-one AX support before accepting an offscreen surface.
 - Removing a window through a preview tile must also remove its cached hidden snapshot. A running application with no current normal windows must not show historical thumbnails or an empty preview panel.
 

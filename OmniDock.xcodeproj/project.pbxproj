@@ -17,6 +17,8 @@
 		215983A2C66D3BE46DB11D4E /* AppLocalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = AACED853BFBA6434A2140D8F /* AppLocalization.swift */; };
 		4AC80169CFFF36CDE4D25817 /* ApplicationPresentationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E10EED6D6A911629989ECC7 /* ApplicationPresentationCoordinator.swift */; };
 		89182724F61B136567EF01D2 /* CGWindowDictionary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E00C378893CB08991CC38B /* CGWindowDictionary.swift */; };
+		DB3C3B2AD9695840B551A626 /* CmdTabPreviewObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C4EB1D89238D6025CE26B38 /* CmdTabPreviewObserver.swift */; };
+		DD461374FA08ADFFCCB5AFA1 /* CmdTabPreviewService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E878B65A3DF0E8FA7E681D97 /* CmdTabPreviewService.swift */; };
 		7DFFB218B7CD5DDC50321F6F /* DisplayCoordinateConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0810B0CF8B8B494AADDCC2DC /* DisplayCoordinateConverter.swift */; };
 		53E460F6EE29FE015F7B2845 /* DockClickEventTap.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F64CAA80FC88E32E0EF024F /* DockClickEventTap.swift */; };
 		2477735ACABDAC0A30EECB22 /* DockClickGestureStateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 230435FF05DFD1959FC97768 /* DockClickGestureStateMachine.swift */; };
@@ -85,6 +87,8 @@
 		AACED853BFBA6434A2140D8F /* AppLocalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/AppLocalization.swift"; sourceTree = SOURCE_ROOT; };
 		2E10EED6D6A911629989ECC7 /* ApplicationPresentationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/ApplicationPresentationCoordinator.swift"; sourceTree = SOURCE_ROOT; };
 		27E00C378893CB08991CC38B /* CGWindowDictionary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/CGWindowDictionary.swift"; sourceTree = SOURCE_ROOT; };
+		7C4EB1D89238D6025CE26B38 /* CmdTabPreviewObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/CmdTabPreviewObserver.swift"; sourceTree = SOURCE_ROOT; };
+		E878B65A3DF0E8FA7E681D97 /* CmdTabPreviewService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/CmdTabPreviewService.swift"; sourceTree = SOURCE_ROOT; };
 		0810B0CF8B8B494AADDCC2DC /* DisplayCoordinateConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/DisplayCoordinateConverter.swift"; sourceTree = SOURCE_ROOT; };
 		1F64CAA80FC88E32E0EF024F /* DockClickEventTap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/DockClickEventTap.swift"; sourceTree = SOURCE_ROOT; };
 		230435FF05DFD1959FC97768 /* DockClickGestureStateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/DockClickGestureStateMachine.swift"; sourceTree = SOURCE_ROOT; };
@@ -190,6 +194,8 @@
 				AACED853BFBA6434A2140D8F /* AppLocalization.swift */,
 				2E10EED6D6A911629989ECC7 /* ApplicationPresentationCoordinator.swift */,
 				27E00C378893CB08991CC38B /* CGWindowDictionary.swift */,
+				7C4EB1D89238D6025CE26B38 /* CmdTabPreviewObserver.swift */,
+				E878B65A3DF0E8FA7E681D97 /* CmdTabPreviewService.swift */,
 				0810B0CF8B8B494AADDCC2DC /* DisplayCoordinateConverter.swift */,
 				1F64CAA80FC88E32E0EF024F /* DockClickEventTap.swift */,
 				230435FF05DFD1959FC97768 /* DockClickGestureStateMachine.swift */,
@@ -377,6 +383,8 @@
 				215983A2C66D3BE46DB11D4E /* AppLocalization.swift in Sources */,
 				4AC80169CFFF36CDE4D25817 /* ApplicationPresentationCoordinator.swift in Sources */,
 				89182724F61B136567EF01D2 /* CGWindowDictionary.swift in Sources */,
+				DB3C3B2AD9695840B551A626 /* CmdTabPreviewObserver.swift in Sources */,
+				DD461374FA08ADFFCCB5AFA1 /* CmdTabPreviewService.swift in Sources */,
 				7DFFB218B7CD5DDC50321F6F /* DisplayCoordinateConverter.swift in Sources */,
 				53E460F6EE29FE015F7B2845 /* DockClickEventTap.swift in Sources */,
 				2477735ACABDAC0A30EECB22 /* DockClickGestureStateMachine.swift in Sources */,

@@ -27,6 +27,21 @@ final class DockAppTargetTests: XCTestCase {
         XCTAssertEqual(target.previewAnchorPoint, CGPoint(x: 10, y: 10))
     }
 
+    func testCommandTabTargetRetainsExplicitPreviewAnchorKind() {
+        let target = DockAppTarget(
+            processIdentifier: 123,
+            bundleIdentifier: "com.example.App",
+            localizedName: "Example",
+            dockElementTitle: "Example",
+            hitPoint: CGPoint(x: 420, y: 320),
+            dockItemFrame: CGRect(x: 388, y: 288, width: 64, height: 64),
+            previewAnchorKind: .commandTab
+        )
+
+        XCTAssertEqual(target.previewAnchorKind, .commandTab)
+        XCTAssertEqual(target.previewAnchorPoint, CGPoint(x: 420, y: 320))
+    }
+
     func testDockTileIdentifierOverrideKeepsOriginalIconsDistinct() {
         let firstTarget = DockAppTarget(
             processIdentifier: 123,
@@ -74,6 +89,7 @@ final class DockAppTargetTests: XCTestCase {
         XCTAssertEqual(proxy.hitPoint, target.hitPoint)
         XCTAssertEqual(proxy.dockItemFrame, target.dockItemFrame)
         XCTAssertEqual(proxy.previewAnchorPoint, target.previewAnchorPoint)
+        XCTAssertEqual(proxy.previewAnchorKind, target.previewAnchorKind)
         XCTAssertEqual(proxy.dockTileIdentifierOverride, "dock-item:project")
         XCTAssertEqual(proxy.dockTileIdentifier, target.dockTileIdentifier)
         XCTAssertTrue(proxy.isSameDockTile(as: target))
