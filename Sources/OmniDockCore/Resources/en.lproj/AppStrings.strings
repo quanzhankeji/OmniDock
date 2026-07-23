@@ -10,8 +10,10 @@
 "appearanceLight" = "Light";
 "appearanceDark" = "Dark";
 
+"tabSettings" = "Setting";
 "tabPreview" = "Preview";
 "tabHotkeys" = "Hotkeys";
+"tabFinderExtension" = "Finder Extension";
 "menuSettings" = "Settings";
 "menuHotkeys" = "Hotkeys";
 "menuQuit" = "Quit";
@@ -47,6 +49,16 @@
 "settingsLiveWindowCount" = "Live Windows";
 "settingsPrivacyPolicy" = "Privacy Policy";
 "settingsSupport" = "Support";
+
+"finderExtensionEnableTitle" = "Enable";
+"finderExtensionEnableDetail" = "Show New File and Copy Path in Finder contextual menus.";
+"finderExtensionSetupRequired" = "Turn on OmniDock in macOS Finder Extensions to add these menu items.";
+"finderExtensionOpenSettings" = "Open Finder Extensions";
+"finderExtensionCreateFailedTitle" = "Could Not Create File";
+"finderExtensionCreateFailedDetail" = "OmniDock could not create a new file in \u201c%@\u201d. %@";
+"finderExtensionFailureDismiss" = "OK";
+"finderExtensionAccessDetail" = "Choose “%@” or one of its parent folders to allow OmniDock to create files there. This is only required once.";
+"finderExtensionAccessButton" = "Allow";
 
 "permissionAccessibility" = "Accessibility";
 "permissionScreenRecording" = "Screen Recording";

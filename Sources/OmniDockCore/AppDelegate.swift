@@ -52,6 +52,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.coordinator.setWindowCycleActive(isActive)
         }
     )
+    private lazy var finderFileCommandCoordinator = FinderFileCommandCoordinator()
     private lazy var statusMenuController = StatusMenuController(
         settings: settings,
         permissionService: permissionService,
@@ -60,7 +61,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         windowCycleRegistrationStatus: windowCycleRegistrationStatus,
         presentationCoordinator: presentationCoordinator,
         onPermissionGateRequired: { [weak self] feature in
-            self?.showPermissionOnboarding(for: feature, automaticallyOpenSettings: true)
+            self?.showPermissionOnboarding(for: feature)
         },
         onOpenPermissionOnboarding: { [weak self] in
             self?.permissionOnboardingController.show(mode: .review)
@@ -122,6 +123,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         previewPanelController.hide()
     }
 
+    public func application(_ application: NSApplication, open urls: [URL]) {
+        finderFileCommandCoordinator.handle(urls: urls)
+    }
+
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         permissionOnboardingController.prepareForApplicationTermination()
         return .terminateNow
@@ -173,16 +178,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func showPermissionOnboarding(
-        for feature: PermissionFeature,
-        automaticallyOpenSettings: Bool
-    ) {
+    private func showPermissionOnboarding(for feature: PermissionFeature) {
         requestPermissionFeature(feature)
         let snapshot = permissionService.snapshot()
         let missingPermission = PermissionFeatureGate.firstMissingPermission(for: feature, in: snapshot)
         permissionOnboardingController.show(
             focus: missingPermission,
-            automaticallyOpenSettings: automaticallyOpenSettings,
             mode: .review
         )
     }

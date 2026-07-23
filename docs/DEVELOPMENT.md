@@ -22,6 +22,7 @@ Use this map before editing so changes stay narrow:
 | Window inventory | `WindowInventoryService`, `PreviewWindowSnapshot`, `PreviewWindowCatalog` | Maintain a public-API window fact cache keyed by `owner PID + CGWindowID`; invalid events make records unavailable until reconciliation, rather than guessing. |
 | Window previews | `ScreenCapturePreviewService`, `PreviewWindowSnapshot`, `PreviewCaptureSessionRegistry`, `PreviewWindowCatalog`, `PreviewPanelController` | Reuse streams by stable window identity and stop them as soon as previews close or switch target. |
 | Window cycling | `WindowCycleService`, `WindowInventoryService`, `PreviewPanelController` | Option-Tab opens OmniDock's window-level cycle. It owns its Carbon registration and a short-lived input monitor, and uses static images only. |
+| Finder right-click extension | `FinderSync`, `FinderExtensionCommandService`, `FinderExtensionShared` | Keep menu construction lightweight and read the Finder target synchronously. The extension queues only explicit New File requests; it never scans directories. |
 | Settings and persistence | `SettingsStore`, `SettingsWindowController` | Keep stored keys compatible with existing users. |
 | Shortcuts | `AppHotkeyService`, `AppHotkeyBinding`, `ShortcutRecorderView`, `HotkeyShortcutPolicy` | Global shortcuts use Apple system APIs and should remain dependency-free. |
 | App selection | `ApplicationSelectionCatalog`, `ApplicationPickerWindowController` | System apps such as Finder should remain selectable. |
@@ -32,6 +33,8 @@ Use this map before editing so changes stay narrow:
 - Dock click handling uses `DockClickEventTap` only for short unmodified clicks. Long press and drag still pass through so the system Dock can handle icon movement.
 - Running app toggles go through `WindowControlService`. Keep hide/show, minimize/restore, and single-window focus on the same central path.
 - Global shortcuts go through `AppHotkeyService`. If an app is not running, the shortcut launches it; if it is running without normal windows, it tries to create a new window.
+- Finder right-click commands are provided only through `FIFinderSync`. The extension reads a fresh App Group settings snapshot when Finder asks for a menu, copies paths directly to the local pasteboard, and hands New File to the containing app through a short-lived request. The containing app asks the user for a security-scoped directory bookmark only when direct access is unavailable. Do not add Accessibility, event-tap, or simulated-input fallbacks for Finder menus.
+- Finder Sync does not receive native contextual-menu requests for File Provider-managed locations, including Desktop and Documents when iCloud Drive manages those folders. Keep that limitation explicit; do not bypass it with global mouse interception or broad home-relative temporary file entitlements.
 - Preview capture uses live ScreenCaptureKit streams when enabled. A delayed static capture may provide a provisional first image, but it must not terminate the live stream; later complete stream frames replace it. Stop streams promptly when the pointer leaves the retained preview area.
 - Preview capture identity is `owner PID + CGWindowID`. Title, frame, AX order, and raw AX counts are presentation or validation metadata, not stable stream identity. Confirm an identity-set change twice before applying it; keep sessions in the intersection and start or stop only the difference.
 - `WindowInventoryService` is the shared window-fact layer for Dock previews, Command-Tab previews, and future window navigation. It observes only public workspace and Accessibility events, tracks metadata and MRU history, and never owns panels or capture sessions. Its short-lived ScreenCaptureKit mapping is reused only while fresh; AX/workspace invalidation falls back to the existing AX + ScreenCaptureKit reconciliation path without starting a capture stream.
@@ -104,6 +107,8 @@ Manual smoke tests should cover:
 - Window Cycle: forward, backward, repeated cycling, Option-release confirmation, Escape cancellation, card click, close/quit buttons, and immediate shutdown when the setting is disabled.
 - Multi-Dock-tile apps: visiting secondary Dock icons should not break previews or click handling for other apps.
 - Settings changes for preview enablement, live preview count, Dock click mode, and shortcut enablement.
+- Finder right-click extension disabled/enabled gating, multi-item path copying, a writable temporary directory, and a non-writable directory failure.
+- Finder right-click commands in an ordinary local directory, plus the expected absence of those commands in File Provider-managed Desktop or Documents locations.
 
 ## Review Checklist
 

@@ -541,7 +541,10 @@ final class WindowCycleService {
         inputMonitor.isMonitoring
     }
 
-    @objc private func settingsChanged() {
+    @objc private func settingsChanged(_ notification: Notification) {
+        guard SettingsStore.change(in: notification).affectsWindowCycle else {
+            return
+        }
         reconcileRegistration()
     }
 

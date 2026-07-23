@@ -326,7 +326,10 @@ final class CmdTabPreviewObserver {
             forName: SettingsStore.changedNotification,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] notification in
+            guard SettingsStore.change(in: notification).affectsCommandTabPreview else {
+                return
+            }
             Task { @MainActor [weak self] in
                 self?.synchronizeEventMonitoring()
             }

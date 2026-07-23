@@ -1,10 +1,10 @@
 import AppKit
 
 public enum SettingsTab: Int {
-    case preview = 0
-    case hotkeys = 1
-
-    public static let settings = SettingsTab.preview
+    case settings = 0
+    case preview = 1
+    case hotkeys = 2
+    case finderExtension = 3
 }
 
 @MainActor
@@ -28,8 +28,10 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
     private var window: NSWindow?
     private var segmentedControl: NSSegmentedControl?
     private var contentContainer: NSView?
-    private var settingsContentView: NSView?
+    private var generalContentView: NSView?
+    private var previewContentView: NSView?
     private var hotkeysContentView: NSView?
+    private var finderExtensionContentView: NSView?
     private var languagePopupButton: NSPopUpButton?
     private var appearancePopupButton: NSPopUpButton?
     private var previewSwitch: NSSwitch?
@@ -43,6 +45,8 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
     private var dockClickSwitch: NSSwitch?
     private var minimizeDockClickSwitch: NSSwitch?
     private var hotkeysEnabledSwitch: NSSwitch?
+    private var finderExtensionSwitch: NSSwitch?
+    private var finderExtensionSetupView: NSView?
     private var hotkeyGuidanceField: NSTextField?
     private var hotkeyHeaderHeightConstraint: NSLayoutConstraint?
     private var permissionViews: [PermissionKind: PermissionStatusView] = [:]
@@ -168,6 +172,8 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         minimizeDockClickSwitch?.state = settings.minimizeWindowsOnDockClickInsteadOfHide ? .on : .off
         minimizeDockClickSwitch?.isEnabled = settings.toggleAppVisibilityOnDockClick
         hotkeysEnabledSwitch?.state = settings.hotkeysEnabled ? .on : .off
+        finderExtensionSwitch?.state = settings.finderExtensionEnabled ? .on : .off
+        refreshFinderExtensionSetupVisibility()
         refreshHotkeyGuidanceVisibility()
 
         let snapshot = permissionService.snapshot()
@@ -250,6 +256,15 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
             settings.liveDockPreviewsEnabled = false
         }
         refreshLivePreviewLimitControls()
+    }
+
+    @objc private func toggleFinderExtension(_ sender: NSSwitch) {
+        settings.finderExtensionEnabled = sender.state == .on
+        refreshFinderExtensionSetupVisibility()
+    }
+
+    @objc private func openFinderExtensionManagement(_ sender: NSButton) {
+        FinderExtensionActivation.showManagementInterface()
     }
 
     @objc private func commitLivePreviewLimit(_ sender: NSTextField) {
@@ -435,6 +450,8 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         dockClickSwitch = nil
         minimizeDockClickSwitch = nil
         hotkeysEnabledSwitch = nil
+        finderExtensionSwitch = nil
+        finderExtensionSetupView = nil
         hotkeyGuidanceField = nil
         hotkeyHeaderHeightConstraint = nil
         hotkeyRowsStack = nil
@@ -448,7 +465,12 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         content.layer?.backgroundColor = OmniDockTheme.palette().canvas.cgColor
 
         let segmentedControl = NSSegmentedControl(
-            labels: [AppStrings.text(.tabPreview), AppStrings.text(.tabHotkeys)],
+            labels: [
+                AppStrings.text(.tabSettings),
+                AppStrings.text(.tabPreview),
+                AppStrings.text(.tabHotkeys),
+                AppStrings.text(.tabFinderExtension)
+            ],
             trackingMode: .selectOne,
             target: self,
             action: #selector(changeTab(_:))
@@ -463,18 +485,24 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         self.contentContainer = contentContainer
         content.addSubview(contentContainer)
 
-        let settingsContentView = makeSettingsTab()
+        let generalContentView = makeScrollableTab(makeGeneralTab())
+        let previewContentView = makeScrollableTab(makePreviewTab())
         let hotkeysContentView = makeHotkeysTab()
-        self.settingsContentView = settingsContentView
+        let finderExtensionContentView = makeScrollableTab(makeFinderExtensionTab())
+        self.generalContentView = generalContentView
+        self.previewContentView = previewContentView
         self.hotkeysContentView = hotkeysContentView
-        embed(settingsContentView, in: contentContainer)
+        self.finderExtensionContentView = finderExtensionContentView
+        embed(generalContentView, in: contentContainer)
+        embed(previewContentView, in: contentContainer)
         embed(hotkeysContentView, in: contentContainer)
+        embed(finderExtensionContentView, in: contentContainer)
         displaySelectedTab()
 
         NSLayoutConstraint.activate([
             segmentedControl.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
             segmentedControl.centerXAnchor.constraint(equalTo: content.centerXAnchor),
-            segmentedControl.widthAnchor.constraint(equalToConstant: 220),
+            segmentedControl.widthAnchor.constraint(equalToConstant: 448),
 
             contentContainer.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24),
             contentContainer.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
@@ -485,33 +513,38 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         return content
     }
 
-    private func makeSettingsTab() -> NSView {
-        let root = NSView()
+    private func makeGeneralTab() -> NSView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 12
 
+        stack.addArrangedSubview(makeSettingRow(
+            title: AppStrings.text(.languageTitle),
+            detail: AppStrings.text(.languageDetail),
+            control: makeLanguageControl()
+        ))
+
+        stack.addArrangedSubview(makeSettingRow(
+            title: AppStrings.text(.appearanceTitle),
+            detail: AppStrings.text(.appearanceDetail),
+            control: makeAppearanceControl()
+        ))
+
+        return stack
+    }
+
+    private func makePreviewTab() -> NSView {
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 18
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        root.addSubview(stack)
 
         let toggles = NSStackView()
         toggles.orientation = .vertical
         toggles.alignment = .leading
         toggles.spacing = 12
         stack.addArrangedSubview(toggles)
-
-        toggles.addArrangedSubview(makeSettingRow(
-            title: AppStrings.text(.languageTitle),
-            detail: AppStrings.text(.languageDetail),
-            control: makeLanguageControl()
-        ))
-
-        toggles.addArrangedSubview(makeSettingRow(
-            title: AppStrings.text(.appearanceTitle),
-            detail: AppStrings.text(.appearanceDetail),
-            control: makeAppearanceControl()
-        ))
 
         let previewSwitch = NSSwitch()
         previewSwitch.target = self
@@ -634,15 +667,11 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         stack.addArrangedSubview(permissions)
 
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: root.topAnchor),
-
             toggles.widthAnchor.constraint(equalTo: stack.widthAnchor),
             permissions.widthAnchor.constraint(equalTo: stack.widthAnchor)
         ])
 
-        return root
+        return stack
     }
 
     private func makeHotkeysTab() -> NSView {
@@ -729,6 +758,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
             scrollView.widthAnchor.constraint(equalTo: stack.widthAnchor),
             scrollView.heightAnchor.constraint(equalToConstant: 250),
             documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
+            documentView.heightAnchor.constraint(greaterThanOrEqualTo: scrollView.contentView.heightAnchor),
             rowsStack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
             rowsStack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
             rowsStack.topAnchor.constraint(equalTo: documentView.topAnchor),
@@ -737,6 +767,57 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
 
         refreshHotkeyGuidanceVisibility()
         return root
+    }
+
+    private func makeFinderExtensionTab() -> NSView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+
+        let enabledSwitch = NSSwitch()
+        enabledSwitch.target = self
+        enabledSwitch.action = #selector(toggleFinderExtension(_:))
+        finderExtensionSwitch = enabledSwitch
+        stack.addArrangedSubview(makeSettingRow(
+            title: AppStrings.text(.finderExtensionEnableTitle),
+            detail: AppStrings.text(.finderExtensionEnableDetail),
+            control: enabledSwitch
+        ))
+
+        let setupView = NSStackView()
+        setupView.orientation = .horizontal
+        setupView.alignment = .centerY
+        setupView.spacing = 12
+        setupView.translatesAutoresizingMaskIntoConstraints = false
+
+        let setupHint = NSTextField(wrappingLabelWithString: AppStrings.text(.finderExtensionSetupRequired))
+        setupHint.font = .systemFont(ofSize: 12)
+        setupHint.textColor = .secondaryLabelColor
+        setupHint.maximumNumberOfLines = 2
+
+        let setupButton = NSButton(
+            title: AppStrings.text(.finderExtensionOpenSettings),
+            target: self,
+            action: #selector(openFinderExtensionManagement(_:))
+        )
+        setupButton.bezelStyle = .rounded
+
+        setupView.addArrangedSubview(setupHint)
+        setupView.addArrangedSubview(setupButton)
+        setupHint.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        setupButton.setContentCompressionResistancePriority(.required, for: .horizontal)
+        stack.addArrangedSubview(setupView)
+        setupView.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        finderExtensionSetupView = setupView
+
+        return stack
+    }
+
+    private func refreshFinderExtensionSetupVisibility() {
+        finderExtensionSetupView?.isHidden = !FinderExtensionActivation.requiresManualActivation(
+            isFeatureEnabled: settings.finderExtensionEnabled,
+            isExtensionEnabledInFinder: FinderExtensionActivation.isEnabledInFinder
+        )
     }
 
     private func makeLanguageControl() -> NSView {
@@ -924,9 +1005,36 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         ])
     }
 
+    private func makeScrollableTab(_ content: NSView) -> NSScrollView {
+        let scrollView = NSScrollView()
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+
+        let documentView = TopAnchoredDocumentView()
+        documentView.translatesAutoresizingMaskIntoConstraints = false
+        content.translatesAutoresizingMaskIntoConstraints = false
+        documentView.addSubview(content)
+        scrollView.documentView = documentView
+
+        NSLayoutConstraint.activate([
+            documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
+            documentView.heightAnchor.constraint(greaterThanOrEqualTo: scrollView.contentView.heightAnchor),
+            content.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
+            content.topAnchor.constraint(equalTo: documentView.topAnchor),
+            content.bottomAnchor.constraint(lessThanOrEqualTo: documentView.bottomAnchor)
+        ])
+
+        return scrollView
+    }
+
     private func displaySelectedTab() {
-        settingsContentView?.isHidden = selectedTab != .settings
+        generalContentView?.isHidden = selectedTab != .settings
+        previewContentView?.isHidden = selectedTab != .preview
         hotkeysContentView?.isHidden = selectedTab != .hotkeys
+        finderExtensionContentView?.isHidden = selectedTab != .finderExtension
     }
 
     private func reloadHotkeyRows() {

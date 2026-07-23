@@ -124,6 +124,17 @@ final class AppLocalizationTests: XCTestCase {
         XCTAssertEqual(AppLocalization.text(.appearanceDark, language: .zhHans), "深色")
     }
 
+    func testFinderExtensionLabelsAreLocalized() {
+        XCTAssertEqual(AppLocalization.text(.tabSettings, language: .en), "Setting")
+        XCTAssertEqual(AppLocalization.text(.tabFinderExtension, language: .en), "Finder Extension")
+        XCTAssertEqual(AppLocalization.text(.finderExtensionEnableTitle, language: .en), "Enable")
+        XCTAssertEqual(AppLocalization.text(.finderExtensionOpenSettings, language: .en), "Open Finder Extensions")
+        XCTAssertEqual(AppLocalization.text(.tabSettings, language: .zhHans), "设置")
+        XCTAssertEqual(AppLocalization.text(.tabFinderExtension, language: .zhHans), "右键扩展")
+        XCTAssertEqual(AppLocalization.text(.finderExtensionEnableTitle, language: .zhHans), "启用")
+        XCTAssertEqual(AppLocalization.text(.finderExtensionOpenSettings, language: .zhHans), "打开 Finder 扩展设置")
+    }
+
     func testScreenRecordingDisclosuresMentionLiveAndStaticThumbnails() {
         let expectations: [(AppLanguage.Resolved, [String])] = [
             (.en, ["live images", "one-time static snapshots"]),

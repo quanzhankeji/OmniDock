@@ -119,8 +119,10 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
         NSApp.terminate(nil)
     }
 
-    @objc private func settingsChanged() {
-        coordinator.refreshForSettingsChange()
+    @objc private func settingsChanged(_ notification: Notification) {
+        if SettingsStore.change(in: notification).affectsDockInteraction {
+            coordinator.refreshForSettingsChange()
+        }
         rebuildMenu()
     }
 

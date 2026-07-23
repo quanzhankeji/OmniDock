@@ -135,7 +135,6 @@ final class PermissionOnboardingWindowController: NSWindowController, NSWindowDe
 
     func show(
         focus permission: PermissionKind? = nil,
-        automaticallyOpenSettings: Bool = false,
         mode: PermissionOnboardingMode = .review
     ) {
         invalidateVisibleSession()
@@ -154,15 +153,6 @@ final class PermissionOnboardingWindowController: NSWindowController, NSWindowDe
         startPolling(for: generation)
         window.center()
         window.makeKeyAndOrderFront(nil)
-
-        if automaticallyOpenSettings, let permission {
-            scheduleDeferredAction(0.25) { [weak self] in
-                self?.openPermissionSettings(
-                    permission,
-                    sessionGeneration: generation
-                )
-            }
-        }
     }
 
     func showRefreshingBeforeRelaunch() {
