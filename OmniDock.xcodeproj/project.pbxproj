@@ -8,6 +8,9 @@
 /* Begin PBXBuildFile section */
 		00E67EAF8D1F0480F1E0F8AA /* OmniDockMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E3B92A97B3D6988F4B42F5E /* OmniDockMain.swift */; };
 		0E7ADBE745AB6F60EE674170 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7A7DED8B7FC805B7B9D9624 /* AppDelegate.swift */; };
+		3E74EFB3BF22E342AFF67AFC /* FinderFileRequests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF21485C54163E53725DE2EC /* FinderFileRequests.swift */; };
+		6245E267050CB0D3011E7D0C /* FinderMenuModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58239091F32F00B5095B417E /* FinderMenuModel.swift */; };
+		C74926C22DDD045B610E1B3F /* FinderMenuPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 026177AAAF388C828A163D1D /* FinderMenuPreferences.swift */; };
 		D4ED1E90E64A329F70087940 /* AppAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12703A6B33AD1DCF8080FC73 /* AppAppearance.swift */; };
 		2145A12C734E8EC3CE14C5B4 /* AppHotkeyBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = B18F9E45D6B0D0F72B6296F5 /* AppHotkeyBinding.swift */; };
 		350841FA8C54AC4970114FFE /* AppLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78CC0AEA502E82DF49D99A06 /* AppLanguage.swift */; };
@@ -28,6 +31,9 @@
 		189D2F8AC18875355A8151C8 /* DockInteractionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B21BE4A552E67C7B76ECF785 /* DockInteractionCoordinator.swift */; };
 		93DDBE08C4F8BC51F78B781F /* DockInteractionSnapshotService.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE9CE44325F9E32C792DD90 /* DockInteractionSnapshotService.swift */; };
 		0DC26A0A619C84EAA2E69B34 /* DockProxyTargetResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AEC7457E6264F2F490E2597 /* DockProxyTargetResolver.swift */; };
+		FDD785A3EF81BD86191BDB4F /* FinderDirectoryGrantStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEEE1BF3694D33D5614D1F25 /* FinderDirectoryGrantStore.swift */; };
+		0732EEB2DA9FE442A84877E3 /* FinderExtensionActivation.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF8C87A8360ACFFBADB6F802 /* FinderExtensionActivation.swift */; };
+		1324A0E128D0D7A43A3F5A45 /* FinderFileCommandCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 214697259348D1357DD4E957 /* FinderFileCommandCoordinator.swift */; };
 		92136C573348886F35F18726 /* HotkeyShortcutPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D765A2CAC69408FD0D02DE75 /* HotkeyShortcutPolicy.swift */; };
 		5E50495DFD801F094898630B /* IndependentWindowIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30D41B0DCA3A55E6E103BA1 /* IndependentWindowIdentity.swift */; };
 		8FECE3B5E53FD8392CB4303F /* LivePreviewCaptureSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAFFA2BCCC66961497DCE50 /* LivePreviewCaptureSession.swift */; };
@@ -67,21 +73,33 @@
 		68FCE8F5ECE1ABDCE066921C /* ShortcutRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CDC17F8C727F532A24A7669 /* ShortcutRecorderView.swift */; };
 		80EEF4B5C0408A3445755B4C /* StatusMenuController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A69449C024EBE9EDD6E598C7 /* StatusMenuController.swift */; };
 		B7FB3A8168B6982212624170 /* TopAnchoredDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7094715CAB8FD75FFC767057 /* TopAnchoredDocumentView.swift */; };
-		21EC93C31ECB7BCF30D2AFF5 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9694B95F4FBF087BF05D19FB /* AppKit.framework */; };
-		D17635ECFED7F0300286624D /* ApplicationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B5BD692039D91AE04FEBC310 /* ApplicationServices.framework */; };
-		622DB6D63888181679A074BB /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8655F244D0DBE899D1CB49B8 /* Carbon.framework */; };
-		11A7FA82E14EE42C55A38E46 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FB95B506FAA940469C15D964 /* CoreGraphics.framework */; };
-		C962ECB1AA725D385AC0312A /* CoreImage.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AC2446436B7AE5A9EC884AD4 /* CoreImage.framework */; };
-		1FF5DD5517CC9B58DFC38411 /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F27031DFE9CE9368FFA54C1B /* CoreMedia.framework */; };
-		FE1868479205910BACC30333 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 20530C1F3D99DF1367A53B4B /* IOKit.framework */; };
-		FF93D8237B0386164EC3D41E /* ScreenCaptureKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 00705383266DD4C2CCC5547B /* ScreenCaptureKit.framework */; };
+		F39A46ABDFFB4D66C30CCB96 /* FinderMenuExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = A18BD2DED7E1CE111A4BEDCA /* FinderMenuExtension.swift */; };
+		F92C7D6A1F6131FACC8C006F /* FinderFileRequests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF21485C54163E53725DE2EC /* FinderFileRequests.swift */; };
+		E200345E124E1120FB011361 /* FinderMenuModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58239091F32F00B5095B417E /* FinderMenuModel.swift */; };
+		325715F74BBCC3D3B6D60FBF /* FinderMenuPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 026177AAAF388C828A163D1D /* FinderMenuPreferences.swift */; };
+		55FBC9A47D2AA15E4B465D15 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9694B95F4FBF087BF05D19FB /* AppKit.framework */; };
+		C844FAEF0692AF76F8987325 /* ApplicationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B5BD692039D91AE04FEBC310 /* ApplicationServices.framework */; };
+		1140BFE5BC906A3C03E724B0 /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8655F244D0DBE899D1CB49B8 /* Carbon.framework */; };
+		190482F86594E50C520ECD96 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FB95B506FAA940469C15D964 /* CoreGraphics.framework */; };
+		FEE3C5941D2A8E78F8DCCBF5 /* CoreImage.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AC2446436B7AE5A9EC884AD4 /* CoreImage.framework */; };
+		34DB4B2625A7C6BBA0BA6D7C /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F27031DFE9CE9368FFA54C1B /* CoreMedia.framework */; };
+		0D93FEAA735A8D683EE82E0E /* FinderSync.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 64C86E046410F4E6C6D059AB /* FinderSync.framework */; };
+		88881090E765C6BA7C7B0F76 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 20530C1F3D99DF1367A53B4B /* IOKit.framework */; };
+		2315E02A7D31A3AF943E2C42 /* ScreenCaptureKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 00705383266DD4C2CCC5547B /* ScreenCaptureKit.framework */; };
+		34E4FFF5A89CC5A0784C2BB0 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9694B95F4FBF087BF05D19FB /* AppKit.framework */; };
+		3F016137D06EB2B97289E64C /* FinderSync.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 64C86E046410F4E6C6D059AB /* FinderSync.framework */; };
 		FFF89EDA05E92CC52DD1D5C7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E0E27618A2D2A8FEBDD49F35 /* Assets.xcassets */; };
+		78565CD8594F390633870546 /* OmniDockFinderSync.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 2CC086129F826B3823CFAB65 /* OmniDockFinderSync.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		89D260D4B56B123247E82F3D /* OmniDock.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "OmniDock.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		2CC086129F826B3823CFAB65 /* OmniDockFinderSync.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = "OmniDockFinderSync.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3E3B92A97B3D6988F4B42F5E /* OmniDockMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDock/OmniDockMain.swift"; sourceTree = SOURCE_ROOT; };
 		D7A7DED8B7FC805B7B9D9624 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/AppDelegate.swift"; sourceTree = SOURCE_ROOT; };
+		EF21485C54163E53725DE2EC /* FinderFileRequests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/FinderExtensionShared/FinderFileRequests.swift"; sourceTree = SOURCE_ROOT; };
+		58239091F32F00B5095B417E /* FinderMenuModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/FinderExtensionShared/FinderMenuModel.swift"; sourceTree = SOURCE_ROOT; };
+		026177AAAF388C828A163D1D /* FinderMenuPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/FinderExtensionShared/FinderMenuPreferences.swift"; sourceTree = SOURCE_ROOT; };
 		12703A6B33AD1DCF8080FC73 /* AppAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Models/AppAppearance.swift"; sourceTree = SOURCE_ROOT; };
 		B18F9E45D6B0D0F72B6296F5 /* AppHotkeyBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Models/AppHotkeyBinding.swift"; sourceTree = SOURCE_ROOT; };
 		78CC0AEA502E82DF49D99A06 /* AppLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Models/AppLanguage.swift"; sourceTree = SOURCE_ROOT; };
@@ -102,6 +120,9 @@
 		B21BE4A552E67C7B76ECF785 /* DockInteractionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/DockInteractionCoordinator.swift"; sourceTree = SOURCE_ROOT; };
 		DDE9CE44325F9E32C792DD90 /* DockInteractionSnapshotService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/DockInteractionSnapshotService.swift"; sourceTree = SOURCE_ROOT; };
 		2AEC7457E6264F2F490E2597 /* DockProxyTargetResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/DockProxyTargetResolver.swift"; sourceTree = SOURCE_ROOT; };
+		CEEE1BF3694D33D5614D1F25 /* FinderDirectoryGrantStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/FinderDirectoryGrantStore.swift"; sourceTree = SOURCE_ROOT; };
+		EF8C87A8360ACFFBADB6F802 /* FinderExtensionActivation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/FinderExtensionActivation.swift"; sourceTree = SOURCE_ROOT; };
+		214697259348D1357DD4E957 /* FinderFileCommandCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/FinderFileCommandCoordinator.swift"; sourceTree = SOURCE_ROOT; };
 		D765A2CAC69408FD0D02DE75 /* HotkeyShortcutPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/HotkeyShortcutPolicy.swift"; sourceTree = SOURCE_ROOT; };
 		D30D41B0DCA3A55E6E103BA1 /* IndependentWindowIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/IndependentWindowIdentity.swift"; sourceTree = SOURCE_ROOT; };
 		2AAFFA2BCCC66961497DCE50 /* LivePreviewCaptureSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/LivePreviewCaptureSession.swift"; sourceTree = SOURCE_ROOT; };
@@ -141,9 +162,13 @@
 		0CDC17F8C727F532A24A7669 /* ShortcutRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/ShortcutRecorderView.swift"; sourceTree = SOURCE_ROOT; };
 		A69449C024EBE9EDD6E598C7 /* StatusMenuController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/StatusMenuController.swift"; sourceTree = SOURCE_ROOT; };
 		7094715CAB8FD75FFC767057 /* TopAnchoredDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/TopAnchoredDocumentView.swift"; sourceTree = SOURCE_ROOT; };
+		A18BD2DED7E1CE111A4BEDCA /* FinderMenuExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockFinderSync/FinderMenuExtension.swift"; sourceTree = SOURCE_ROOT; };
 		E0E27618A2D2A8FEBDD49F35 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Resources/Assets.xcassets"; sourceTree = SOURCE_ROOT; };
+		31BEFD43862C3893FFE18E56 /* OmniDock-Development.entitlements */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Resources/OmniDock-Development.entitlements"; sourceTree = SOURCE_ROOT; };
 		921E39243A760BE16D455FDF /* OmniDock-AppStore.entitlements */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Resources/OmniDock-AppStore.entitlements"; sourceTree = SOURCE_ROOT; };
 		70F3B63E2FE432644C6D06FC /* OmniDock-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Resources/OmniDock-Info.plist"; sourceTree = SOURCE_ROOT; };
+		D1347A9D29A0026DA7D553F5 /* OmniDockFinderSync.entitlements */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Resources/OmniDockFinderSync.entitlements"; sourceTree = SOURCE_ROOT; };
+		E20CF96D82C877A23B78D06F /* OmniDockFinderSync-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Resources/OmniDockFinderSync-Info.plist"; sourceTree = SOURCE_ROOT; };
 		6327A1005FF0B783151E530B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "Resources/PrivacyInfo.xcprivacy"; sourceTree = SOURCE_ROOT; };
 		C4C6323CDCF11527E8BABD52 /* AppStrings.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = "Sources/OmniDockCore/Resources/en.lproj/AppStrings.strings"; sourceTree = SOURCE_ROOT; };
 		E70ECD50972126886EDD1D30 /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = "Sources/OmniDockCore/Resources/en.lproj/InfoPlist.strings"; sourceTree = SOURCE_ROOT; };
@@ -155,23 +180,48 @@
 		FB95B506FAA940469C15D964 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "CoreGraphics.framework"; path = "System/Library/Frameworks/CoreGraphics.framework"; sourceTree = SDKROOT; };
 		AC2446436B7AE5A9EC884AD4 /* CoreImage.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "CoreImage.framework"; path = "System/Library/Frameworks/CoreImage.framework"; sourceTree = SDKROOT; };
 		F27031DFE9CE9368FFA54C1B /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "CoreMedia.framework"; path = "System/Library/Frameworks/CoreMedia.framework"; sourceTree = SDKROOT; };
+		64C86E046410F4E6C6D059AB /* FinderSync.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "FinderSync.framework"; path = "System/Library/Frameworks/FinderSync.framework"; sourceTree = SDKROOT; };
 		20530C1F3D99DF1367A53B4B /* IOKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "IOKit.framework"; path = "System/Library/Frameworks/IOKit.framework"; sourceTree = SDKROOT; };
 		00705383266DD4C2CCC5547B /* ScreenCaptureKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "ScreenCaptureKit.framework"; path = "System/Library/Frameworks/ScreenCaptureKit.framework"; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		7862A46D3B126B3F0603DABD /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				78565CD8594F390633870546 /* OmniDockFinderSync.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		CF5BDB0BEAFE176F9629192A /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				21EC93C31ECB7BCF30D2AFF5 /* AppKit.framework in Frameworks */,
-				D17635ECFED7F0300286624D /* ApplicationServices.framework in Frameworks */,
-				622DB6D63888181679A074BB /* Carbon.framework in Frameworks */,
-				11A7FA82E14EE42C55A38E46 /* CoreGraphics.framework in Frameworks */,
-				C962ECB1AA725D385AC0312A /* CoreImage.framework in Frameworks */,
-				1FF5DD5517CC9B58DFC38411 /* CoreMedia.framework in Frameworks */,
-				FE1868479205910BACC30333 /* IOKit.framework in Frameworks */,
-				FF93D8237B0386164EC3D41E /* ScreenCaptureKit.framework in Frameworks */,
+				55FBC9A47D2AA15E4B465D15 /* AppKit.framework in Frameworks */,
+				C844FAEF0692AF76F8987325 /* ApplicationServices.framework in Frameworks */,
+				1140BFE5BC906A3C03E724B0 /* Carbon.framework in Frameworks */,
+				190482F86594E50C520ECD96 /* CoreGraphics.framework in Frameworks */,
+				FEE3C5941D2A8E78F8DCCBF5 /* CoreImage.framework in Frameworks */,
+				34DB4B2625A7C6BBA0BA6D7C /* CoreMedia.framework in Frameworks */,
+				0D93FEAA735A8D683EE82E0E /* FinderSync.framework in Frameworks */,
+				88881090E765C6BA7C7B0F76 /* IOKit.framework in Frameworks */,
+				2315E02A7D31A3AF943E2C42 /* ScreenCaptureKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		64E3204A7DF69C7452416018 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				34E4FFF5A89CC5A0784C2BB0 /* AppKit.framework in Frameworks */,
+				3F016137D06EB2B97289E64C /* FinderSync.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -193,6 +243,9 @@
 			children = (
 				3E3B92A97B3D6988F4B42F5E /* OmniDockMain.swift */,
 				D7A7DED8B7FC805B7B9D9624 /* AppDelegate.swift */,
+				EF21485C54163E53725DE2EC /* FinderFileRequests.swift */,
+				58239091F32F00B5095B417E /* FinderMenuModel.swift */,
+				026177AAAF388C828A163D1D /* FinderMenuPreferences.swift */,
 				12703A6B33AD1DCF8080FC73 /* AppAppearance.swift */,
 				B18F9E45D6B0D0F72B6296F5 /* AppHotkeyBinding.swift */,
 				78CC0AEA502E82DF49D99A06 /* AppLanguage.swift */,
@@ -213,6 +266,9 @@
 				B21BE4A552E67C7B76ECF785 /* DockInteractionCoordinator.swift */,
 				DDE9CE44325F9E32C792DD90 /* DockInteractionSnapshotService.swift */,
 				2AEC7457E6264F2F490E2597 /* DockProxyTargetResolver.swift */,
+				CEEE1BF3694D33D5614D1F25 /* FinderDirectoryGrantStore.swift */,
+				EF8C87A8360ACFFBADB6F802 /* FinderExtensionActivation.swift */,
+				214697259348D1357DD4E957 /* FinderFileCommandCoordinator.swift */,
 				D765A2CAC69408FD0D02DE75 /* HotkeyShortcutPolicy.swift */,
 				D30D41B0DCA3A55E6E103BA1 /* IndependentWindowIdentity.swift */,
 				2AAFFA2BCCC66961497DCE50 /* LivePreviewCaptureSession.swift */,
@@ -252,6 +308,7 @@
 				0CDC17F8C727F532A24A7669 /* ShortcutRecorderView.swift */,
 				A69449C024EBE9EDD6E598C7 /* StatusMenuController.swift */,
 				7094715CAB8FD75FFC767057 /* TopAnchoredDocumentView.swift */,
+				A18BD2DED7E1CE111A4BEDCA /* FinderMenuExtension.swift */,
 			);
 			name = Sources;
 			sourceTree = "<group>";
@@ -260,8 +317,11 @@
 			isa = PBXGroup;
 			children = (
 				E0E27618A2D2A8FEBDD49F35 /* Assets.xcassets */,
+				31BEFD43862C3893FFE18E56 /* OmniDock-Development.entitlements */,
 				921E39243A760BE16D455FDF /* OmniDock-AppStore.entitlements */,
 				70F3B63E2FE432644C6D06FC /* OmniDock-Info.plist */,
+				D1347A9D29A0026DA7D553F5 /* OmniDockFinderSync.entitlements */,
+				E20CF96D82C877A23B78D06F /* OmniDockFinderSync-Info.plist */,
 				6327A1005FF0B783151E530B /* PrivacyInfo.xcprivacy */,
 				C4C6323CDCF11527E8BABD52 /* AppStrings.strings */,
 				E70ECD50972126886EDD1D30 /* InfoPlist.strings */,
@@ -280,6 +340,7 @@
 				FB95B506FAA940469C15D964 /* CoreGraphics.framework */,
 				AC2446436B7AE5A9EC884AD4 /* CoreImage.framework */,
 				F27031DFE9CE9368FFA54C1B /* CoreMedia.framework */,
+				64C86E046410F4E6C6D059AB /* FinderSync.framework */,
 				20530C1F3D99DF1367A53B4B /* IOKit.framework */,
 				00705383266DD4C2CCC5547B /* ScreenCaptureKit.framework */,
 			);
@@ -290,6 +351,7 @@
 			isa = PBXGroup;
 			children = (
 				89D260D4B56B123247E82F3D /* OmniDock.app */,
+				2CC086129F826B3823CFAB65 /* OmniDockFinderSync.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -305,15 +367,42 @@
 				CF5BDB0BEAFE176F9629192A /* Frameworks */,
 				C02F1309AF4906C92F1EAD44 /* Resources */,
 				9E89E7D3B1CB6AE36E6BA4C8 /* Copy App Resources */,
+				7862A46D3B126B3F0603DABD /* Embed App Extensions */,
 			);
 			buildRules = ();
-			dependencies = ();
+			dependencies = (
+				6154B5B7E00592317D87A7B5 /* PBXTargetDependency */,
+			);
 			name = "OmniDock";
 			productName = "OmniDock";
 			productReference = 89D260D4B56B123247E82F3D /* OmniDock.app */;
 			productType = "com.apple.product-type.application";
 		};
+		552C6C06F7A352DA07226DA1 /* OmniDockFinderSync */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 47B2DD45975366412F52E36E /* Build configuration list for PBXNativeTarget "OmniDockFinderSync" */;
+			buildPhases = (
+				51B2760AD5BD9796D05C0BCB /* Sources */,
+				64E3204A7DF69C7452416018 /* Frameworks */,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = "OmniDockFinderSync";
+			productName = "OmniDockFinderSync";
+			productReference = 2CC086129F826B3823CFAB65 /* OmniDockFinderSync.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXContainerItemProxy section */
+		B11A22DE02AF3E12FEE84632 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F5511362F3AFAECC778267A8 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 552C6C06F7A352DA07226DA1;
+			remoteInfo = "OmniDockFinderSync";
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXProject section */
 		F5511362F3AFAECC778267A8 /* Project object */ = {
@@ -325,6 +414,19 @@
 				TargetAttributes = {
 					BF4C4A16C84777801519B540 = {
 						CreatedOnToolsVersion = "26.3";
+						ProvisioningStyle = Automatic;
+						SystemCapabilities = {
+							com.apple.ApplicationGroups.iOS = { enabled = 1; };
+							com.apple.Sandbox = { enabled = 1; };
+						};
+					};
+					552C6C06F7A352DA07226DA1 = {
+						CreatedOnToolsVersion = "26.3";
+						ProvisioningStyle = Automatic;
+						SystemCapabilities = {
+							com.apple.ApplicationGroups.iOS = { enabled = 1; };
+							com.apple.Sandbox = { enabled = 1; };
+						};
 					};
 				};
 			};
@@ -342,9 +444,18 @@
 			projectRoot = "";
 			targets = (
 				BF4C4A16C84777801519B540 /* OmniDock */,
+				552C6C06F7A352DA07226DA1 /* OmniDockFinderSync */,
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXTargetDependency section */
+		6154B5B7E00592317D87A7B5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 552C6C06F7A352DA07226DA1 /* OmniDockFinderSync */;
+			targetProxy = B11A22DE02AF3E12FEE84632 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXResourcesBuildPhase section */
 		C02F1309AF4906C92F1EAD44 /* Resources */ = {
@@ -366,6 +477,7 @@
 			inputFileListPaths = ();
 			inputPaths = (
 				"$(SRCROOT)/Resources/PrivacyInfo.xcprivacy",
+				"$(SRCROOT)/LICENSE",
 				"$(SRCROOT)/Sources/OmniDockCore/Resources",
 			);
 			name = "Copy App Resources";
@@ -375,7 +487,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "set -euo pipefail\n\nresources_dir=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nmkdir -p \"$resources_dir\"\n\n/usr/bin/ditto \"${SRCROOT}/Resources/PrivacyInfo.xcprivacy\" \"${resources_dir}/PrivacyInfo.xcprivacy\"\n\nfor localization_dir in \"${SRCROOT}\"/Sources/OmniDockCore/Resources/*.lproj; do\n  [[ -d \"$localization_dir\" ]] || continue\n  /usr/bin/ditto \"$localization_dir\" \"${resources_dir}/$(basename \"$localization_dir\")\"\ndone\n\n/usr/bin/xattr -dr com.apple.quarantine \"$resources_dir\" 2>/dev/null || true\n";
+			shellScript = "set -euo pipefail\n\nresources_dir=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nmkdir -p \"$resources_dir\"\n\n/usr/bin/ditto \"${SRCROOT}/Resources/PrivacyInfo.xcprivacy\" \"${resources_dir}/PrivacyInfo.xcprivacy\"\n/usr/bin/ditto \"${SRCROOT}/LICENSE\" \"${resources_dir}/COPYING.txt\"\n\nfor localization_dir in \"${SRCROOT}\"/Sources/OmniDockCore/Resources/*.lproj; do\n  [[ -d \"$localization_dir\" ]] || continue\n  /usr/bin/ditto \"$localization_dir\" \"${resources_dir}/$(basename \"$localization_dir\")\"\ndone\n\n/usr/bin/xattr -dr com.apple.quarantine \"$resources_dir\" 2>/dev/null || true\n/usr/bin/xattr -cr \"${TARGET_BUILD_DIR}/${WRAPPER_NAME}\" 2>/dev/null || true\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -386,6 +498,9 @@
 			files = (
 				00E67EAF8D1F0480F1E0F8AA /* OmniDockMain.swift in Sources */,
 				0E7ADBE745AB6F60EE674170 /* AppDelegate.swift in Sources */,
+				3E74EFB3BF22E342AFF67AFC /* FinderFileRequests.swift in Sources */,
+				6245E267050CB0D3011E7D0C /* FinderMenuModel.swift in Sources */,
+				C74926C22DDD045B610E1B3F /* FinderMenuPreferences.swift in Sources */,
 				D4ED1E90E64A329F70087940 /* AppAppearance.swift in Sources */,
 				2145A12C734E8EC3CE14C5B4 /* AppHotkeyBinding.swift in Sources */,
 				350841FA8C54AC4970114FFE /* AppLanguage.swift in Sources */,
@@ -406,6 +521,9 @@
 				189D2F8AC18875355A8151C8 /* DockInteractionCoordinator.swift in Sources */,
 				93DDBE08C4F8BC51F78B781F /* DockInteractionSnapshotService.swift in Sources */,
 				0DC26A0A619C84EAA2E69B34 /* DockProxyTargetResolver.swift in Sources */,
+				FDD785A3EF81BD86191BDB4F /* FinderDirectoryGrantStore.swift in Sources */,
+				0732EEB2DA9FE442A84877E3 /* FinderExtensionActivation.swift in Sources */,
+				1324A0E128D0D7A43A3F5A45 /* FinderFileCommandCoordinator.swift in Sources */,
 				92136C573348886F35F18726 /* HotkeyShortcutPolicy.swift in Sources */,
 				5E50495DFD801F094898630B /* IndependentWindowIdentity.swift in Sources */,
 				8FECE3B5E53FD8392CB4303F /* LivePreviewCaptureSession.swift in Sources */,
@@ -445,6 +563,17 @@
 				68FCE8F5ECE1ABDCE066921C /* ShortcutRecorderView.swift in Sources */,
 				80EEF4B5C0408A3445755B4C /* StatusMenuController.swift in Sources */,
 				B7FB3A8168B6982212624170 /* TopAnchoredDocumentView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		51B2760AD5BD9796D05C0BCB /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F39A46ABDFFB4D66C30CCB96 /* FinderMenuExtension.swift in Sources */,
+				F92C7D6A1F6131FACC8C006F /* FinderFileRequests.swift in Sources */,
+				E200345E124E1120FB011361 /* FinderMenuModel.swift in Sources */,
+				325715F74BBCC3D3B6D60FBF /* FinderMenuPreferences.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -571,7 +700,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon";
-				CODE_SIGN_ENTITLEMENTS = "Resources/OmniDock-AppStore.entitlements";
+				CODE_SIGN_ENTITLEMENTS = "Resources/OmniDock-Development.entitlements";
 				CODE_SIGN_STYLE = "Automatic";
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = "3";
@@ -591,7 +720,6 @@
 				SUPPORTED_PLATFORMS = "macosx";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = (
 					"$(inherited)",
-					"APP_STORE",
 				);
 				SWIFT_VERSION = "5.0";
 			};
@@ -627,6 +755,58 @@
 			};
 			name = Release;
 		};
+		44E61A8C709788035DE5E2ED /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = "Resources/OmniDockFinderSync.entitlements";
+				CODE_SIGN_STYLE = "Automatic";
+				CURRENT_PROJECT_VERSION = "3";
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Resources/OmniDockFinderSync-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = "12.3";
+				MARKETING_VERSION = "1.0";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.quanzhankeji.OmniDock.FinderSync";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = "macosx";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "macosx";
+				SWIFT_VERSION = "5.0";
+			};
+			name = Debug;
+		};
+		0A535B4EC503DD81BF0434F9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = "Resources/OmniDockFinderSync.entitlements";
+				CODE_SIGN_STYLE = "Automatic";
+				CURRENT_PROJECT_VERSION = "3";
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "Resources/OmniDockFinderSync-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = "12.3";
+				MARKETING_VERSION = "1.0";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.quanzhankeji.OmniDock.FinderSync";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = "macosx";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "macosx";
+				SWIFT_VERSION = "5.0";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -635,6 +815,15 @@
 			buildConfigurations = (
 				73BFC4993D558C2844970A56 /* Debug */,
 				3C5BC6FE1E438E679FB7F74F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		47B2DD45975366412F52E36E /* Build configuration list for PBXNativeTarget "OmniDockFinderSync" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				44E61A8C709788035DE5E2ED /* Debug */,
+				0A535B4EC503DD81BF0434F9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

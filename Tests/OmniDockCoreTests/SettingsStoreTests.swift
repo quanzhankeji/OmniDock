@@ -14,6 +14,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.toggleAppVisibilityOnDockClick)
         XCTAssertFalse(store.minimizeWindowsOnDockClickInsteadOfHide)
         XCTAssertTrue(store.hotkeysEnabled)
+        XCTAssertFalse(store.finderExtensionEnabled)
         XCTAssertEqual(store.appLanguage, .system)
         XCTAssertEqual(store.appAppearance, .system)
         XCTAssertFalse(store.permissionOnboardingCompleted)
@@ -34,6 +35,7 @@ final class SettingsStoreTests: XCTestCase {
         store.toggleAppVisibilityOnDockClick = false
         store.minimizeWindowsOnDockClickInsteadOfHide = true
         store.hotkeysEnabled = false
+        store.finderExtensionEnabled = true
         store.appLanguage = .en
         store.appAppearance = .dark
         store.permissionOnboardingCompleted = true
@@ -59,6 +61,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(reloaded.toggleAppVisibilityOnDockClick)
         XCTAssertTrue(reloaded.minimizeWindowsOnDockClickInsteadOfHide)
         XCTAssertFalse(reloaded.hotkeysEnabled)
+        XCTAssertTrue(reloaded.finderExtensionEnabled)
         XCTAssertEqual(reloaded.appLanguage, .en)
         XCTAssertEqual(reloaded.appAppearance, .dark)
         XCTAssertTrue(reloaded.permissionOnboardingCompleted)
@@ -122,6 +125,18 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.hotkeysEnabled)
         XCTAssertTrue(store.permissionOnboardingCompleted)
         XCTAssertFalse(store.permissionOnboardingSkipped)
+    }
+
+    func testLanguageAndAppearanceChangesDoNotRestartInputDependentFeatures() {
+        XCTAssertFalse(SettingsChange.language.affectsDockInteraction)
+        XCTAssertFalse(SettingsChange.language.affectsCommandTabPreview)
+        XCTAssertFalse(SettingsChange.language.affectsWindowCycle)
+        XCTAssertFalse(SettingsChange.language.affectsAppHotkeys)
+        XCTAssertFalse(SettingsChange.appearance.affectsDockInteraction)
+
+        XCTAssertTrue(SettingsChange.dockClick.affectsDockInteraction)
+        XCTAssertTrue(SettingsChange.windowCycle.affectsWindowCycle)
+        XCTAssertTrue(SettingsChange.hotkeys.affectsAppHotkeys)
     }
 
     private func isolatedDefaults() -> UserDefaults {

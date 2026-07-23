@@ -1,5 +1,64 @@
 import Foundation
 
+public enum SettingsChange: String, Equatable {
+    case preview
+    case commandTabPreview
+    case windowCycle
+    case finderExtension
+    case livePreview
+    case livePreviewLimit
+    case dockClick
+    case minimizeDockClick
+    case hotkeys
+    case hotkeyBindings
+    case language
+    case appearance
+    case permissionState
+    case all
+
+    fileprivate static let notificationUserInfoKey = "OmniDockSettingsChange"
+
+    public var affectsDockInteraction: Bool {
+        switch self {
+        case .preview, .livePreview, .livePreviewLimit, .dockClick, .all:
+            return true
+        case .commandTabPreview, .windowCycle, .finderExtension, .minimizeDockClick,
+             .hotkeys, .hotkeyBindings, .language, .appearance, .permissionState:
+            return false
+        }
+    }
+
+    public var affectsCommandTabPreview: Bool {
+        switch self {
+        case .preview, .commandTabPreview, .all:
+            return true
+        case .windowCycle, .finderExtension, .livePreview, .livePreviewLimit, .dockClick,
+             .minimizeDockClick, .hotkeys, .hotkeyBindings, .language, .appearance, .permissionState:
+            return false
+        }
+    }
+
+    public var affectsWindowCycle: Bool {
+        switch self {
+        case .preview, .windowCycle, .all:
+            return true
+        case .commandTabPreview, .finderExtension, .livePreview, .livePreviewLimit, .dockClick,
+             .minimizeDockClick, .hotkeys, .hotkeyBindings, .language, .appearance, .permissionState:
+            return false
+        }
+    }
+
+    public var affectsAppHotkeys: Bool {
+        switch self {
+        case .hotkeys, .hotkeyBindings, .all:
+            return true
+        case .preview, .commandTabPreview, .windowCycle, .finderExtension, .livePreview,
+             .livePreviewLimit, .dockClick, .minimizeDockClick, .language, .appearance, .permissionState:
+            return false
+        }
+    }
+}
+
 public final class SettingsStore {
     public static let changedNotification = Notification.Name("OmniDockSettingsChanged")
 
@@ -8,6 +67,7 @@ public final class SettingsStore {
         case showCommandTabPreviews = "showCommandTabPreviews"
         // Keep the original storage name so existing installations retain their choice.
         case windowCycleEnabled = "independentWindowSwitcherEnabled"
+        case finderExtensionEnabled = "finderExtensionEnabled"
         case liveDockPreviewsEnabled = "liveDockPreviewsEnabled"
         case livePreviewWindowLimit = "livePreviewWindowLimit"
         case toggleAppVisibilityOnDockClick = "toggleAppVisibilityOnDockClick"
@@ -25,22 +85,30 @@ public final class SettingsStore {
 
     private let defaults: UserDefaults
     private let livePreviewLimitProvider: () -> Int
+    private let finderMenuPreferencesStore: FinderMenuPreferencesStore?
 
     public convenience init(defaults: UserDefaults = .standard) {
         self.init(
             defaults: defaults,
-            livePreviewLimitProvider: { PreviewPerformanceProfile.current.recommendedLiveWindowLimit }
+            livePreviewLimitProvider: { PreviewPerformanceProfile.current.recommendedLiveWindowLimit },
+            finderMenuPreferencesStore: FinderMenuPreferencesStore()
         )
     }
 
-    init(defaults: UserDefaults, livePreviewLimitProvider: @escaping () -> Int) {
+    init(
+        defaults: UserDefaults,
+        livePreviewLimitProvider: @escaping () -> Int,
+        finderMenuPreferencesStore: FinderMenuPreferencesStore? = nil
+    ) {
         self.defaults = defaults
         self.livePreviewLimitProvider = livePreviewLimitProvider
+        self.finderMenuPreferencesStore = finderMenuPreferencesStore
         migrateLegacyMinimizePreferenceIfNeeded()
         defaults.register(defaults: [
             Key.showDockPreviews.rawValue: true,
             Key.showCommandTabPreviews.rawValue: true,
             Key.windowCycleEnabled.rawValue: false,
+            Key.finderExtensionEnabled.rawValue: false,
             Key.liveDockPreviewsEnabled.rawValue: true,
             Key.livePreviewWindowLimit.rawValue: min(6, max(0, livePreviewLimitProvider())),
             Key.hotkeysEnabled.rawValue: true,
@@ -51,6 +119,7 @@ public final class SettingsStore {
         ])
         AppLocalization.configure(language: appLanguage)
         OmniDockTheme.configure(appearance: appAppearance)
+        syncFinderExtensionSettings()
     }
 
     public var showDockPreviews: Bool {
@@ -71,6 +140,15 @@ public final class SettingsStore {
     public var windowCycleEnabled: Bool {
         get { defaults.bool(forKey: Key.windowCycleEnabled.rawValue) }
         set { set(newValue, for: .windowCycleEnabled) }
+    }
+
+    public var finderExtensionEnabled: Bool {
+        get { defaults.bool(forKey: Key.finderExtensionEnabled.rawValue) }
+        set {
+            defaults.set(newValue, forKey: Key.finderExtensionEnabled.rawValue)
+            syncFinderExtensionSettings()
+            postChange(.finderExtension)
+        }
     }
 
     public var liveDockPreviewsEnabled: Bool {
@@ -138,7 +216,8 @@ public final class SettingsStore {
         set {
             defaults.set(newValue.rawValue, forKey: Key.appLanguage.rawValue)
             AppLocalization.configure(language: newValue)
-            NotificationCenter.default.post(name: Self.changedNotification, object: self)
+            syncFinderExtensionSettings()
+            postChange(.language)
         }
     }
 
@@ -154,7 +233,7 @@ public final class SettingsStore {
         set {
             defaults.set(newValue.rawValue, forKey: Key.appAppearance.rawValue)
             OmniDockTheme.configure(appearance: newValue)
-            NotificationCenter.default.post(name: Self.changedNotification, object: self)
+            postChange(.appearance)
         }
     }
 
@@ -173,7 +252,7 @@ public final class SettingsStore {
             } else {
                 defaults.removeObject(forKey: Key.hotkeyAssignments.rawValue)
             }
-            NotificationCenter.default.post(name: Self.changedNotification, object: self)
+            postChange(.hotkeyBindings)
         }
     }
 
@@ -213,7 +292,7 @@ public final class SettingsStore {
             } else {
                 defaults.removeObject(forKey: Key.lastPermissionRefreshRelaunchAttemptAt.rawValue)
             }
-            NotificationCenter.default.post(name: Self.changedNotification, object: self)
+            postChange(.permissionState)
         }
     }
 
@@ -239,21 +318,77 @@ public final class SettingsStore {
         defaults.set(true, forKey: Key.hotkeysEnabled.rawValue)
         defaults.set(true, forKey: Key.permissionOnboardingCompleted.rawValue)
         defaults.set(false, forKey: Key.permissionOnboardingSkipped.rawValue)
-        NotificationCenter.default.post(name: Self.changedNotification, object: self)
+        postChange(.all)
     }
 
     private func set(_ value: Bool, for key: Key) {
         defaults.set(value, forKey: key.rawValue)
-        NotificationCenter.default.post(name: Self.changedNotification, object: self)
+        postChange(change(for: key))
     }
 
     private func set(_ value: Int, for key: Key) {
         defaults.set(value, forKey: key.rawValue)
-        NotificationCenter.default.post(name: Self.changedNotification, object: self)
+        postChange(change(for: key))
+    }
+
+    public static func change(in notification: Notification) -> SettingsChange {
+        guard let rawValue = notification.userInfo?[SettingsChange.notificationUserInfoKey] as? String,
+              let change = SettingsChange(rawValue: rawValue)
+        else {
+            return .all
+        }
+        return change
+    }
+
+    private func postChange(_ change: SettingsChange) {
+        NotificationCenter.default.post(
+            name: Self.changedNotification,
+            object: self,
+            userInfo: [SettingsChange.notificationUserInfoKey: change.rawValue]
+        )
+    }
+
+    private func change(for key: Key) -> SettingsChange {
+        switch key {
+        case .showDockPreviews:
+            return .preview
+        case .showCommandTabPreviews:
+            return .commandTabPreview
+        case .windowCycleEnabled:
+            return .windowCycle
+        case .finderExtensionEnabled:
+            return .finderExtension
+        case .liveDockPreviewsEnabled:
+            return .livePreview
+        case .livePreviewWindowLimit:
+            return .livePreviewLimit
+        case .toggleAppVisibilityOnDockClick:
+            return .dockClick
+        case .minimizeWindowsOnDockClickInsteadOfHide, .minimizeOnRepeatedDockClick:
+            return .minimizeDockClick
+        case .hotkeysEnabled:
+            return .hotkeys
+        case .hotkeyAssignments:
+            return .hotkeyBindings
+        case .appLanguage:
+            return .language
+        case .appAppearance:
+            return .appearance
+        case .permissionOnboardingCompleted, .permissionOnboardingSkipped,
+             .pendingPermissionFeatures, .lastPermissionRefreshRelaunchAttemptAt:
+            return .permissionState
+        }
     }
 
     private func clampLivePreviewWindowLimit(_ value: Int) -> Int {
         min(max(value, 0), livePreviewWindowLimitMaximum)
+    }
+
+    private func syncFinderExtensionSettings() {
+        finderMenuPreferencesStore?.update(FinderMenuPreferences(
+            isEnabled: finderExtensionEnabled,
+            languageIdentifier: appLanguage.rawValue
+        ))
     }
 
     private func migrateLegacyMinimizePreferenceIfNeeded() {

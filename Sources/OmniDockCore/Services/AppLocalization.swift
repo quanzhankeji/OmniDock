@@ -12,8 +12,10 @@ enum AppStringKey: String, CaseIterable {
     case appearanceLight
     case appearanceDark
 
+    case tabSettings
     case tabPreview
     case tabHotkeys
+    case tabFinderExtension
     case menuSettings
     case menuHotkeys
     case menuQuit
@@ -49,6 +51,16 @@ enum AppStringKey: String, CaseIterable {
     case settingsLiveWindowCount
     case settingsPrivacyPolicy
     case settingsSupport
+
+    case finderExtensionEnableTitle
+    case finderExtensionEnableDetail
+    case finderExtensionSetupRequired
+    case finderExtensionOpenSettings
+    case finderExtensionCreateFailedTitle
+    case finderExtensionCreateFailedDetail
+    case finderExtensionFailureDismiss
+    case finderExtensionAccessDetail
+    case finderExtensionAccessButton
 
     case permissionAccessibility
     case permissionScreenRecording

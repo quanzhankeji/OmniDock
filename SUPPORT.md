@@ -13,6 +13,7 @@ The settings window includes controls for:
 - Dock hide/bring-forward toggle
 - Optional minimize/restore behavior
 - Live Dock previews
+- Finder right-click extension
 - Per-app keyboard shortcuts
 - Permission status for macOS features
 
@@ -41,6 +42,15 @@ If a per-app shortcut does not register:
 2. Avoid browser tab navigation shortcuts and common system shortcuts.
 3. Remove duplicate shortcuts inside OmniDock.
 4. Reopen OmniDock after changing permissions.
+
+If Finder right-click commands do not appear:
+
+1. Open `OD` > `Settings` > `Finder Extension` and turn on `Enable`.
+2. In the macOS extension management page, enable OmniDock Finder Extension.
+3. Quit and reopen Finder if macOS has not yet refreshed its extension menu.
+4. Right-click an empty area in a local Finder folder for Copy Path and the New File submenu, or select one or more items for Copy Path.
+
+Finder Sync menus do not appear in File Provider-managed locations, including Desktop and Documents when those folders are managed by iCloud Drive. This is a macOS limitation.
 
 ## Reporting Issues
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate OmniDock.xcodeproj for the Mac App Store/Xcode archive path."""
+"""Generate OmniDock.xcodeproj for local extension builds and App Store archives."""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 PROJECT_NAME = "OmniDock"
 BUNDLE_ID = "com.quanzhankeji.OmniDock"
+FINDER_EXTENSION_NAME = "OmniDockFinderSync"
+FINDER_EXTENSION_BUNDLE_ID = f"{BUNDLE_ID}.FinderSync"
 MIN_MACOS = "12.3"
 XCODE_VERSION = "2630"
 
@@ -22,9 +24,11 @@ FRAMEWORKS = [
     "CoreGraphics",
     "CoreImage",
     "CoreMedia",
+    "FinderSync",
     "IOKit",
     "ScreenCaptureKit",
 ]
+FINDER_EXTENSION_FRAMEWORKS = ["AppKit", "FinderSync"]
 
 
 def oid(seed: str) -> str:
@@ -40,17 +44,35 @@ def rel(path: Path) -> str:
     return path.relative_to(ROOT).as_posix()
 
 
-def list_swift_sources() -> list[str]:
+def list_app_sources() -> list[str]:
     app = sorted(rel(path) for path in (ROOT / "Sources" / PROJECT_NAME).rglob("*.swift"))
     core = sorted(rel(path) for path in (ROOT / "Sources" / "OmniDockCore").rglob("*.swift"))
     return [*app, *core]
 
 
+def list_finder_extension_sources() -> list[str]:
+    extension = sorted(
+        rel(path) for path in (ROOT / "Sources" / FINDER_EXTENSION_NAME).rglob("*.swift")
+    )
+    shared = sorted(
+        rel(path)
+        for path in (ROOT / "Sources" / "OmniDockCore" / "FinderExtensionShared").rglob("*.swift")
+    )
+    return [*extension, *shared]
+
+
+def list_swift_sources() -> list[str]:
+    return sorted(set([*list_app_sources(), *list_finder_extension_sources()]))
+
+
 def list_resource_references() -> list[str]:
     resources = [
         "Resources/Assets.xcassets",
+        "Resources/OmniDock-Development.entitlements",
         "Resources/OmniDock-AppStore.entitlements",
         "Resources/OmniDock-Info.plist",
+        "Resources/OmniDockFinderSync.entitlements",
+        "Resources/OmniDockFinderSync-Info.plist",
         "Resources/PrivacyInfo.xcprivacy",
     ]
     resources.extend(
@@ -80,7 +102,9 @@ def build_settings(settings: dict[str, object], indent: str = "\t\t\t\t") -> str
 
 
 def generate_pbxproj() -> str:
-    swift_sources = list_swift_sources()
+    swift_sources = list_app_sources()
+    finder_extension_sources = list_finder_extension_sources()
+    all_swift_sources = sorted(set([*swift_sources, *finder_extension_sources]))
     resource_refs = list_resource_references()
 
     main_group = oid("group:main")
@@ -90,28 +114,48 @@ def generate_pbxproj() -> str:
     products_group = oid("group:products")
 
     target = oid("target:OmniDock")
+    finder_extension_target = oid(f"target:{FINDER_EXTENSION_NAME}")
     project = oid("project:OmniDock")
     product_ref = oid("product:OmniDock.app")
+    finder_extension_product_ref = oid(f"product:{FINDER_EXTENSION_NAME}.appex")
     sources_phase = oid("phase:sources")
+    finder_extension_sources_phase = oid(f"phase:{FINDER_EXTENSION_NAME}:sources")
     frameworks_phase = oid("phase:frameworks")
+    finder_extension_frameworks_phase = oid(f"phase:{FINDER_EXTENSION_NAME}:frameworks")
     resources_phase = oid("phase:resources")
     resource_script_phase = oid("phase:copy-local-resources")
+    embed_extensions_phase = oid("phase:embed-app-extensions")
+    finder_extension_dependency = oid(f"dependency:{PROJECT_NAME}:{FINDER_EXTENSION_NAME}")
+    finder_extension_proxy = oid(f"proxy:{PROJECT_NAME}:{FINDER_EXTENSION_NAME}")
     project_debug = oid("config:project:debug")
     project_release = oid("config:project:release")
     target_debug = oid("config:target:debug")
     target_release = oid("config:target:release")
+    finder_extension_debug = oid(f"config:target:{FINDER_EXTENSION_NAME}:debug")
+    finder_extension_release = oid(f"config:target:{FINDER_EXTENSION_NAME}:release")
     project_config_list = oid("config-list:project")
     target_config_list = oid("config-list:target")
+    finder_extension_config_list = oid(f"config-list:target:{FINDER_EXTENSION_NAME}")
 
-    file_refs = {path: oid(f"file:{path}") for path in [*swift_sources, *resource_refs]}
+    file_refs = {path: oid(f"file:{path}") for path in [*all_swift_sources, *resource_refs]}
     source_build_files = {path: oid(f"build:sources:{path}") for path in swift_sources}
+    finder_extension_source_build_files = {
+        path: oid(f"build:sources:{FINDER_EXTENSION_NAME}:{path}")
+        for path in finder_extension_sources
+    }
     resource_build_files = {
         path: oid(f"build:resources:{path}")
         for path in resource_refs
         if path.endswith(".xcassets")
     }
-    framework_refs = {name: oid(f"framework:{name}") for name in FRAMEWORKS}
-    framework_build_files = {name: oid(f"build:frameworks:{name}") for name in FRAMEWORKS}
+    all_frameworks = sorted(set([*FRAMEWORKS, *FINDER_EXTENSION_FRAMEWORKS]))
+    framework_refs = {name: oid(f"framework:{name}") for name in all_frameworks}
+    framework_build_files = {name: oid(f"build:frameworks:{PROJECT_NAME}:{name}") for name in FRAMEWORKS}
+    finder_extension_framework_build_files = {
+        name: oid(f"build:frameworks:{FINDER_EXTENSION_NAME}:{name}")
+        for name in FINDER_EXTENSION_FRAMEWORKS
+    }
+    embed_extension_build_file = oid(f"build:embed:{FINDER_EXTENSION_NAME}")
 
     lines: list[str] = [
         "// !$*UTF8*$!",
@@ -130,9 +174,20 @@ def generate_pbxproj() -> str:
             f"\t\t{source_build_files[path]} /* {name} in Sources */ = "
             f"{{isa = PBXBuildFile; fileRef = {file_refs[path]} /* {name} */; }};"
         )
+    for path in finder_extension_sources:
+        name = Path(path).name
+        lines.append(
+            f"\t\t{finder_extension_source_build_files[path]} /* {name} in Sources */ = "
+            f"{{isa = PBXBuildFile; fileRef = {file_refs[path]} /* {name} */; }};"
+        )
     for name in FRAMEWORKS:
         lines.append(
             f"\t\t{framework_build_files[name]} /* {name}.framework in Frameworks */ = "
+            f"{{isa = PBXBuildFile; fileRef = {framework_refs[name]} /* {name}.framework */; }};"
+        )
+    for name in FINDER_EXTENSION_FRAMEWORKS:
+        lines.append(
+            f"\t\t{finder_extension_framework_build_files[name]} /* {name}.framework in Frameworks */ = "
             f"{{isa = PBXBuildFile; fileRef = {framework_refs[name]} /* {name}.framework */; }};"
         )
     for path in resource_build_files:
@@ -141,6 +196,11 @@ def generate_pbxproj() -> str:
             f"\t\t{resource_build_files[path]} /* {name} in Resources */ = "
             f"{{isa = PBXBuildFile; fileRef = {file_refs[path]} /* {name} */; }};"
         )
+    lines.append(
+        f"\t\t{embed_extension_build_file} /* {FINDER_EXTENSION_NAME}.appex in Embed App Extensions */ = "
+        f"{{isa = PBXBuildFile; fileRef = {finder_extension_product_ref} /* {FINDER_EXTENSION_NAME}.appex */; "
+        "settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };"
+    )
     lines.extend(["/* End PBXBuildFile section */", "", "/* Begin PBXFileReference section */"])
 
     lines.append(
@@ -148,7 +208,12 @@ def generate_pbxproj() -> str:
         f"{{isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; "
         f"path = {q(PROJECT_NAME + '.app')}; sourceTree = BUILT_PRODUCTS_DIR; }};"
     )
-    for path in swift_sources:
+    lines.append(
+        f"\t\t{finder_extension_product_ref} /* {FINDER_EXTENSION_NAME}.appex */ = "
+        f"{{isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; "
+        f"path = {q(FINDER_EXTENSION_NAME + '.appex')}; sourceTree = BUILT_PRODUCTS_DIR; }};"
+    )
+    for path in all_swift_sources:
         name = Path(path).name
         lines.append(
             f"\t\t{file_refs[path]} /* {name} */ = "
@@ -172,13 +237,35 @@ def generate_pbxproj() -> str:
             f"{{isa = PBXFileReference; lastKnownFileType = {file_type}; path = {q(path)}; "
             f"sourceTree = SOURCE_ROOT; }};"
         )
-    for name in FRAMEWORKS:
+    for name in all_frameworks:
         lines.append(
             f"\t\t{framework_refs[name]} /* {name}.framework */ = "
             f"{{isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = {q(name + '.framework')}; "
             f"path = {q('System/Library/Frameworks/' + name + '.framework')}; sourceTree = SDKROOT; }};"
         )
-    lines.extend(["/* End PBXFileReference section */", "", "/* Begin PBXFrameworksBuildPhase section */"])
+    lines.extend([
+        "/* End PBXFileReference section */",
+        "",
+        "/* Begin PBXCopyFilesBuildPhase section */",
+    ])
+    lines.append(f"\t\t{embed_extensions_phase} /* Embed App Extensions */ = {{")
+    lines.append("\t\t\tisa = PBXCopyFilesBuildPhase;")
+    lines.append("\t\t\tbuildActionMask = 2147483647;")
+    lines.append("\t\t\tdstPath = \"\";")
+    lines.append("\t\t\tdstSubfolderSpec = 13;")
+    lines.append("\t\t\tfiles = (")
+    lines.append(
+        f"\t\t\t\t{embed_extension_build_file} /* {FINDER_EXTENSION_NAME}.appex in Embed App Extensions */,"
+    )
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tname = \"Embed App Extensions\";")
+    lines.append("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
+    lines.append("\t\t};")
+    lines.extend([
+        "/* End PBXCopyFilesBuildPhase section */",
+        "",
+        "/* Begin PBXFrameworksBuildPhase section */",
+    ])
 
     lines.append(f"\t\t{frameworks_phase} /* Frameworks */ = {{")
     lines.append("\t\t\tisa = PBXFrameworksBuildPhase;")
@@ -186,6 +273,18 @@ def generate_pbxproj() -> str:
     lines.append("\t\t\tfiles = (")
     for name in FRAMEWORKS:
         lines.append(f"\t\t\t\t{framework_build_files[name]} /* {name}.framework in Frameworks */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
+    lines.append("\t\t};")
+    lines.append(f"\t\t{finder_extension_frameworks_phase} /* Frameworks */ = {{")
+    lines.append("\t\t\tisa = PBXFrameworksBuildPhase;")
+    lines.append("\t\t\tbuildActionMask = 2147483647;")
+    lines.append("\t\t\tfiles = (")
+    for name in FINDER_EXTENSION_FRAMEWORKS:
+        lines.append(
+            f"\t\t\t\t{finder_extension_framework_build_files[name]} "
+            f"/* {name}.framework in Frameworks */,"
+        )
     lines.append("\t\t\t);")
     lines.append("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
     lines.append("\t\t};")
@@ -205,7 +304,7 @@ def generate_pbxproj() -> str:
     lines.append(f"\t\t{sources_group} /* Sources */ = {{")
     lines.append("\t\t\tisa = PBXGroup;")
     lines.append("\t\t\tchildren = (")
-    for path in swift_sources:
+    for path in all_swift_sources:
         lines.append(f"\t\t\t\t{file_refs[path]} /* {Path(path).name} */,")
     lines.append("\t\t\t);")
     lines.append("\t\t\tname = Sources;")
@@ -225,7 +324,7 @@ def generate_pbxproj() -> str:
     lines.append(f"\t\t{frameworks_group} /* Frameworks */ = {{")
     lines.append("\t\t\tisa = PBXGroup;")
     lines.append("\t\t\tchildren = (")
-    for name in FRAMEWORKS:
+    for name in all_frameworks:
         lines.append(f"\t\t\t\t{framework_refs[name]} /* {name}.framework */,")
     lines.append("\t\t\t);")
     lines.append("\t\t\tname = Frameworks;")
@@ -236,6 +335,7 @@ def generate_pbxproj() -> str:
     lines.append("\t\t\tisa = PBXGroup;")
     lines.append("\t\t\tchildren = (")
     lines.append(f"\t\t\t\t{product_ref} /* {PROJECT_NAME}.app */,")
+    lines.append(f"\t\t\t\t{finder_extension_product_ref} /* {FINDER_EXTENSION_NAME}.appex */,")
     lines.append("\t\t\t);")
     lines.append("\t\t\tname = Products;")
     lines.append("\t\t\tsourceTree = \"<group>\";")
@@ -250,15 +350,46 @@ def generate_pbxproj() -> str:
     lines.append(f"\t\t\t\t{frameworks_phase} /* Frameworks */,")
     lines.append(f"\t\t\t\t{resources_phase} /* Resources */,")
     lines.append(f"\t\t\t\t{resource_script_phase} /* Copy App Resources */,")
+    lines.append(f"\t\t\t\t{embed_extensions_phase} /* Embed App Extensions */,")
     lines.append("\t\t\t);")
     lines.append("\t\t\tbuildRules = ();")
-    lines.append("\t\t\tdependencies = ();")
+    lines.append("\t\t\tdependencies = (")
+    lines.append(f"\t\t\t\t{finder_extension_dependency} /* PBXTargetDependency */,")
+    lines.append("\t\t\t);")
     lines.append(f"\t\t\tname = {q(PROJECT_NAME)};")
     lines.append(f"\t\t\tproductName = {q(PROJECT_NAME)};")
     lines.append(f"\t\t\tproductReference = {product_ref} /* {PROJECT_NAME}.app */;")
     lines.append("\t\t\tproductType = \"com.apple.product-type.application\";")
     lines.append("\t\t};")
-    lines.extend(["/* End PBXNativeTarget section */", "", "/* Begin PBXProject section */"])
+    lines.append(f"\t\t{finder_extension_target} /* {FINDER_EXTENSION_NAME} */ = {{")
+    lines.append("\t\t\tisa = PBXNativeTarget;")
+    lines.append(
+        f"\t\t\tbuildConfigurationList = {finder_extension_config_list} "
+        f"/* Build configuration list for PBXNativeTarget \"{FINDER_EXTENSION_NAME}\" */;"
+    )
+    lines.append("\t\t\tbuildPhases = (")
+    lines.append(f"\t\t\t\t{finder_extension_sources_phase} /* Sources */,")
+    lines.append(f"\t\t\t\t{finder_extension_frameworks_phase} /* Frameworks */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tbuildRules = ();")
+    lines.append("\t\t\tdependencies = ();")
+    lines.append(f"\t\t\tname = {q(FINDER_EXTENSION_NAME)};")
+    lines.append(f"\t\t\tproductName = {q(FINDER_EXTENSION_NAME)};")
+    lines.append(
+        f"\t\t\tproductReference = {finder_extension_product_ref} "
+        f"/* {FINDER_EXTENSION_NAME}.appex */;"
+    )
+    lines.append("\t\t\tproductType = \"com.apple.product-type.app-extension\";")
+    lines.append("\t\t};")
+    lines.extend(["/* End PBXNativeTarget section */", "", "/* Begin PBXContainerItemProxy section */"])
+    lines.append(f"\t\t{finder_extension_proxy} /* PBXContainerItemProxy */ = {{")
+    lines.append("\t\t\tisa = PBXContainerItemProxy;")
+    lines.append(f"\t\t\tcontainerPortal = {project} /* Project object */;")
+    lines.append("\t\t\tproxyType = 1;")
+    lines.append(f"\t\t\tremoteGlobalIDString = {finder_extension_target};")
+    lines.append(f"\t\t\tremoteInfo = {q(FINDER_EXTENSION_NAME)};")
+    lines.append("\t\t};")
+    lines.extend(["/* End PBXContainerItemProxy section */", "", "/* Begin PBXProject section */"])
 
     lines.append(f"\t\t{project} /* Project object */ = {{")
     lines.append("\t\t\tisa = PBXProject;")
@@ -269,6 +400,19 @@ def generate_pbxproj() -> str:
     lines.append("\t\t\t\tTargetAttributes = {")
     lines.append(f"\t\t\t\t\t{target} = {{")
     lines.append(f"\t\t\t\t\t\tCreatedOnToolsVersion = {q('26.3')};")
+    lines.append("\t\t\t\t\t\tProvisioningStyle = Automatic;")
+    lines.append("\t\t\t\t\t\tSystemCapabilities = {")
+    lines.append("\t\t\t\t\t\t\tcom.apple.ApplicationGroups.iOS = { enabled = 1; };")
+    lines.append("\t\t\t\t\t\t\tcom.apple.Sandbox = { enabled = 1; };")
+    lines.append("\t\t\t\t\t\t};")
+    lines.append("\t\t\t\t\t};")
+    lines.append(f"\t\t\t\t\t{finder_extension_target} = {{")
+    lines.append(f"\t\t\t\t\t\tCreatedOnToolsVersion = {q('26.3')};")
+    lines.append("\t\t\t\t\t\tProvisioningStyle = Automatic;")
+    lines.append("\t\t\t\t\t\tSystemCapabilities = {")
+    lines.append("\t\t\t\t\t\t\tcom.apple.ApplicationGroups.iOS = { enabled = 1; };")
+    lines.append("\t\t\t\t\t\t\tcom.apple.Sandbox = { enabled = 1; };")
+    lines.append("\t\t\t\t\t\t};")
     lines.append("\t\t\t\t\t};")
     lines.append("\t\t\t\t};")
     lines.append("\t\t\t};")
@@ -286,9 +430,16 @@ def generate_pbxproj() -> str:
     lines.append("\t\t\tprojectRoot = \"\";")
     lines.append("\t\t\ttargets = (")
     lines.append(f"\t\t\t\t{target} /* {PROJECT_NAME} */,")
+    lines.append(f"\t\t\t\t{finder_extension_target} /* {FINDER_EXTENSION_NAME} */,")
     lines.append("\t\t\t);")
     lines.append("\t\t};")
-    lines.extend(["/* End PBXProject section */", "", "/* Begin PBXResourcesBuildPhase section */"])
+    lines.extend(["/* End PBXProject section */", "", "/* Begin PBXTargetDependency section */"])
+    lines.append(f"\t\t{finder_extension_dependency} /* PBXTargetDependency */ = {{")
+    lines.append("\t\t\tisa = PBXTargetDependency;")
+    lines.append(f"\t\t\ttarget = {finder_extension_target} /* {FINDER_EXTENSION_NAME} */;")
+    lines.append(f"\t\t\ttargetProxy = {finder_extension_proxy} /* PBXContainerItemProxy */;")
+    lines.append("\t\t};")
+    lines.extend(["/* End PBXTargetDependency section */", "", "/* Begin PBXResourcesBuildPhase section */"])
 
     lines.append(f"\t\t{resources_phase} /* Resources */ = {{")
     lines.append("\t\t\tisa = PBXResourcesBuildPhase;")
@@ -307,6 +458,7 @@ resources_dir="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
 mkdir -p "$resources_dir"
 
 /usr/bin/ditto "${SRCROOT}/Resources/PrivacyInfo.xcprivacy" "${resources_dir}/PrivacyInfo.xcprivacy"
+/usr/bin/ditto "${SRCROOT}/LICENSE" "${resources_dir}/COPYING.txt"
 
 for localization_dir in "${SRCROOT}"/Sources/OmniDockCore/Resources/*.lproj; do
   [[ -d "$localization_dir" ]] || continue
@@ -314,6 +466,7 @@ for localization_dir in "${SRCROOT}"/Sources/OmniDockCore/Resources/*.lproj; do
 done
 
 /usr/bin/xattr -dr com.apple.quarantine "$resources_dir" 2>/dev/null || true
+/usr/bin/xattr -cr "${TARGET_BUILD_DIR}/${WRAPPER_NAME}" 2>/dev/null || true
 """
     lines.append(f"\t\t{resource_script_phase} /* Copy App Resources */ = {{")
     lines.append("\t\t\tisa = PBXShellScriptBuildPhase;")
@@ -323,6 +476,7 @@ done
     lines.append("\t\t\tinputFileListPaths = ();")
     lines.append("\t\t\tinputPaths = (")
     lines.append("\t\t\t\t\"$(SRCROOT)/Resources/PrivacyInfo.xcprivacy\",")
+    lines.append("\t\t\t\t\"$(SRCROOT)/LICENSE\",")
     lines.append("\t\t\t\t\"$(SRCROOT)/Sources/OmniDockCore/Resources\",")
     lines.append("\t\t\t);")
     lines.append("\t\t\tname = \"Copy App Resources\";")
@@ -334,6 +488,7 @@ done
     lines.append("\t\t\tshellPath = /bin/bash;")
     lines.append(f"\t\t\tshellScript = {q(resource_script)};")
     lines.append("\t\t};")
+
     lines.extend(["/* End PBXShellScriptBuildPhase section */", "", "/* Begin PBXSourcesBuildPhase section */"])
 
     lines.append(f"\t\t{sources_phase} /* Sources */ = {{")
@@ -342,6 +497,18 @@ done
     lines.append("\t\t\tfiles = (")
     for path in swift_sources:
         lines.append(f"\t\t\t\t{source_build_files[path]} /* {Path(path).name} in Sources */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
+    lines.append("\t\t};")
+    lines.append(f"\t\t{finder_extension_sources_phase} /* Sources */ = {{")
+    lines.append("\t\t\tisa = PBXSourcesBuildPhase;")
+    lines.append("\t\t\tbuildActionMask = 2147483647;")
+    lines.append("\t\t\tfiles = (")
+    for path in finder_extension_sources:
+        lines.append(
+            f"\t\t\t\t{finder_extension_source_build_files[path]} "
+            f"/* {Path(path).name} in Sources */,"
+        )
     lines.append("\t\t\t);")
     lines.append("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
     lines.append("\t\t};")
@@ -416,7 +583,6 @@ done
     }
     base_target_settings = {
         "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
-        "CODE_SIGN_ENTITLEMENTS": "Resources/OmniDock-AppStore.entitlements",
         "CODE_SIGN_STYLE": "Automatic",
         "COMBINE_HIDPI_IMAGES": "YES",
         "CURRENT_PROJECT_VERSION": "3",
@@ -431,17 +597,46 @@ done
         "SDKROOT": "macosx",
         "SKIP_INSTALL": "NO",
         "SUPPORTED_PLATFORMS": "macosx",
-        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": ["$(inherited)", "APP_STORE"],
         "SWIFT_VERSION": "5.0",
     }
-    debug_target_settings = {**base_target_settings}
-    release_target_settings = {**base_target_settings}
+    debug_target_settings = {
+        **base_target_settings,
+        "CODE_SIGN_ENTITLEMENTS": "Resources/OmniDock-Development.entitlements",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": ["$(inherited)"],
+    }
+    release_target_settings = {
+        **base_target_settings,
+        "CODE_SIGN_ENTITLEMENTS": "Resources/OmniDock-AppStore.entitlements",
+        "SWIFT_ACTIVE_COMPILATION_CONDITIONS": ["$(inherited)", "APP_STORE"],
+    }
+    base_finder_extension_settings = {
+        "APPLICATION_EXTENSION_API_ONLY": "YES",
+        "CODE_SIGN_ENTITLEMENTS": "Resources/OmniDockFinderSync.entitlements",
+        "CODE_SIGN_STYLE": "Automatic",
+        "CURRENT_PROJECT_VERSION": "3",
+        "ENABLE_HARDENED_RUNTIME": "YES",
+        "GENERATE_INFOPLIST_FILE": "NO",
+        "INFOPLIST_FILE": "Resources/OmniDockFinderSync-Info.plist",
+        "LD_RUNPATH_SEARCH_PATHS": ["$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks"],
+        "MACOSX_DEPLOYMENT_TARGET": MIN_MACOS,
+        "MARKETING_VERSION": "1.0",
+        "PRODUCT_BUNDLE_IDENTIFIER": FINDER_EXTENSION_BUNDLE_ID,
+        "PRODUCT_NAME": "$(TARGET_NAME)",
+        "SDKROOT": "macosx",
+        "SKIP_INSTALL": "YES",
+        "SUPPORTED_PLATFORMS": "macosx",
+        "SWIFT_VERSION": "5.0",
+    }
+    debug_finder_extension_settings = {**base_finder_extension_settings}
+    release_finder_extension_settings = {**base_finder_extension_settings}
 
     for config_id, name, settings in [
         (project_debug, "Debug", debug_project_settings),
         (project_release, "Release", release_project_settings),
         (target_debug, "Debug", debug_target_settings),
         (target_release, "Release", release_target_settings),
+        (finder_extension_debug, "Debug", debug_finder_extension_settings),
+        (finder_extension_release, "Release", release_finder_extension_settings),
     ]:
         lines.append(f"\t\t{config_id} /* {name} */ = {{")
         lines.append("\t\t\tisa = XCBuildConfiguration;")
@@ -457,6 +652,17 @@ done
     lines.append("\t\t\tbuildConfigurations = (")
     lines.append(f"\t\t\t\t{project_debug} /* Debug */,")
     lines.append(f"\t\t\t\t{project_release} /* Release */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tdefaultConfigurationIsVisible = 0;")
+    lines.append("\t\t\tdefaultConfigurationName = Release;")
+    lines.append("\t\t};")
+    lines.append(
+        f"\t\t{finder_extension_config_list} /* Build configuration list for PBXNativeTarget \"{FINDER_EXTENSION_NAME}\" */ = {{"
+    )
+    lines.append("\t\t\tisa = XCConfigurationList;")
+    lines.append("\t\t\tbuildConfigurations = (")
+    lines.append(f"\t\t\t\t{finder_extension_debug} /* Debug */,")
+    lines.append(f"\t\t\t\t{finder_extension_release} /* Release */,")
     lines.append("\t\t\t);")
     lines.append("\t\t\tdefaultConfigurationIsVisible = 0;")
     lines.append("\t\t\tdefaultConfigurationName = Release;")
@@ -570,11 +776,15 @@ def generated_outputs() -> list[tuple[Path, bytes]]:
 def missing_inputs() -> list[Path]:
     required = [
         ROOT / "Resources" / "Assets.xcassets",
+        ROOT / "Resources" / "OmniDock-Development.entitlements",
         ROOT / "Resources" / "OmniDock-AppStore.entitlements",
         ROOT / "Resources" / "OmniDock-Info.plist",
+        ROOT / "Resources" / "OmniDockFinderSync.entitlements",
+        ROOT / "Resources" / "OmniDockFinderSync-Info.plist",
         ROOT / "Resources" / "PrivacyInfo.xcprivacy",
         ROOT / "Sources" / PROJECT_NAME,
         ROOT / "Sources" / "OmniDockCore",
+        ROOT / "Sources" / FINDER_EXTENSION_NAME,
     ]
     missing = [path for path in required if not path.exists()]
     if not list_swift_sources():

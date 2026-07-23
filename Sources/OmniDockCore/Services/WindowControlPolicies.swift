@@ -14,8 +14,12 @@ enum WindowActivationPolicy {
 enum ApplicationHidePolicy {
     static func shouldRevealDesktop(
         targetProcessIdentifier: pid_t,
-        visibleWindowOwnerProcessIdentifiers: [pid_t]
+        visibleWindowOwnerProcessIdentifiers: [pid_t],
+        isAllowed: Bool = true
     ) -> Bool {
+        guard isAllowed else {
+            return false
+        }
         let owners = Set(visibleWindowOwnerProcessIdentifiers)
         return owners == [targetProcessIdentifier]
     }
@@ -32,6 +36,19 @@ enum ApplicationHidePolicy {
         isOwnerRunning
             && !isOwnerHidden
             && visibleWindowOwnerProcessIdentifiers.isEmpty
+    }
+}
+
+enum AppHotkeyTopmostPolicy {
+    static func isTopmost(
+        targetProcessIdentifier: pid_t,
+        workspaceFrontmostProcessIdentifier: pid_t?,
+        orderedVisibleWindowOwnerProcessIdentifiers: [pid_t]
+    ) -> Bool {
+        if let workspaceFrontmostProcessIdentifier {
+            return workspaceFrontmostProcessIdentifier == targetProcessIdentifier
+        }
+        return orderedVisibleWindowOwnerProcessIdentifiers.first == targetProcessIdentifier
     }
 }
 

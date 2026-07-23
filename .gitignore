@@ -4,6 +4,7 @@
 .build/
 .swiftpm/
 /dist/
+/build/
 /DerivedData/
 *.dSYM/
 *.xcarchive/

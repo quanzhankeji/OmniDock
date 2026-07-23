@@ -58,11 +58,9 @@ final class PermissionOnboardingWindowControllerTests: XCTestCase {
 
         harness.controller.show(
             focus: .accessibility,
-            automaticallyOpenSettings: true,
             mode: .initialSetup
         )
-        let openSettings = try XCTUnwrap(harness.scheduler.popAction(after: 0.25))
-        openSettings()
+        try harness.continuePermissionSetup()
         let currentRefresh = try XCTUnwrap(harness.scheduler.popAction(after: 0.5))
         harness.permissionService.currentSnapshot = .allOnboardingPermissionsGranted
 
@@ -79,6 +77,16 @@ final class PermissionOnboardingWindowControllerTests: XCTestCase {
         XCTAssertTrue(harness.settings.permissionOnboardingCompleted)
         XCTAssertFalse(harness.settings.permissionOnboardingSkipped)
         XCTAssertTrue(harness.settings.toggleAppVisibilityOnDockClick)
+    }
+
+    func testShowingPermissionOnboardingDoesNotOpenSystemSettingsAutomatically() {
+        let harness = PermissionOnboardingHarness()
+        defer { harness.shutDown() }
+
+        harness.controller.show(focus: .accessibility, mode: .review)
+
+        XCTAssertTrue(harness.permissionService.openedPermissions.isEmpty)
+        XCTAssertNil(harness.scheduler.popAction(after: 0.25))
     }
 
     func testVisibleOnboardingRefreshesLocalizedCopyWhenLanguageChanges() throws {
@@ -165,12 +173,16 @@ private final class PermissionOnboardingHarness {
     func queuePermissionRefresh() throws -> PermissionOnboardingDeferredScheduler.Action {
         controller.show(
             focus: .accessibility,
-            automaticallyOpenSettings: true,
             mode: .initialSetup
         )
-        let openSettings = try XCTUnwrap(scheduler.popAction(after: 0.25))
-        openSettings()
+        try continuePermissionSetup()
         return try XCTUnwrap(scheduler.popAction(after: 0.5))
+    }
+
+    func continuePermissionSetup() throws {
+        let contentView = try XCTUnwrap(controller.window?.contentView)
+        let primaryButton = try XCTUnwrap(button(withAction: "primaryAction:", in: contentView))
+        primaryButton.performClick(nil)
     }
 
     func chooseLater() throws {

@@ -3,6 +3,32 @@ import XCTest
 @testable import OmniDockCore
 
 final class WindowControlPoliciesTests: XCTestCase {
+    func testHotkeyUsesWorkspaceFrontmostApplicationWhenAvailable() {
+        XCTAssertFalse(AppHotkeyTopmostPolicy.isTopmost(
+            targetProcessIdentifier: 21,
+            workspaceFrontmostProcessIdentifier: 99,
+            orderedVisibleWindowOwnerProcessIdentifiers: [21, 99]
+        ))
+        XCTAssertTrue(AppHotkeyTopmostPolicy.isTopmost(
+            targetProcessIdentifier: 21,
+            workspaceFrontmostProcessIdentifier: 21,
+            orderedVisibleWindowOwnerProcessIdentifiers: [99, 21]
+        ))
+    }
+
+    func testHotkeyFallsBackToVisibleWindowOrderWhenWorkspaceHasNoFrontmostApplication() {
+        XCTAssertTrue(AppHotkeyTopmostPolicy.isTopmost(
+            targetProcessIdentifier: 21,
+            workspaceFrontmostProcessIdentifier: nil,
+            orderedVisibleWindowOwnerProcessIdentifiers: [21, 99]
+        ))
+        XCTAssertFalse(AppHotkeyTopmostPolicy.isTopmost(
+            targetProcessIdentifier: 21,
+            workspaceFrontmostProcessIdentifier: nil,
+            orderedVisibleWindowOwnerProcessIdentifiers: [99, 21]
+        ))
+    }
+
     func testDesktopRevealIsUsedWhenTargetOwnsEveryVisibleApplicationWindow() {
         XCTAssertTrue(ApplicationHidePolicy.shouldRevealDesktop(
             targetProcessIdentifier: 10,
@@ -28,6 +54,14 @@ final class WindowControlPoliciesTests: XCTestCase {
         XCTAssertFalse(ApplicationHidePolicy.shouldRevealDesktop(
             targetProcessIdentifier: 10,
             visibleWindowOwnerProcessIdentifiers: [10, 99]
+        ))
+    }
+
+    func testDesktopRevealCanBeDisabledForNonDockInteractions() {
+        XCTAssertFalse(ApplicationHidePolicy.shouldRevealDesktop(
+            targetProcessIdentifier: 10,
+            visibleWindowOwnerProcessIdentifiers: [10, 10],
+            isAllowed: false
         ))
     }
 

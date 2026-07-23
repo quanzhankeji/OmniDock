@@ -53,7 +53,10 @@ public final class AppHotkeyService {
         hotkeyRegistry.stop()
     }
 
-    @objc private func settingsChanged() {
+    @objc private func settingsChanged(_ notification: Notification) {
+        guard SettingsStore.change(in: notification).affectsAppHotkeys else {
+            return
+        }
         reconcileRegisteredShortcuts()
     }
 
@@ -105,13 +108,14 @@ public final class AppHotkeyService {
         let summary = windowControlService.interactionSummary(for: app.processIdentifier)
         let decision = AppHotkeyDecisionResolver.decision(
             isRunning: true,
-            isTopmost: windowControlService.isApplicationTopmost(processIdentifier: app.processIdentifier),
+            isTopmost: windowControlService.isApplicationTopmostForHotkey(
+                processIdentifier: app.processIdentifier
+            ),
             isHidden: app.isHidden,
             normalWindowCount: summary.normalWindowCount,
             unminimizedNormalWindowCount: summary.unminimizedNormalWindowCount,
             onscreenNormalWindowCount: summary.onscreenNormalWindowCount
         )
-
         switch decision {
         case .launchApplication:
             openConfiguredApplication(at: url, ensuringWindowWithFallback: nil)
@@ -120,8 +124,9 @@ public final class AppHotkeyService {
         case .bringApplicationToFront:
             windowControlService.bringApplicationToFront(processIdentifier: app.processIdentifier)
         case .hideApplication:
-            windowControlService.toggleRunningApplication(
+            windowControlService.hideApplication(
                 processIdentifier: app.processIdentifier,
+                revealDesktopWhenHiding: false,
                 beforeHide: { [weak self] continuation in
                     guard let self else {
                         continuation()

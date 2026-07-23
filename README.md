@@ -11,6 +11,7 @@ OmniDock is a local macOS menu bar utility that makes Dock window switching fast
 - Drag a file over a preview thumbnail to raise that window and continue dropping the file.
 - Optionally switch between individual windows with Alt-Tab (Option-Tab), using static previews and the same close and quit controls.
 - Assign per-app global shortcuts to launch, bring forward, or hide apps with the same toggle behavior.
+- Optionally add Finder right-click commands for creating an empty text file and copying the current or selected paths.
 - Avoid browser tab navigation shortcuts so those shortcuts stay with the browser.
 
 OmniDock does not include analytics, advertising SDKs, or third-party packages. It uses Apple system frameworks only.
@@ -51,6 +52,20 @@ To install a local copy into Applications:
 ./script/build_and_run.sh --install
 ```
 
+For a local build that includes the Finder right-click extension, use:
+
+```bash
+./script/build_and_run.sh --install-finder-extension
+```
+
+## Finder Right-Click Extension
+
+The Finder extension is off by default. Open `OD` > `Settings` > `Finder Extension`, then turn on `Enable`. macOS may open its extension management page; enable OmniDock there to let Finder load the menu.
+
+When enabled, right-clicking an empty area in a Finder Sync-monitored local folder offers **Copy Path** and a **New File** submenu with text and Markdown file choices. Right-clicking selected items offers **Copy Path** and copies every selected path on a separate line. New files are created in the selected folder as `NewFile.txt` or `NewFile.md`, with a number added when needed to avoid conflicts.
+
+Finder Sync menus are available only in locations that macOS lets third-party Finder Sync extensions monitor. They do not appear in File Provider-managed locations, including Desktop and Documents when those folders are managed by iCloud Drive.
+
 To launch only the staged bundle:
 
 ```bash
@@ -82,6 +97,8 @@ Contributions are welcome under the process in [CONTRIBUTING.md](CONTRIBUTING.md
 OmniDock runs locally on your Mac. Preferences and shortcut bindings are stored locally. A shortcut binding includes the selected app's name, bundle identifier, application URL or path, shortcut keys, and enabled state.
 
 One-time preview snapshot cache entries expire 45 seconds after capture so hidden-window previews can be shown briefly. If a cached preview is open when its entry expires, OmniDock releases its displayed image references during the next preview validation pass. Preview images are not written to disk. OmniDock does not collect or transmit personal data.
+
+For Finder's New File command, OmniDock temporarily passes only the user-selected destination folder to its containing app and removes the request after it is consumed or expires. It does not scan Finder folders or request broad file-system access.
 
 See [PRIVACY.md](PRIVACY.md) for the full privacy policy.
 

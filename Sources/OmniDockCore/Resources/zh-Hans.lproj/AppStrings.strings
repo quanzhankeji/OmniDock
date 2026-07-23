@@ -10,8 +10,10 @@
 "appearanceLight" = "浅色";
 "appearanceDark" = "深色";
 
+"tabSettings" = "设置";
 "tabPreview" = "预览";
 "tabHotkeys" = "快捷键";
+"tabFinderExtension" = "右键扩展";
 "menuSettings" = "设置";
 "menuHotkeys" = "快捷键";
 "menuQuit" = "退出";
@@ -47,6 +49,16 @@
 "settingsLiveWindowCount" = "实时窗口数";
 "settingsPrivacyPolicy" = "隐私政策";
 "settingsSupport" = "支持";
+
+"finderExtensionEnableTitle" = "启用";
+"finderExtensionEnableDetail" = "在 Finder 右键菜单中显示新建文件与复制路径。";
+"finderExtensionSetupRequired" = "请在 macOS 的 Finder 扩展中开启 OmniDock 后使用这些菜单项。";
+"finderExtensionOpenSettings" = "打开 Finder 扩展设置";
+"finderExtensionCreateFailedTitle" = "无法新建文件";
+"finderExtensionCreateFailedDetail" = "无法在\u201c%@\u201d中创建新文件。%@";
+"finderExtensionFailureDismiss" = "好";
+"finderExtensionAccessDetail" = "请选择“%@”或它的上级文件夹，允许 OmniDock 在其中新建文件。此授权只需完成一次。";
+"finderExtensionAccessButton" = "允许";
 
 "permissionAccessibility" = "辅助功能";
 "permissionScreenRecording" = "屏幕录制";

@@ -38,8 +38,12 @@ jobs:
         run: |
           plutil -lint Resources/OmniDock-Info.plist
           plutil -lint Resources/OmniDock-AppStore.entitlements
+          plutil -lint Resources/OmniDockFinderSync-Info.plist
+          plutil -lint Resources/OmniDockFinderSync.entitlements
           test "$(plutil -extract 'com\.apple\.security\.app-sandbox' raw Resources/OmniDock-AppStore.entitlements)" = "true"
-          test "$(plutil -extract 'com\.apple\.security\.files\.user-selected\.read-only' raw Resources/OmniDock-AppStore.entitlements)" = "true"
+          test "$(plutil -extract 'com\.apple\.security\.files\.user-selected\.read-write' raw Resources/OmniDock-AppStore.entitlements)" = "true"
+          test "$(plutil -extract 'com\.apple\.security\.app-sandbox' raw Resources/OmniDockFinderSync.entitlements)" = "true"
+          test "$(plutil -extract 'com\.apple\.security\.files\.user-selected\.read-write' raw Resources/OmniDockFinderSync.entitlements)" = "true"
       - name: Build unsigned Universal app
         run: |
           xcodebuild \
@@ -59,8 +63,11 @@ jobs:
           app="$RUNNER_TEMP/OmniDockDerivedData/Build/Products/Release/OmniDock.app"
           binary="$app/Contents/MacOS/OmniDock"
           resources="$app/Contents/Resources"
+          extension="$app/Contents/PlugIns/OmniDockFinderSync.appex"
 
           test -x "$binary"
+          test -x "$extension/Contents/MacOS/OmniDockFinderSync"
+          test "$(plutil -extract 'NSExtension.NSExtensionPointIdentifier' raw "$extension/Contents/Info.plist")" = "com.apple.FinderSync"
           lipo "$binary" -verify_arch arm64 x86_64
           test "$(lipo "$binary" -archs | awk '{ print NF }')" -eq 2
 

@@ -120,6 +120,14 @@ public final class WindowControlService {
         NSWorkspace.shared.frontmostApplication?.processIdentifier == processIdentifier
     }
 
+    public func isApplicationTopmostForHotkey(processIdentifier: pid_t) -> Bool {
+        AppHotkeyTopmostPolicy.isTopmost(
+            targetProcessIdentifier: processIdentifier,
+            workspaceFrontmostProcessIdentifier: NSWorkspace.shared.frontmostApplication?.processIdentifier,
+            orderedVisibleWindowOwnerProcessIdentifiers: onscreenNormalWindowOwnerProcessIdentifiers()
+        )
+    }
+
     func isApplicationDisplacedByDesktopReveal(processIdentifier: pid_t) -> Bool {
         guard desktopRevealState.ownerProcessIdentifier == processIdentifier else {
             return false
@@ -185,6 +193,7 @@ public final class WindowControlService {
     public func toggleRunningApplication(
         processIdentifier: pid_t,
         prefersMinimizeInsteadOfHide: Bool = false,
+        revealDesktopWhenHiding: Bool = true,
         beforeHide: ((@escaping () -> Void) -> Void)? = nil
     ) -> DockIconClickAction? {
         switch resolvePendingDesktopReveal(for: processIdentifier) {
@@ -220,31 +229,73 @@ public final class WindowControlService {
                 processIdentifier: processIdentifier,
                 beforeHide: beforeHide
             ) { [weak self] in
-                self?.performDockIconClickAction(action, processIdentifier: processIdentifier)
+                self?.performDockIconClickAction(
+                    action,
+                    processIdentifier: processIdentifier,
+                    revealDesktopWhenHiding: revealDesktopWhenHiding
+                )
             }
         } else {
-            performDockIconClickAction(action, processIdentifier: processIdentifier)
+            performDockIconClickAction(
+                action,
+                processIdentifier: processIdentifier,
+                revealDesktopWhenHiding: revealDesktopWhenHiding
+            )
         }
         return action
     }
 
-    public func performDockIconClickAction(_ action: DockIconClickAction, processIdentifier: pid_t) {
+    public func performDockIconClickAction(
+        _ action: DockIconClickAction,
+        processIdentifier: pid_t,
+        revealDesktopWhenHiding: Bool = true
+    ) {
         switch action {
         case .bringApplicationToFront:
             bringApplicationToFront(processIdentifier: processIdentifier)
         case .hideApplication:
-            hideApplication(processIdentifier: processIdentifier)
+            hideApplication(
+                processIdentifier: processIdentifier,
+                revealDesktopWhenHiding: revealDesktopWhenHiding
+            )
         case .minimizeApplicationWindows:
             minimizeApplicationWindows(processIdentifier: processIdentifier)
         }
     }
 
-    public func hideApplication(processIdentifier: pid_t) {
+    public func hideApplication(
+        processIdentifier: pid_t,
+        revealDesktopWhenHiding: Bool = true
+    ) {
         let token = operationTracker.begin(.hide, for: processIdentifier)
-        hideApplication(processIdentifier: processIdentifier, token: token)
+        hideApplication(
+            processIdentifier: processIdentifier,
+            token: token,
+            revealDesktopWhenHiding: revealDesktopWhenHiding
+        )
     }
 
-    private func hideApplication(processIdentifier: pid_t, token: WindowOperationToken) {
+    public func hideApplication(
+        processIdentifier: pid_t,
+        revealDesktopWhenHiding: Bool,
+        beforeHide: @escaping (@escaping () -> Void) -> Void
+    ) {
+        performAfterPendingHideCapture(
+            processIdentifier: processIdentifier,
+            beforeHide: beforeHide
+        ) { [weak self] in
+            self?.hideApplication(
+                processIdentifier: processIdentifier,
+                revealDesktopWhenHiding: revealDesktopWhenHiding
+            )
+        }
+    }
+
+    private func hideApplication(
+        processIdentifier: pid_t,
+        token: WindowOperationToken,
+        revealDesktopWhenHiding: Bool = true
+    ) {
         guard token.processIdentifier == processIdentifier,
               operationTracker.isForegroundCurrent(token),
               let app = NSRunningApplication(processIdentifier: processIdentifier)
@@ -255,7 +306,8 @@ public final class WindowControlService {
         let onscreenOwnerProcessIdentifiers = onscreenNormalWindowOwnerProcessIdentifiers()
         let shouldRevealDesktop = ApplicationHidePolicy.shouldRevealDesktop(
             targetProcessIdentifier: processIdentifier,
-            visibleWindowOwnerProcessIdentifiers: onscreenOwnerProcessIdentifiers
+            visibleWindowOwnerProcessIdentifiers: onscreenOwnerProcessIdentifiers,
+            isAllowed: revealDesktopWhenHiding
         )
         if shouldRevealDesktop {
             if let shortcut = revealDesktopUsingCurrentShortcut() {
