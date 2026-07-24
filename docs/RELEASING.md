@@ -33,12 +33,12 @@ GPL mode installs the repository license as `COPYING.txt` and records both the s
 
 For a separately licensed Developer ID release, use `--license-mode eula --binary-license </secure/path/to/approved-eula.txt>`. The EULA must be an approved, nonempty file stored outside the source repository. The script refuses the GPL source license as a substitute, records the EULA digest without recording its private path, and installs the EULA as `EULA.txt`.
 
-The script refuses a dirty worktree, builds a Universal 2 executable, creates and validates its dSYM, signs the app with the hardened runtime and a secure timestamp, submits the app for notarization, staples the accepted ticket, and verifies Gatekeeper assessment. It then creates, signs, notarizes, and staples a DMG.
+The script refuses a dirty worktree and builds a Universal 2 direct-distribution app with the Finder Sync extension embedded. The main app remains unsandboxed for cross-application controls, while the extension remains sandboxed and both signatures use the same App Group. It validates both dSYMs, signs the nested extension and app with the hardened runtime and secure timestamps, submits the app for notarization, staples the accepted ticket, and verifies Gatekeeper assessment. It then creates, signs, notarizes, and staples a DMG.
 
 Each release is split into two output directories:
 
 - `public/` contains only `OmniDock-<version>.dmg` and `OmniDock-<version>.zip`. These are the binary assets uploaded to GitHub Releases.
-- `private/` contains the dSYM, release manifest, and SHA-256 records. Retain these for diagnostics and release traceability; do not upload them as public Release assets.
+- `private/` contains the app and Finder extension dSYMs in one archive, the release manifest, and SHA-256 records. Retain these for diagnostics and release traceability; do not upload them as public Release assets.
 
 GitHub automatically adds source ZIP and TAR.GZ archives for the release tag. They do not need to be generated or uploaded by the release script.
 

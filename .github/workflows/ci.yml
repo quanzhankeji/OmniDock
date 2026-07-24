@@ -90,5 +90,5 @@ jobs:
           plutil -lint "$resources/zh-Hans.lproj/InfoPlist.strings"
 
           test "$(plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist")" = "com.quanzhankeji.OmniDock"
-          test "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" = "1.0"
-          test "$(plutil -extract CFBundleVersion raw "$app/Contents/Info.plist")" = "3"
+          test "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" = "1.1.0"
+          test "$(plutil -extract CFBundleVersion raw "$app/Contents/Info.plist")" = "4"
