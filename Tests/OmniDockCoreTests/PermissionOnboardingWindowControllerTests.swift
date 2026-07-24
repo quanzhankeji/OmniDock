@@ -234,6 +234,10 @@ private final class PermissionOnboardingPermissionServiceStub: PermissionOnboard
             return snapshot.screenRecording
         case .inputMonitoring:
             return snapshot.inputMonitoring
+        case .finderExtension:
+            return snapshot.finderExtension
+        case .folderAccess:
+            return snapshot.folderAccess
         }
     }
 }
@@ -267,12 +271,16 @@ private extension PermissionSnapshot {
     static let missingOnboardingPermissions = PermissionSnapshot(
         accessibility: false,
         screenRecording: false,
-        inputMonitoring: false
+        inputMonitoring: false,
+        finderExtension: false,
+        folderAccess: false
     )
 
     static let allOnboardingPermissionsGranted = PermissionSnapshot(
         accessibility: true,
         screenRecording: true,
-        inputMonitoring: true
+        inputMonitoring: true,
+        finderExtension: true,
+        folderAccess: true
     )
 }

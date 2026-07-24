@@ -68,6 +68,9 @@ public final class SettingsStore {
         // Keep the original storage name so existing installations retain their choice.
         case windowCycleEnabled = "independentWindowSwitcherEnabled"
         case finderExtensionEnabled = "finderExtensionEnabled"
+        case finderLaunchShortcutsGrouped = "finderLaunchShortcutsGrouped"
+        case finderLaunchShortcuts = "finderLaunchShortcuts"
+        case finderDocumentPresets = "finderDocumentPresets"
         case liveDockPreviewsEnabled = "liveDockPreviewsEnabled"
         case livePreviewWindowLimit = "livePreviewWindowLimit"
         case toggleAppVisibilityOnDockClick = "toggleAppVisibilityOnDockClick"
@@ -109,6 +112,7 @@ public final class SettingsStore {
             Key.showCommandTabPreviews.rawValue: true,
             Key.windowCycleEnabled.rawValue: false,
             Key.finderExtensionEnabled.rawValue: false,
+            Key.finderLaunchShortcutsGrouped.rawValue: true,
             Key.liveDockPreviewsEnabled.rawValue: true,
             Key.livePreviewWindowLimit.rawValue: min(6, max(0, livePreviewLimitProvider())),
             Key.hotkeysEnabled.rawValue: true,
@@ -146,6 +150,52 @@ public final class SettingsStore {
         get { defaults.bool(forKey: Key.finderExtensionEnabled.rawValue) }
         set {
             defaults.set(newValue, forKey: Key.finderExtensionEnabled.rawValue)
+            syncFinderExtensionSettings()
+            postChange(.finderExtension)
+        }
+    }
+
+    public var finderLaunchShortcutsGrouped: Bool {
+        get {
+            defaults.object(forKey: Key.finderLaunchShortcutsGrouped.rawValue) as? Bool ?? true
+        }
+        set {
+            defaults.set(newValue, forKey: Key.finderLaunchShortcutsGrouped.rawValue)
+            syncFinderExtensionSettings()
+            postChange(.finderExtension)
+        }
+    }
+
+    var finderLaunchShortcuts: [FinderLaunchShortcut] {
+        get {
+            decoded(
+                [FinderLaunchShortcut].self,
+                from: defaults.data(forKey: Key.finderLaunchShortcuts.rawValue)
+            ) ?? []
+        }
+        set {
+            defaults.set(encoded(newValue), forKey: Key.finderLaunchShortcuts.rawValue)
+            syncFinderExtensionSettings()
+            postChange(.finderExtension)
+        }
+    }
+
+    var finderDocumentPresets: [FinderDocumentPreset] {
+        get {
+            decoded(
+                [FinderDocumentPreset].self,
+                from: defaults.data(forKey: Key.finderDocumentPresets.rawValue)
+            ) ?? FinderDocumentPreset.defaultPresets
+        }
+        set {
+            let normalized = newValue.compactMap {
+                FinderDocumentPreset(
+                    id: $0.id,
+                    displayName: $0.displayName,
+                    fileExtension: $0.fileExtension
+                )
+            }
+            defaults.set(encoded(normalized), forKey: Key.finderDocumentPresets.rawValue)
             syncFinderExtensionSettings()
             postChange(.finderExtension)
         }
@@ -310,14 +360,51 @@ public final class SettingsStore {
         appHotkeyBindings = appHotkeyBindings.filter { $0.id != id }
     }
 
+    func addFinderLaunchShortcut(_ shortcut: FinderLaunchShortcut) {
+        var shortcuts = finderLaunchShortcuts
+        let newURL = shortcut.bundleURL?.standardizedFileURL
+        guard !shortcuts.contains(where: {
+            if let bundleIdentifier = shortcut.bundleIdentifier,
+               $0.bundleIdentifier == bundleIdentifier {
+                return true
+            }
+            return $0.bundleURL?.standardizedFileURL == newURL
+        }) else {
+            return
+        }
+        shortcuts.append(shortcut)
+        finderLaunchShortcuts = shortcuts
+    }
+
+    func deleteFinderLaunchShortcut(id: UUID) {
+        finderLaunchShortcuts = finderLaunchShortcuts.filter { $0.id != id }
+    }
+
+    func addFinderDocumentPreset(_ preset: FinderDocumentPreset) {
+        var presets = finderDocumentPresets
+        guard !presets.contains(where: {
+            $0.fileExtension.caseInsensitiveCompare(preset.fileExtension) == .orderedSame
+        }) else {
+            return
+        }
+        presets.append(preset)
+        finderDocumentPresets = presets
+    }
+
+    func deleteFinderDocumentPreset(id: UUID) {
+        finderDocumentPresets = finderDocumentPresets.filter { $0.id != id }
+    }
+
     public func enablePermissionBackedDefaultsAfterOnboarding() {
         defaults.set(true, forKey: Key.showDockPreviews.rawValue)
         defaults.set(true, forKey: Key.showCommandTabPreviews.rawValue)
         defaults.set(true, forKey: Key.liveDockPreviewsEnabled.rawValue)
         defaults.set(true, forKey: Key.toggleAppVisibilityOnDockClick.rawValue)
         defaults.set(true, forKey: Key.hotkeysEnabled.rawValue)
+        defaults.set(true, forKey: Key.finderExtensionEnabled.rawValue)
         defaults.set(true, forKey: Key.permissionOnboardingCompleted.rawValue)
         defaults.set(false, forKey: Key.permissionOnboardingSkipped.rawValue)
+        syncFinderExtensionSettings()
         postChange(.all)
     }
 
@@ -358,6 +445,8 @@ public final class SettingsStore {
             return .windowCycle
         case .finderExtensionEnabled:
             return .finderExtension
+        case .finderLaunchShortcutsGrouped, .finderLaunchShortcuts, .finderDocumentPresets:
+            return .finderExtension
         case .liveDockPreviewsEnabled:
             return .livePreview
         case .livePreviewWindowLimit:
@@ -387,8 +476,22 @@ public final class SettingsStore {
     private func syncFinderExtensionSettings() {
         finderMenuPreferencesStore?.update(FinderMenuPreferences(
             isEnabled: finderExtensionEnabled,
-            languageIdentifier: appLanguage.rawValue
+            languageIdentifier: appLanguage.rawValue,
+            groupsLaunchShortcuts: finderLaunchShortcutsGrouped,
+            launchShortcuts: finderLaunchShortcuts,
+            documentPresets: finderDocumentPresets
         ))
+    }
+
+    private func encoded<T: Encodable>(_ value: T) -> Data? {
+        try? JSONEncoder().encode(value)
+    }
+
+    private func decoded<T: Decodable>(_ type: T.Type, from data: Data?) -> T? {
+        guard let data else {
+            return nil
+        }
+        return try? JSONDecoder().decode(type, from: data)
     }
 
     private func migrateLegacyMinimizePreferenceIfNeeded() {

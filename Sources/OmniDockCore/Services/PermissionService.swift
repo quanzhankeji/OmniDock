@@ -1,17 +1,36 @@
 import AppKit
 import ApplicationServices
 import CoreGraphics
+import FinderSync
 
 public struct PermissionSnapshot: Equatable {
     public let accessibility: Bool
     public let screenRecording: Bool
     public let inputMonitoring: Bool
+    public let finderExtension: Bool
+    public let folderAccess: Bool
+
+    public init(
+        accessibility: Bool,
+        screenRecording: Bool,
+        inputMonitoring: Bool,
+        finderExtension: Bool = false,
+        folderAccess: Bool = false
+    ) {
+        self.accessibility = accessibility
+        self.screenRecording = screenRecording
+        self.inputMonitoring = inputMonitoring
+        self.finderExtension = finderExtension
+        self.folderAccess = folderAccess
+    }
 }
 
 public enum PermissionKind: CaseIterable, Hashable {
     case accessibility
     case screenRecording
     case inputMonitoring
+    case finderExtension
+    case folderAccess
 
     public var title: String {
         AppStrings.permissionTitle(self)
@@ -21,13 +40,19 @@ public enum PermissionKind: CaseIterable, Hashable {
 public final class PermissionService {
     public static let changedNotification = Notification.Name("OmniDockPermissionServiceChanged")
 
-    public init() {}
+    private let directoryGrantStore: FinderDirectoryGrantStore
+
+    public init() {
+        directoryGrantStore = FinderDirectoryGrantStore()
+    }
 
     public func snapshot() -> PermissionSnapshot {
         PermissionSnapshot(
             accessibility: isAccessibilityTrusted(prompt: false),
             screenRecording: CGPreflightScreenCaptureAccess(),
-            inputMonitoring: CGPreflightListenEventAccess()
+            inputMonitoring: CGPreflightListenEventAccess(),
+            finderExtension: FinderExtensionActivation.isEnabledInFinder,
+            folderAccess: directoryGrantStore.hasUsableGrant()
         )
     }
 
@@ -40,6 +65,12 @@ public final class PermissionService {
             anchor = "Privacy_ScreenCapture"
         case .inputMonitoring:
             anchor = "Privacy_ListenEvent"
+        case .finderExtension:
+            FinderExtensionActivation.showManagementInterface()
+            return
+        case .folderAccess:
+            requestFolderAccess()
+            return
         }
 
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(anchor)") {
@@ -57,6 +88,10 @@ public final class PermissionService {
             return snapshot.screenRecording
         case .inputMonitoring:
             return snapshot.inputMonitoring
+        case .finderExtension:
+            return snapshot.finderExtension
+        case .folderAccess:
+            return snapshot.folderAccess
         }
     }
 
@@ -101,5 +136,27 @@ public final class PermissionService {
         let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         let options = [key: prompt] as CFDictionary
         return AXIsProcessTrustedWithOptions(options)
+    }
+
+    private func requestFolderAccess() {
+        let panel = NSOpenPanel()
+        panel.title = AppStrings.text(.folderAccessPanelTitle)
+        panel.message = AppStrings.text(.folderAccessPanelDetail)
+        panel.prompt = AppStrings.text(.folderAccessPanelChoose)
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = false
+        panel.directoryURL = FileManager.default.homeDirectoryForCurrentUser
+
+        panel.begin { [weak self] response in
+            guard response == .OK,
+                  let directory = panel.url
+            else {
+                return
+            }
+            try? self?.directoryGrantStore.remember(directory: directory)
+            NotificationCenter.default.post(name: Self.changedNotification, object: self)
+        }
     }
 }

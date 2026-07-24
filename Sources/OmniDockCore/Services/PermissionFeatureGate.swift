@@ -6,6 +6,7 @@ public enum PermissionFeature: String, CaseIterable, Hashable {
     // Preserve pending onboarding requests saved by earlier builds.
     case windowCycle = "independentWindowSwitcher"
     case hotkeys
+    case finderExtension
 
     public var requiredPermissions: [PermissionKind] {
         switch self {
@@ -17,6 +18,8 @@ public enum PermissionFeature: String, CaseIterable, Hashable {
             return [.accessibility, .screenRecording, .inputMonitoring]
         case .hotkeys:
             return [.accessibility]
+        case .finderExtension:
+            return [.accessibility, .finderExtension, .folderAccess]
         }
     }
 }
@@ -25,7 +28,9 @@ public enum PermissionFeatureGate {
     public static let onboardingPermissions: [PermissionKind] = [
         .accessibility,
         .inputMonitoring,
-        .screenRecording
+        .screenRecording,
+        .finderExtension,
+        .folderAccess
     ]
 
     public static func missingPermissions(
@@ -83,6 +88,12 @@ public enum PermissionFeatureGate {
             disabled.append(.windowCycle)
         }
 
+        if settings.finderExtensionEnabled,
+           !isSatisfied(for: .finderExtension, in: snapshot) {
+            settings.finderExtensionEnabled = false
+            disabled.append(.finderExtension)
+        }
+
         return disabled
     }
 
@@ -112,6 +123,8 @@ public enum PermissionFeatureGate {
                 settings.windowCycleEnabled = true
             case .hotkeys:
                 settings.hotkeysEnabled = true
+            case .finderExtension:
+                settings.finderExtensionEnabled = true
             }
         }
 
@@ -126,6 +139,10 @@ public enum PermissionFeatureGate {
             return snapshot.screenRecording
         case .inputMonitoring:
             return snapshot.inputMonitoring
+        case .finderExtension:
+            return snapshot.finderExtension
+        case .folderAccess:
+            return snapshot.folderAccess
         }
     }
 }

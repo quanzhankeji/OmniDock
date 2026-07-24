@@ -106,7 +106,7 @@ final class PermissionOnboardingWindowController: NSWindowController, NSWindowDe
         self.onPermissionStatusChanged = onPermissionStatusChanged
 
         let window = NSWindow(
-            contentRect: CGRect(x: 0, y: 0, width: 620, height: 560),
+            contentRect: CGRect(x: 0, y: 0, width: 620, height: 620),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -186,12 +186,26 @@ final class PermissionOnboardingWindowController: NSWindowController, NSWindowDe
         root.wantsLayer = true
         root.layer?.backgroundColor = OmniDockTheme.palette().canvas.cgColor
 
+        let scrollView = NSScrollView()
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(scrollView)
+
+        let documentView = TopAnchoredDocumentView()
+        documentView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.documentView = documentView
+
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 14
         stack.translatesAutoresizingMaskIntoConstraints = false
-        root.addSubview(stack)
+        stack.setContentHuggingPriority(.required, for: .vertical)
+        stack.setContentCompressionResistancePriority(.required, for: .vertical)
+        documentView.addSubview(stack)
 
         configureWrappingLabel(subtitleLabel, size: 14, color: .secondaryLabelColor)
         configureWrappingLabel(privacyLabel, size: 12, color: .tertiaryLabelColor)
@@ -241,10 +255,16 @@ final class PermissionOnboardingWindowController: NSWindowController, NSWindowDe
         buttonRow.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 28),
-            stack.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -28),
-            stack.topAnchor.constraint(equalTo: root.topAnchor, constant: 28),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: root.bottomAnchor, constant: -24),
+            scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: root.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
+            documentView.heightAnchor.constraint(greaterThanOrEqualTo: scrollView.contentView.heightAnchor),
+            stack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor, constant: 28),
+            stack.trailingAnchor.constraint(equalTo: documentView.trailingAnchor, constant: -28),
+            stack.topAnchor.constraint(equalTo: documentView.topAnchor, constant: 28),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: documentView.bottomAnchor, constant: -24),
             spacer.widthAnchor.constraint(greaterThanOrEqualToConstant: 80)
         ])
 

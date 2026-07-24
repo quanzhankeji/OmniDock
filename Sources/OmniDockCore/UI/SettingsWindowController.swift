@@ -47,9 +47,12 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
     private var hotkeysEnabledSwitch: NSSwitch?
     private var finderExtensionSwitch: NSSwitch?
     private var finderExtensionSetupView: NSView?
+    private var finderLaunchShortcutsGroupedSwitch: NSSwitch?
+    private var finderLaunchShortcutsStack: NSStackView?
+    private var finderDocumentPresetsStack: NSStackView?
     private var hotkeyGuidanceField: NSTextField?
     private var hotkeyHeaderHeightConstraint: NSLayoutConstraint?
-    private var permissionViews: [PermissionKind: PermissionStatusView] = [:]
+    private var permissionViews: [PermissionKind: [PermissionStatusView]] = [:]
     private var hotkeyRowsStack: NSStackView?
     private var hotkeyWarnings: [UUID: String] = [:]
     private var applicationPicker: ApplicationPickerWindowController?
@@ -173,17 +176,20 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         minimizeDockClickSwitch?.isEnabled = settings.toggleAppVisibilityOnDockClick
         hotkeysEnabledSwitch?.state = settings.hotkeysEnabled ? .on : .off
         finderExtensionSwitch?.state = settings.finderExtensionEnabled ? .on : .off
+        finderLaunchShortcutsGroupedSwitch?.state = settings.finderLaunchShortcutsGrouped ? .on : .off
         refreshFinderExtensionSetupVisibility()
         refreshHotkeyGuidanceVisibility()
 
         let snapshot = permissionService.snapshot()
         for kind in PermissionKind.allCases {
-            permissionViews[kind]?.update(
-                isGranted: permissionService.isGranted(kind, in: snapshot)
-            )
+            for view in permissionViews[kind] ?? [] {
+                view.update(isGranted: permissionService.isGranted(kind, in: snapshot))
+            }
         }
 
         reloadHotkeyRows()
+        reloadFinderLaunchShortcuts()
+        reloadFinderDocumentPresets()
         applicationPicker?.refreshLocalization()
     }
 
@@ -259,8 +265,19 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
     }
 
     @objc private func toggleFinderExtension(_ sender: NSSwitch) {
-        settings.finderExtensionEnabled = sender.state == .on
+        if sender.state == .on {
+            guard canEnable(.finderExtension, sender: sender) else {
+                return
+            }
+            settings.finderExtensionEnabled = true
+        } else {
+            settings.finderExtensionEnabled = false
+        }
         refreshFinderExtensionSetupVisibility()
+    }
+
+    @objc private func toggleFinderLaunchShortcutGrouping(_ sender: NSSwitch) {
+        settings.finderLaunchShortcutsGrouped = sender.state == .on
     }
 
     @objc private func openFinderExtensionManagement(_ sender: NSButton) {
@@ -392,6 +409,76 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         picker.present(over: window)
     }
 
+    @objc private func addFinderLaunchShortcut(_ sender: NSButton) {
+        guard let window, applicationPicker == nil else {
+            return
+        }
+
+        applicationPickerGeneration &+= 1
+        let generation = applicationPickerGeneration
+        let picker = ApplicationPickerWindowController(
+            excluding: settings.finderLaunchShortcuts,
+            onSelect: { [weak self] url in
+                self?.addFinderLaunchShortcut(at: url)
+            },
+            onClose: { [weak self] in
+                guard self?.applicationPickerGeneration == generation else {
+                    return
+                }
+                self?.applicationPicker = nil
+            }
+        )
+        applicationPicker = picker
+        picker.present(over: window)
+    }
+
+    @objc private func removeFinderLaunchShortcut(_ sender: NSButton) {
+        guard let rawValue = sender.identifier?.rawValue,
+              let id = UUID(uuidString: rawValue)
+        else {
+            return
+        }
+        settings.deleteFinderLaunchShortcut(id: id)
+    }
+
+    @objc private func addFinderDocumentPreset(_ sender: NSButton) {
+        guard let window else {
+            return
+        }
+
+        let form = FinderDocumentTypeFormView(
+            nameLabel: AppStrings.text(.finderDocumentTypeName),
+            fileExtensionLabel: AppStrings.text(.finderDocumentTypeExtension)
+        )
+
+        let alert = NSAlert()
+        alert.messageText = AppStrings.text(.finderDocumentTypeAdd)
+        alert.accessoryView = form
+        alert.addButton(withTitle: AppStrings.text(.pickerSelect))
+        alert.addButton(withTitle: AppStrings.text(.pickerCancel))
+        alert.window.initialFirstResponder = form.nameField
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard response == .alertFirstButtonReturn else {
+                return
+            }
+            Task { @MainActor [weak self] in
+                self?.saveFinderDocumentPreset(
+                    name: form.nameField.stringValue,
+                    fileExtension: form.fileExtensionField.stringValue
+                )
+            }
+        }
+    }
+
+    @objc private func removeFinderDocumentPreset(_ sender: NSButton) {
+        guard let rawValue = sender.identifier?.rawValue,
+              let id = UUID(uuidString: rawValue)
+        else {
+            return
+        }
+        settings.deleteFinderDocumentPreset(id: id)
+    }
+
     @objc private func openPermissionOnboarding(_ sender: NSButton) {
         onOpenPermissionOnboarding()
     }
@@ -452,6 +539,9 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         hotkeysEnabledSwitch = nil
         finderExtensionSwitch = nil
         finderExtensionSetupView = nil
+        finderLaunchShortcutsGroupedSwitch = nil
+        finderLaunchShortcutsStack = nil
+        finderDocumentPresetsStack = nil
         hotkeyGuidanceField = nil
         hotkeyHeaderHeightConstraint = nil
         hotkeyRowsStack = nil
@@ -642,12 +732,12 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         permissions.addArrangedSubview(permissionHeader)
         permissionHeader.widthAnchor.constraint(equalTo: permissions.widthAnchor).isActive = true
 
-        for kind in PermissionKind.allCases {
+        for kind in [PermissionKind.accessibility, .screenRecording, .inputMonitoring] {
             let view = PermissionStatusView(kind: kind)
             view.onRequestPermission = { [weak self] kind in
                 self?.openPermissionSettings(kind)
             }
-            permissionViews[kind] = view
+            permissionViews[kind, default: []].append(view)
             permissions.addArrangedSubview(view)
         }
 
@@ -773,6 +863,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
+        stack.spacing = 18
 
         let enabledSwitch = NSSwitch()
         enabledSwitch.target = self
@@ -810,7 +901,92 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         setupView.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         finderExtensionSetupView = setupView
 
+        let permissions = makeFinderPermissionSection()
+        stack.addArrangedSubview(permissions)
+
+        let groupingSwitch = NSSwitch()
+        groupingSwitch.target = self
+        groupingSwitch.action = #selector(toggleFinderLaunchShortcutGrouping(_:))
+        finderLaunchShortcutsGroupedSwitch = groupingSwitch
+        stack.addArrangedSubview(makeSettingRow(
+            title: AppStrings.text(.finderQuickOpenGroupedTitle),
+            detail: AppStrings.text(.finderQuickOpenGroupedDetail),
+            control: groupingSwitch
+        ))
+
+        let launchShortcuts = makeFinderCollectionSection(
+            title: AppStrings.text(.finderQuickOpenTitle),
+            detail: AppStrings.text(.finderQuickOpenDetail),
+            buttonTitle: AppStrings.text(.finderQuickOpenAdd),
+            action: #selector(addFinderLaunchShortcut(_:))
+        )
+        finderLaunchShortcutsStack = launchShortcuts.rows
+        stack.addArrangedSubview(launchShortcuts.view)
+
+        let documentPresets = makeFinderCollectionSection(
+            title: AppStrings.text(.finderDocumentTypesTitle),
+            detail: AppStrings.text(.finderDocumentTypesDetail),
+            buttonTitle: AppStrings.text(.finderDocumentTypeAdd),
+            action: #selector(addFinderDocumentPreset(_:))
+        )
+        finderDocumentPresetsStack = documentPresets.rows
+        stack.addArrangedSubview(documentPresets.view)
+
+        for view in stack.arrangedSubviews {
+            view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        }
+
         return stack
+    }
+
+    private func makeFinderPermissionSection() -> NSView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+
+        let title = NSTextField(labelWithString: AppStrings.text(.finderPermissionStatus))
+        title.font = .systemFont(ofSize: 13, weight: .semibold)
+        title.textColor = .secondaryLabelColor
+        stack.addArrangedSubview(title)
+
+        for kind in [PermissionKind.finderExtension, .folderAccess, .accessibility] {
+            let view = PermissionStatusView(kind: kind)
+            view.onRequestPermission = { [weak self] kind in
+                self?.openPermissionSettings(kind)
+            }
+            permissionViews[kind, default: []].append(view)
+            stack.addArrangedSubview(view)
+        }
+        return stack
+    }
+
+    private func makeFinderCollectionSection(
+        title: String,
+        detail: String,
+        buttonTitle: String,
+        action: Selector
+    ) -> (view: NSView, rows: NSStackView) {
+        let container = NSStackView()
+        container.orientation = .vertical
+        container.alignment = .leading
+        container.spacing = 8
+
+        let button = NSButton(title: buttonTitle, target: self, action: action)
+        button.bezelStyle = .rounded
+        container.addArrangedSubview(makeSettingRow(
+            title: title,
+            detail: detail,
+            control: button
+        ))
+
+        let rows = NSStackView()
+        rows.orientation = .vertical
+        rows.alignment = .leading
+        rows.spacing = 6
+        container.addArrangedSubview(rows)
+        rows.widthAnchor.constraint(equalTo: container.widthAnchor).isActive = true
+        return (container, rows)
     }
 
     private func refreshFinderExtensionSetupVisibility() {
@@ -1015,6 +1191,8 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         let documentView = TopAnchoredDocumentView()
         documentView.translatesAutoresizingMaskIntoConstraints = false
         content.translatesAutoresizingMaskIntoConstraints = false
+        content.setContentHuggingPriority(.required, for: .vertical)
+        content.setContentCompressionResistancePriority(.required, for: .vertical)
         documentView.addSubview(content)
         scrollView.documentView = documentView
 
@@ -1127,6 +1305,158 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
             bundleIdentifier: bundle.bundleIdentifier
         )
         settings.upsertAppHotkeyBinding(binding)
+    }
+
+    private func addFinderLaunchShortcut(at url: URL) {
+        guard let bundle = Bundle(url: url) else {
+            return
+        }
+        let displayName = bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
+            ?? FileManager.default.displayName(atPath: url.path)
+        settings.addFinderLaunchShortcut(FinderLaunchShortcut(
+            displayName: displayName,
+            bundleURLString: url.absoluteString,
+            bundleIdentifier: bundle.bundleIdentifier
+        ))
+    }
+
+    private func saveFinderDocumentPreset(name: String, fileExtension: String) {
+        guard let preset = FinderDocumentPreset(
+            displayName: name,
+            fileExtension: fileExtension
+        ) else {
+            presentFinderConfigurationWarning(.finderDocumentTypeInvalid)
+            return
+        }
+        guard !settings.finderDocumentPresets.contains(where: {
+            $0.fileExtension.caseInsensitiveCompare(preset.fileExtension) == .orderedSame
+        }) else {
+            presentFinderConfigurationWarning(.finderDocumentTypeDuplicate)
+            return
+        }
+        settings.addFinderDocumentPreset(preset)
+    }
+
+    private func presentFinderConfigurationWarning(_ key: AppStringKey) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = AppStrings.text(key)
+        alert.addButton(withTitle: AppStrings.text(.finderExtensionFailureDismiss))
+        if let window {
+            alert.beginSheetModal(for: window)
+        }
+    }
+
+    private func reloadFinderLaunchShortcuts() {
+        guard let stack = finderLaunchShortcutsStack else {
+            return
+        }
+        stack.removeAllArrangedSubviews()
+
+        let shortcuts = settings.finderLaunchShortcuts
+        guard !shortcuts.isEmpty else {
+            stack.addArrangedSubview(makeFinderEmptyLabel(
+                AppStrings.text(.finderQuickOpenEmpty)
+            ))
+            return
+        }
+
+        for shortcut in shortcuts {
+            stack.addArrangedSubview(makeFinderListRow(
+                title: shortcut.displayName,
+                detail: shortcut.bundleIdentifier ?? shortcut.bundleURL?.path ?? "",
+                id: shortcut.id,
+                action: #selector(removeFinderLaunchShortcut(_:)),
+                icon: shortcut.bundleURL.map {
+                    NSWorkspace.shared.icon(forFile: $0.path)
+                }
+            ))
+        }
+    }
+
+    private func reloadFinderDocumentPresets() {
+        guard let stack = finderDocumentPresetsStack else {
+            return
+        }
+        stack.removeAllArrangedSubviews()
+        for preset in settings.finderDocumentPresets {
+            stack.addArrangedSubview(makeFinderListRow(
+                title: preset.displayName,
+                detail: ".\(preset.fileExtension)",
+                id: preset.id,
+                action: #selector(removeFinderDocumentPreset(_:))
+            ))
+        }
+    }
+
+    private func makeFinderEmptyLabel(_ value: String) -> NSTextField {
+        let label = NSTextField(labelWithString: value)
+        label.font = .systemFont(ofSize: 12)
+        label.textColor = .secondaryLabelColor
+        return label
+    }
+
+    private func makeFinderListRow(
+        title: String,
+        detail: String,
+        id: UUID,
+        action: Selector,
+        icon: NSImage? = nil
+    ) -> NSView {
+        let row = NSView()
+        let labels = NSStackView()
+        labels.orientation = .vertical
+        labels.alignment = .leading
+        labels.spacing = 2
+
+        let titleField = NSTextField(labelWithString: title)
+        titleField.font = .systemFont(ofSize: 13, weight: .medium)
+        let detailField = NSTextField(labelWithString: detail)
+        detailField.font = .systemFont(ofSize: 11)
+        detailField.textColor = .secondaryLabelColor
+        labels.addArrangedSubview(titleField)
+        labels.addArrangedSubview(detailField)
+
+        let removeButton = NSButton(
+            title: AppStrings.text(.finderRemove),
+            target: self,
+            action: action
+        )
+        removeButton.bezelStyle = .rounded
+        removeButton.identifier = NSUserInterfaceItemIdentifier(id.uuidString)
+
+        row.addSubview(labels)
+        row.addSubview(removeButton)
+        labels.translatesAutoresizingMaskIntoConstraints = false
+        removeButton.translatesAutoresizingMaskIntoConstraints = false
+
+        var leadingAnchor = row.leadingAnchor
+        if let icon {
+            icon.size = CGSize(width: 28, height: 28)
+            let iconView = NSImageView(image: icon)
+            iconView.imageScaling = .scaleProportionallyUpOrDown
+            iconView.translatesAutoresizingMaskIntoConstraints = false
+            row.addSubview(iconView)
+            NSLayoutConstraint.activate([
+                iconView.leadingAnchor.constraint(equalTo: row.leadingAnchor),
+                iconView.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+                iconView.widthAnchor.constraint(equalToConstant: 28),
+                iconView.heightAnchor.constraint(equalToConstant: 28)
+            ])
+            leadingAnchor = iconView.trailingAnchor
+        }
+
+        NSLayoutConstraint.activate([
+            row.heightAnchor.constraint(greaterThanOrEqualToConstant: 40),
+            labels.leadingAnchor.constraint(equalTo: leadingAnchor, constant: icon == nil ? 0 : 10),
+            labels.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            labels.trailingAnchor.constraint(lessThanOrEqualTo: removeButton.leadingAnchor, constant: -12),
+            removeButton.trailingAnchor.constraint(equalTo: row.trailingAnchor),
+            removeButton.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            row.widthAnchor.constraint(greaterThanOrEqualToConstant: 360)
+        ])
+        return row
     }
 
     private func openPermissionSettings(_ kind: PermissionKind) {

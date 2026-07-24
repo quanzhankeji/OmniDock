@@ -6,6 +6,10 @@ final class PermissionFeatureGateTests: XCTestCase {
         XCTAssertEqual(PermissionFeature.dockClick.requiredPermissions, [.accessibility, .inputMonitoring])
         XCTAssertEqual(PermissionFeature.dockPreview.requiredPermissions, [.accessibility, .screenRecording])
         XCTAssertEqual(PermissionFeature.hotkeys.requiredPermissions, [.accessibility])
+        XCTAssertEqual(
+            PermissionFeature.finderExtension.requiredPermissions,
+            [.accessibility, .finderExtension, .folderAccess]
+        )
     }
 
     func testMissingPermissionsForFeature() {
@@ -42,13 +46,17 @@ final class PermissionFeatureGateTests: XCTestCase {
         XCTAssertTrue(PermissionFeatureGate.allOnboardingPermissionsGranted(in: PermissionSnapshot(
             accessibility: true,
             screenRecording: true,
-            inputMonitoring: true
+            inputMonitoring: true,
+            finderExtension: true,
+            folderAccess: true
         )))
 
         XCTAssertFalse(PermissionFeatureGate.allOnboardingPermissionsGranted(in: PermissionSnapshot(
             accessibility: true,
             screenRecording: true,
-            inputMonitoring: false
+            inputMonitoring: false,
+            finderExtension: true,
+            folderAccess: true
         )))
     }
 
@@ -137,6 +145,39 @@ final class PermissionFeatureGateTests: XCTestCase {
         XCTAssertEqual(enabled, [.dockPreview])
         XCTAssertTrue(store.showDockPreviews)
         XCTAssertTrue(store.liveDockPreviewsEnabled)
+    }
+
+    func testFinderExtensionEnablesOnlyAfterEveryRequiredPermissionIsReady() {
+        let defaults = isolatedDefaults()
+        let store = SettingsStore(defaults: defaults, livePreviewLimitProvider: { 8 })
+        var queue = PermissionFeatureActivationQueue()
+        queue.request(.finderExtension)
+
+        let pending = queue.resolve(
+            in: store,
+            snapshot: PermissionSnapshot(
+                accessibility: true,
+                screenRecording: true,
+                inputMonitoring: true,
+                finderExtension: true,
+                folderAccess: false
+            )
+        )
+        XCTAssertTrue(pending.isEmpty)
+        XCTAssertFalse(store.finderExtensionEnabled)
+
+        let enabled = queue.resolve(
+            in: store,
+            snapshot: PermissionSnapshot(
+                accessibility: true,
+                screenRecording: true,
+                inputMonitoring: true,
+                finderExtension: true,
+                folderAccess: true
+            )
+        )
+        XCTAssertEqual(enabled, [.finderExtension])
+        XCTAssertTrue(store.finderExtensionEnabled)
     }
 
     func testActivationQueueRestoresPendingFeaturesAfterRelaunch() {

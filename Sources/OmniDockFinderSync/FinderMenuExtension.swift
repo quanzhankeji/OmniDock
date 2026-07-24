@@ -3,7 +3,8 @@ import FinderSync
 
 final class FinderMenuExtension: FIFinderSync {
     private let preferencesStore = FinderMenuPreferencesStore()
-    private let requestMailbox = FinderFileRequestMailbox()
+    private let commandMailbox = FinderCommandMailbox()
+    private let actionRegistry = FinderMenuActionRegistry()
 
     override init() {
         super.init()
@@ -19,7 +20,7 @@ final class FinderMenuExtension: FIFinderSync {
             return nil
         }
 
-        let entries = FinderMenuCatalog.entries(for: context, isEnabled: preferences.isEnabled)
+        let entries = FinderMenuCatalog.entries(for: context, preferences: preferences)
         guard !entries.isEmpty else {
             return nil
         }
@@ -28,7 +29,11 @@ final class FinderMenuExtension: FIFinderSync {
         for entry in entries {
             switch entry {
             case let .action(action):
-                menu.addItem(menuItem(for: action, preferences: preferences))
+                menu.addItem(menuItem(
+                    for: action,
+                    context: context,
+                    preferences: preferences
+                ))
             case let .documentSubmenu(actions):
                 let parent = NSMenuItem(
                     title: FinderMenuLabels.documentSubmenuTitle(
@@ -39,7 +44,29 @@ final class FinderMenuExtension: FIFinderSync {
                 )
                 let submenu = NSMenu(title: parent.title)
                 for action in actions {
-                    submenu.addItem(menuItem(for: action, preferences: preferences))
+                    submenu.addItem(menuItem(
+                        for: action,
+                        context: context,
+                        preferences: preferences
+                    ))
+                }
+                parent.submenu = submenu
+                menu.addItem(parent)
+            case let .applicationSubmenu(actions):
+                let parent = NSMenuItem(
+                    title: FinderMenuLabels.applicationSubmenuTitle(
+                        languageIdentifier: preferences.languageIdentifier
+                    ),
+                    action: nil,
+                    keyEquivalent: ""
+                )
+                let submenu = NSMenu(title: parent.title)
+                for action in actions {
+                    submenu.addItem(menuItem(
+                        for: action,
+                        context: context,
+                        preferences: preferences
+                    ))
                 }
                 parent.submenu = submenu
                 menu.addItem(parent)
@@ -50,24 +77,41 @@ final class FinderMenuExtension: FIFinderSync {
 
     @objc private func performAction(_ sender: NSMenuItem) {
         guard preferencesStore.snapshot().isEnabled,
-              let action = FinderMenuAction(menuTag: sender.tag),
-              let context = context(for: action.location)
+              let binding = actionRegistry.consume(token: sender.tag)
         else {
             return
         }
 
-        switch action {
+        switch binding.action {
         case .copyCurrentDirectoryPath:
-            copy(FinderPathList.text(for: context.currentDirectory.map { [$0] } ?? []))
+            copy(FinderPathList.text(
+                for: binding.context.currentDirectory.map { [$0] } ?? []
+            ))
         case .copySelectedPaths:
-            copy(FinderPathList.text(for: context.selectedURLs))
-        case .createTextFile, .createMarkdownFile:
-            queueFileCreation(action, in: context.currentDirectory)
+            copy(FinderPathList.text(for: binding.context.selectedURLs))
+        case let .createDocument(preset):
+            guard let directory = binding.context.currentDirectory else {
+                return
+            }
+            forward(.createDocument(
+                fileExtension: preset.fileExtension,
+                directoryDisplayPath: directory.path
+            ))
+        case let .openSelection(shortcut):
+            let paths = binding.context.selectedURLs.map(\.path)
+            guard !paths.isEmpty else {
+                return
+            }
+            forward(.openSelection(
+                shortcut: shortcut,
+                selectedDisplayPaths: paths
+            ))
         }
     }
 
     private func menuItem(
         for action: FinderMenuAction,
+        context: FinderMenuContext,
         preferences: FinderMenuPreferences
     ) -> NSMenuItem {
         let item = NSMenuItem(
@@ -76,7 +120,16 @@ final class FinderMenuExtension: FIFinderSync {
             keyEquivalent: ""
         )
         item.target = self
-        item.tag = action.menuTag
+        item.tag = actionRegistry.issueToken(for: FinderMenuCommandBinding(
+            action: action,
+            context: context
+        ))
+        if case let .openSelection(shortcut) = action,
+           let applicationURL = shortcut.bundleURL {
+            let icon = NSWorkspace.shared.icon(forFile: applicationURL.path)
+            icon.size = CGSize(width: 16, height: 16)
+            item.image = icon
+        }
         return item
     }
 
@@ -102,15 +155,6 @@ final class FinderMenuExtension: FIFinderSync {
         }
     }
 
-    private func context(for location: FinderMenuLocation) -> FinderMenuContext? {
-        switch location {
-        case .folderBackground:
-            return context(for: .contextualMenuForContainer)
-        case .selection:
-            return context(for: .contextualMenuForItems)
-        }
-    }
-
     private func copy(_ string: String) {
         guard !string.isEmpty else {
             return
@@ -120,27 +164,17 @@ final class FinderMenuExtension: FIFinderSync {
         pasteboard.setString(string, forType: .string)
     }
 
-    private func queueFileCreation(_ action: FinderMenuAction, in directory: URL?) {
-        guard let directory,
-              action.documentKind != nil
-        else {
-            return
-        }
-        forwardFileCreation(action, directory: directory)
-    }
-
-    private func forwardFileCreation(_ action: FinderMenuAction, directory: URL) {
+    private func forward(_ command: FinderCommand) {
         do {
-            let request = FinderFileRequest(
-                action: action,
-                directoryDisplayPath: directory.path
-            )
-            try requestMailbox.enqueue(request)
-            if !NSWorkspace.shared.open(FinderActionRoute.url(for: request.id)) {
-                requestMailbox.discard(id: request.id)
-            }
+            let request = FinderCommandEnvelope(command: command)
+            try commandMailbox.enqueue(request)
+            FinderCommandSignal.post(requestID: request.id)
+            _ = NSWorkspace.shared.open(FinderActionRoute.url(for: request.id))
         } catch {
-            NSLog("OmniDock Finder extension could not create a file in %@: %@", directory.path, error.localizedDescription)
+            NSLog(
+                "OmniDock Finder extension could not forward a command: %@",
+                error.localizedDescription
+            )
         }
     }
 }
