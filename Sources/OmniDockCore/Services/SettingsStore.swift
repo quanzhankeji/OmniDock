@@ -62,7 +62,7 @@ public enum SettingsChange: String, Equatable {
 public final class SettingsStore {
     public static let changedNotification = Notification.Name("OmniDockSettingsChanged")
 
-    private enum Key: String {
+    private enum Key: String, CaseIterable {
         case showDockPreviews = "showDockPreviews"
         case showCommandTabPreviews = "showCommandTabPreviews"
         // Keep the original storage name so existing installations retain their choice.
@@ -91,21 +91,27 @@ public final class SettingsStore {
     private let finderMenuPreferencesStore: FinderMenuPreferencesStore?
 
     public convenience init(defaults: UserDefaults = .standard) {
+        let sandboxPreferences = defaults === UserDefaults.standard
+            ? Self.loadSandboxPreferences()
+            : nil
         self.init(
             defaults: defaults,
             livePreviewLimitProvider: { PreviewPerformanceProfile.current.recommendedLiveWindowLimit },
-            finderMenuPreferencesStore: FinderMenuPreferencesStore()
+            finderMenuPreferencesStore: FinderMenuPreferencesStore(),
+            sandboxPreferences: sandboxPreferences
         )
     }
 
     init(
         defaults: UserDefaults,
         livePreviewLimitProvider: @escaping () -> Int,
-        finderMenuPreferencesStore: FinderMenuPreferencesStore? = nil
+        finderMenuPreferencesStore: FinderMenuPreferencesStore? = nil,
+        sandboxPreferences: [String: Any]? = nil
     ) {
         self.defaults = defaults
         self.livePreviewLimitProvider = livePreviewLimitProvider
         self.finderMenuPreferencesStore = finderMenuPreferencesStore
+        migrateSandboxPreferencesIfNeeded(sandboxPreferences)
         migrateLegacyMinimizePreferenceIfNeeded()
         defaults.register(defaults: [
             Key.showDockPreviews.rawValue: true,
@@ -501,5 +507,59 @@ public final class SettingsStore {
             return
         }
         defaults.set(legacyValue, forKey: Key.toggleAppVisibilityOnDockClick.rawValue)
+    }
+
+    private func migrateSandboxPreferencesIfNeeded(_ sandboxPreferences: [String: Any]?) {
+        let migrationVersionKey = "sandboxSettingsMigrationVersion"
+        guard defaults.integer(forKey: migrationVersionKey) < 1,
+              let sandboxPreferences
+        else {
+            return
+        }
+
+        var migratedValue = false
+        let excludedKeys: Set<Key> = [
+            .pendingPermissionFeatures,
+            .lastPermissionRefreshRelaunchAttemptAt
+        ]
+        for key in Key.allCases where !excludedKeys.contains(key) {
+            guard let value = sandboxPreferences[key.rawValue] else {
+                continue
+            }
+            defaults.set(value, forKey: key.rawValue)
+            migratedValue = true
+        }
+
+        let directoryBookmarksKey = "finderExtensionDirectoryBookmarks"
+        if let bookmarks = sandboxPreferences[directoryBookmarksKey] {
+            defaults.set(bookmarks, forKey: directoryBookmarksKey)
+            migratedValue = true
+        }
+
+        if migratedValue {
+            defaults.set(1, forKey: migrationVersionKey)
+        }
+    }
+
+    private static func loadSandboxPreferences() -> [String: Any]? {
+        guard let bundleIdentifier = Bundle.main.bundleIdentifier else {
+            return nil
+        }
+        let preferencesURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Containers", isDirectory: true)
+            .appendingPathComponent(bundleIdentifier, isDirectory: true)
+            .appendingPathComponent("Data/Library/Preferences", isDirectory: true)
+            .appendingPathComponent("\(bundleIdentifier).plist", isDirectory: false)
+        guard let data = try? Data(contentsOf: preferencesURL),
+              let propertyList = try? PropertyListSerialization.propertyList(
+                from: data,
+                options: [],
+                format: nil
+              )
+        else {
+            return nil
+        }
+        return propertyList as? [String: Any]
     }
 }

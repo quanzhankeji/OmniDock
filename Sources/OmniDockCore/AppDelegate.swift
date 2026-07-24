@@ -112,6 +112,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         windowCycleService.start()
         hotkeyService.start()
         showPermissionOnboardingIfNeeded()
+        schedulePermissionRecheckAfterLaunch()
+    }
+
+    public func applicationDidBecomeActive(_ notification: Notification) {
+        refreshPermissionState()
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
@@ -147,7 +152,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let snapshot = permissionService.snapshot()
         _ = resolvePendingPermissionFeatures(snapshot: snapshot)
-        PermissionFeatureGate.disableUnavailableFeatures(in: settings, snapshot: snapshot)
+        disableUnavailableFeaturesPreservingIntent(snapshot: snapshot)
         maybeRelaunchIfPermissionRefreshDidNotAttach()
     }
 
@@ -160,7 +165,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        PermissionFeatureGate.disableUnavailableFeatures(in: settings, snapshot: snapshot)
+        disableUnavailableFeaturesPreservingIntent(snapshot: snapshot)
     }
 
     private func showPermissionOnboardingIfNeeded() {
@@ -205,8 +210,25 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func enterRestrictedModeForCurrentPermissions() {
         let snapshot = permissionService.snapshot()
-        PermissionFeatureGate.disableUnavailableFeatures(in: settings, snapshot: snapshot)
+        disableUnavailableFeaturesPreservingIntent(snapshot: snapshot)
         refreshAfterPermissionChange()
+    }
+
+    private func disableUnavailableFeaturesPreservingIntent(
+        snapshot: PermissionSnapshot
+    ) {
+        let disabledFeatures = PermissionFeatureGate.disableUnavailableFeatures(
+            in: settings,
+            snapshot: snapshot
+        )
+        permissionFeatureActivationQueue.preserveIntent(for: disabledFeatures)
+        settings.pendingPermissionFeatures = permissionFeatureActivationQueue.pendingFeatures
+    }
+
+    private func schedulePermissionRecheckAfterLaunch() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.refreshPermissionState()
+        }
     }
 
     private func refreshAfterPermissionChange() {

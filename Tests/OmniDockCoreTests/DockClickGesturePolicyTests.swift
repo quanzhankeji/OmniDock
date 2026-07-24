@@ -260,6 +260,7 @@ final class DockClickGesturePolicyTests: XCTestCase {
             mouseCursorPosition: CGPoint(x: 20, y: 20),
             mouseButton: .left
         ))
+        mouseDown.flags = []
 
         XCTAssertNil(eventTap.handle(type: .leftMouseDown, event: mouseDown))
         XCTAssertEqual(recorder.count, 0)

@@ -19,7 +19,7 @@ public enum PermissionFeature: String, CaseIterable, Hashable {
         case .hotkeys:
             return [.accessibility]
         case .finderExtension:
-            return [.accessibility, .finderExtension, .folderAccess]
+            return [.finderExtension, .folderAccess]
         }
     }
 }
@@ -180,6 +180,10 @@ struct PermissionFeatureActivationQueue {
 
     mutating func request(_ feature: PermissionFeature) {
         pendingFeatures.insert(feature)
+    }
+
+    mutating func preserveIntent(for features: some Sequence<PermissionFeature>) {
+        pendingFeatures.formUnion(features)
     }
 
     @discardableResult
