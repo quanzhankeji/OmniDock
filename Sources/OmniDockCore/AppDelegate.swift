@@ -105,6 +105,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         preparePermissionBackedFeaturesForLaunch()
         applicationMainMenuController.install()
         statusMenuController.install()
+        finderFileCommandCoordinator.start()
         windowInventory.start()
         coordinator.start()
         cmdTabPreviewService.start()
@@ -115,6 +116,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationWillTerminate(_ notification: Notification) {
         NotificationCenter.default.removeObserver(self)
+        finderFileCommandCoordinator.stop()
         hotkeyService.stop()
         windowCycleService.stop()
         cmdTabPreviewService.stop()

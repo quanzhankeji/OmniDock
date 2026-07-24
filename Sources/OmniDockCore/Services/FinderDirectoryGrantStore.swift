@@ -48,15 +48,16 @@ final class FinderDirectoryGrantStore {
                 continue
             }
 
-            guard Self.contains(target, in: authorizedURL),
-                  authorizedURL.startAccessingSecurityScopedResource()
-            else {
+            guard Self.contains(target, in: authorizedURL) else {
                 records.remove(at: index)
                 changed = true
                 continue
             }
+            let didStartAccess = authorizedURL.startAccessingSecurityScopedResource()
             defer {
-                authorizedURL.stopAccessingSecurityScopedResource()
+                if didStartAccess {
+                    authorizedURL.stopAccessingSecurityScopedResource()
+                }
             }
 
             if isStale {
@@ -86,6 +87,47 @@ final class FinderDirectoryGrantStore {
         var records = savedRecords().filter { $0.path != record.path }
         records.append(record)
         save(records)
+    }
+
+    func hasUsableGrant() -> Bool {
+        var records = savedRecords()
+        var changed = false
+        var foundUsableGrant = false
+
+        for index in records.indices.reversed() {
+            do {
+                var isStale = false
+                let url = try URL(
+                    resolvingBookmarkData: records[index].bookmark,
+                    options: .withSecurityScope,
+                    relativeTo: nil,
+                    bookmarkDataIsStale: &isStale
+                )
+                let didStartAccess = url.startAccessingSecurityScopedResource()
+                if didStartAccess {
+                    url.stopAccessingSecurityScopedResource()
+                }
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    records.remove(at: index)
+                    changed = true
+                    continue
+                }
+                foundUsableGrant = true
+
+                if isStale {
+                    records[index] = try bookmarkRecord(for: url)
+                    changed = true
+                }
+            } catch {
+                records.remove(at: index)
+                changed = true
+            }
+        }
+
+        if changed {
+            save(records)
+        }
+        return foundUsableGrant
     }
 
     static func contains(_ targetDirectory: URL, in authorizedDirectory: URL) -> Bool {

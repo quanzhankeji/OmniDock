@@ -61,10 +61,33 @@ enum AppStringKey: String, CaseIterable {
     case finderExtensionFailureDismiss
     case finderExtensionAccessDetail
     case finderExtensionAccessButton
+    case finderQuickOpenTitle
+    case finderQuickOpenDetail
+    case finderQuickOpenGroupedTitle
+    case finderQuickOpenGroupedDetail
+    case finderQuickOpenAdd
+    case finderQuickOpenEmpty
+    case finderQuickOpenFailedTitle
+    case finderQuickOpenFailedDetail
+    case finderQuickOpenApplicationMissing
+    case finderDocumentTypesTitle
+    case finderDocumentTypesDetail
+    case finderDocumentTypeAdd
+    case finderDocumentTypeName
+    case finderDocumentTypeExtension
+    case finderDocumentTypeInvalid
+    case finderDocumentTypeDuplicate
+    case finderRemove
+    case finderPermissionStatus
+    case folderAccessPanelTitle
+    case folderAccessPanelDetail
+    case folderAccessPanelChoose
 
     case permissionAccessibility
     case permissionScreenRecording
     case permissionInputMonitoring
+    case permissionFinderExtension
+    case permissionFolderAccess
     case permissionGranted
     case permissionNotGranted
     case permissionStatusFormat
@@ -76,6 +99,8 @@ enum AppStringKey: String, CaseIterable {
     case onboardingAccessibilityPurpose
     case onboardingInputMonitoringPurpose
     case onboardingScreenRecordingPurpose
+    case onboardingFinderExtensionPurpose
+    case onboardingFolderAccessPurpose
     case onboardingStatusReady
     case onboardingStatusNeedsPermissions
     case onboardingStatusRefreshing
@@ -266,6 +291,10 @@ enum AppStrings {
             return text(.permissionScreenRecording)
         case .inputMonitoring:
             return text(.permissionInputMonitoring)
+        case .finderExtension:
+            return text(.permissionFinderExtension)
+        case .folderAccess:
+            return text(.permissionFolderAccess)
         }
     }
 
@@ -277,6 +306,10 @@ enum AppStrings {
             return text(.onboardingScreenRecordingPurpose)
         case .inputMonitoring:
             return text(.onboardingInputMonitoringPurpose)
+        case .finderExtension:
+            return text(.onboardingFinderExtensionPurpose)
+        case .folderAccess:
+            return text(.onboardingFolderAccessPurpose)
         }
     }
 }

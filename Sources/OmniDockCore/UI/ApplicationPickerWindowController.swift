@@ -10,7 +10,8 @@ enum ApplicationPickerContentState: Equatable, Sendable {
 
 @MainActor
 final class ApplicationPickerWindowController: NSWindowController, NSWindowDelegate, NSTableViewDataSource, NSTableViewDelegate {
-    private let existingBindings: [AppHotkeyBinding]
+    private let excludedBundleIdentifiers: Set<String>
+    private let excludedBundleURLs: Set<URL>
     private let loader: ApplicationSelectionLoading
     private let onSelect: (URL) -> Void
     private let onClose: () -> Void
@@ -48,20 +49,50 @@ final class ApplicationPickerWindowController: NSWindowController, NSWindowDeleg
         onSelect: @escaping (URL) -> Void,
         onClose: @escaping () -> Void
     ) {
-        self.existingBindings = existingBindings
+        excludedBundleIdentifiers = Set(existingBindings.compactMap(\.bundleIdentifier))
+        excludedBundleURLs = Set(existingBindings.compactMap {
+            $0.bundleURL?.standardizedFileURL
+        })
         self.loader = loader ?? ApplicationSelectionCatalogLoader()
         self.onSelect = onSelect
         self.onClose = onClose
 
-        let window = NSWindow(
+        let window = Self.makeWindow()
+        super.init(window: window)
+        finishInitialization(window: window)
+    }
+
+    init(
+        excluding shortcuts: [FinderLaunchShortcut],
+        loader: ApplicationSelectionLoading? = nil,
+        onSelect: @escaping (URL) -> Void,
+        onClose: @escaping () -> Void
+    ) {
+        excludedBundleIdentifiers = Set(shortcuts.compactMap(\.bundleIdentifier))
+        excludedBundleURLs = Set(shortcuts.compactMap {
+            $0.bundleURL?.standardizedFileURL
+        })
+        self.loader = loader ?? ApplicationSelectionCatalogLoader()
+        self.onSelect = onSelect
+        self.onClose = onClose
+
+        let window = Self.makeWindow()
+        super.init(window: window)
+        finishInitialization(window: window)
+    }
+
+    private static func makeWindow() -> NSWindow {
+        NSWindow(
             contentRect: CGRect(x: 0, y: 0, width: 520, height: 460),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
+    }
+
+    private func finishInitialization(window: NSWindow) {
         window.title = AppStrings.text(.pickerTitle)
         window.isReleasedWhenClosed = false
-        super.init(window: window)
         window.delegate = self
         window.contentView = makeContentView()
         updateContentStateUI()
@@ -418,13 +449,11 @@ final class ApplicationPickerWindowController: NSWindowController, NSWindowDeleg
     }
 
     private func isAlreadySelected(_ candidate: ApplicationSelectionCandidate) -> Bool {
-        existingBindings.contains { binding in
-            if let bundleIdentifier = candidate.bundleIdentifier,
-               binding.bundleIdentifier == bundleIdentifier {
-                return true
-            }
-            return binding.bundleURL?.standardizedFileURL == candidate.bundleURL.standardizedFileURL
+        if let bundleIdentifier = candidate.bundleIdentifier,
+           excludedBundleIdentifiers.contains(bundleIdentifier) {
+            return true
         }
+        return excludedBundleURLs.contains(candidate.bundleURL.standardizedFileURL)
     }
 
     private func cachedIcon(for candidate: ApplicationSelectionCandidate) -> NSImage? {

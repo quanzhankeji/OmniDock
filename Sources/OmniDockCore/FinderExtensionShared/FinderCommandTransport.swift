@@ -1,25 +1,15 @@
 import Foundation
 
-enum FinderDocumentKind: String, Codable, CaseIterable {
-    case text
-    case markdown
-
-    var fileExtension: String {
-        switch self {
-        case .text:
-            return "txt"
-        case .markdown:
-            return "md"
-        }
-    }
-}
-
 enum BlankDocumentFactory {
     static func create(
         in directory: URL,
-        kind: FinderDocumentKind,
+        fileExtension: String,
         fileManager: FileManager = .default
     ) throws -> URL {
+        guard let fileExtension = FinderDocumentPreset.normalizedFileExtension(fileExtension) else {
+            throw CocoaError(.fileWriteInvalidFileName)
+        }
+
         var isDirectory = ObjCBool(false)
         guard fileManager.fileExists(atPath: directory.path, isDirectory: &isDirectory),
               isDirectory.boolValue
@@ -29,7 +19,7 @@ enum BlankDocumentFactory {
 
         for sequence in 1...10_000 {
             let suffix = sequence == 1 ? "" : " \(sequence)"
-            let fileName = "NewFile\(suffix).\(kind.fileExtension)"
+            let fileName = "NewFile\(suffix).\(fileExtension)"
             let destination = directory.appendingPathComponent(fileName, isDirectory: false)
 
             do {
@@ -44,26 +34,34 @@ enum BlankDocumentFactory {
     }
 }
 
-struct FinderFileRequest: Codable, Equatable, Identifiable {
+enum FinderCommand: Codable, Equatable {
+    case createDocument(
+        fileExtension: String,
+        directoryDisplayPath: String
+    )
+    case openSelection(
+        shortcut: FinderLaunchShortcut,
+        selectedDisplayPaths: [String]
+    )
+}
+
+struct FinderCommandEnvelope: Codable, Equatable, Identifiable {
     let id: UUID
-    let action: FinderMenuAction
-    let directoryDisplayPath: String
+    let command: FinderCommand
     let createdAt: Date
 
     init(
         id: UUID = UUID(),
-        action: FinderMenuAction,
-        directoryDisplayPath: String,
+        command: FinderCommand,
         createdAt: Date = Date()
     ) {
         self.id = id
-        self.action = action
-        self.directoryDisplayPath = directoryDisplayPath
+        self.command = command
         self.createdAt = createdAt
     }
 }
 
-final class FinderFileRequestMailbox {
+final class FinderCommandMailbox {
     private static let directoryName = "FinderExtensionCommands"
     private static let requestLifetime: TimeInterval = 300
 
@@ -88,21 +86,21 @@ final class FinderFileRequestMailbox {
         self.fileManager = fileManager
     }
 
-    func enqueue(_ request: FinderFileRequest) throws {
+    func enqueue(_ request: FinderCommandEnvelope) throws {
         let directory = try requestDirectory()
         removeExpiredRequests(in: directory)
         let data = try JSONEncoder().encode(request)
         try data.write(to: fileURL(for: request.id, in: directory), options: .withoutOverwriting)
     }
 
-    func take(id: UUID) -> FinderFileRequest? {
+    func take(id: UUID) -> FinderCommandEnvelope? {
         guard let directory = try? requestDirectory() else {
             return nil
         }
 
         let url = fileURL(for: id, in: directory)
         guard let data = try? Data(contentsOf: url),
-              let request = try? JSONDecoder().decode(FinderFileRequest.self, from: data)
+              let request = try? JSONDecoder().decode(FinderCommandEnvelope.self, from: data)
         else {
             return nil
         }
@@ -146,13 +144,40 @@ final class FinderFileRequestMailbox {
 
         for url in contents {
             guard let data = try? Data(contentsOf: url),
-                  let request = try? JSONDecoder().decode(FinderFileRequest.self, from: data),
+                  let request = try? JSONDecoder().decode(FinderCommandEnvelope.self, from: data),
                   request.createdAt.addingTimeInterval(Self.requestLifetime) <= Date()
             else {
                 continue
             }
             try? fileManager.removeItem(at: url)
         }
+    }
+}
+
+enum FinderCommandSignal {
+    static let notificationName = Notification.Name(
+        "com.quanzhankeji.OmniDock.finderCommandPending"
+    )
+
+    static func post(
+        requestID: UUID,
+        center: DistributedNotificationCenter = DistributedNotificationCenter.default()
+    ) {
+        center.postNotificationName(
+            notificationName,
+            object: requestID.uuidString,
+            userInfo: nil,
+            deliverImmediately: true
+        )
+    }
+
+    static func requestID(from notification: Notification) -> UUID? {
+        guard notification.name == notificationName,
+              let value = notification.object as? String
+        else {
+            return nil
+        }
+        return UUID(uuidString: value)
     }
 }
 

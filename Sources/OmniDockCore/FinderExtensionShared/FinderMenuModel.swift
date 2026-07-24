@@ -1,47 +1,16 @@
 import Foundation
 
-enum FinderMenuAction: String, Codable, CaseIterable {
-    case createTextFile
-    case createMarkdownFile
+enum FinderMenuAction: Equatable {
+    case createDocument(FinderDocumentPreset)
     case copyCurrentDirectoryPath
     case copySelectedPaths
-
-    var menuTag: Int {
-        switch self {
-        case .createTextFile:
-            return 1_001
-        case .createMarkdownFile:
-            return 1_002
-        case .copyCurrentDirectoryPath:
-            return 1_003
-        case .copySelectedPaths:
-            return 1_004
-        }
-    }
-
-    init?(menuTag: Int) {
-        guard let action = Self.allCases.first(where: { $0.menuTag == menuTag }) else {
-            return nil
-        }
-        self = action
-    }
-
-    var documentKind: FinderDocumentKind? {
-        switch self {
-        case .createTextFile:
-            return .text
-        case .createMarkdownFile:
-            return .markdown
-        case .copyCurrentDirectoryPath, .copySelectedPaths:
-            return nil
-        }
-    }
+    case openSelection(FinderLaunchShortcut)
 
     var location: FinderMenuLocation {
         switch self {
-        case .createTextFile, .createMarkdownFile, .copyCurrentDirectoryPath:
+        case .createDocument, .copyCurrentDirectoryPath:
             return .folderBackground
-        case .copySelectedPaths:
+        case .copySelectedPaths, .openSelection:
             return .selection
         }
     }
@@ -58,17 +27,68 @@ struct FinderMenuContext: Equatable {
     let selectedURLs: [URL]
 }
 
+struct FinderMenuCommandBinding: Equatable {
+    let action: FinderMenuAction
+    let context: FinderMenuContext
+}
+
+final class FinderMenuActionRegistry {
+    private let capacity: Int
+    private var nextToken = 1
+    private var tokensInOrder: [Int] = []
+    private var bindings: [Int: FinderMenuCommandBinding] = [:]
+
+    init(capacity: Int = 256) {
+        self.capacity = max(1, capacity)
+    }
+
+    func issueToken(for binding: FinderMenuCommandBinding) -> Int {
+        let token = reserveToken()
+        bindings[token] = binding
+        tokensInOrder.append(token)
+
+        while tokensInOrder.count > capacity {
+            let expiredToken = tokensInOrder.removeFirst()
+            bindings.removeValue(forKey: expiredToken)
+        }
+
+        return token
+    }
+
+    func consume(token: Int) -> FinderMenuCommandBinding? {
+        guard let binding = bindings.removeValue(forKey: token) else {
+            return nil
+        }
+        tokensInOrder.removeAll { $0 == token }
+        return binding
+    }
+
+    private func reserveToken() -> Int {
+        while bindings[nextToken] != nil {
+            advanceToken()
+        }
+        let token = nextToken
+        advanceToken()
+        return token
+    }
+
+    private func advanceToken() {
+        nextToken = nextToken == Int.max ? 1 : nextToken + 1
+    }
+}
+
 enum FinderMenuEntry: Equatable {
     case action(FinderMenuAction)
     case documentSubmenu([FinderMenuAction])
+    case applicationSubmenu([FinderMenuAction])
 }
 
 enum FinderMenuCatalog {
     static func entries(
         for context: FinderMenuContext,
-        isEnabled: Bool = true
+        preferences: FinderMenuPreferences
     ) -> [FinderMenuEntry] {
-        guard isEnabled else {
+        guard preferences.isEnabled else {
             return []
         }
 
@@ -77,12 +97,34 @@ enum FinderMenuCatalog {
             guard context.currentDirectory != nil else {
                 return []
             }
-            return [
-                .action(.copyCurrentDirectoryPath),
-                .documentSubmenu([.createTextFile, .createMarkdownFile])
-            ]
+            var entries: [FinderMenuEntry] = [.action(.copyCurrentDirectoryPath)]
+            if !preferences.documentPresets.isEmpty {
+                entries.append(.documentSubmenu(
+                    preferences.documentPresets.map(FinderMenuAction.createDocument)
+                ))
+            }
+            return entries
         case .selection:
-            return context.selectedURLs.isEmpty ? [] : [.action(.copySelectedPaths)]
+            guard !context.selectedURLs.isEmpty else {
+                return []
+            }
+
+            let applicationActions = preferences.launchShortcuts
+                .filter { shortcut in
+                    guard let url = shortcut.bundleURL else {
+                        return false
+                    }
+                    return FileManager.default.fileExists(atPath: url.path)
+                }
+                .map(FinderMenuAction.openSelection)
+
+            var entries: [FinderMenuEntry] = [.action(.copySelectedPaths)]
+            if preferences.groupsLaunchShortcuts, !applicationActions.isEmpty {
+                entries.append(.applicationSubmenu(applicationActions))
+            } else {
+                entries.append(contentsOf: applicationActions.map(FinderMenuEntry.action))
+            }
+            return entries
         }
     }
 }
@@ -90,23 +132,34 @@ enum FinderMenuCatalog {
 enum FinderMenuLabels {
     static func title(for action: FinderMenuAction, languageIdentifier: String) -> String {
         switch (action, usesChinese(languageIdentifier)) {
-        case (.createTextFile, true):
-            return "TXT 文件"
-        case (.createMarkdownFile, true):
-            return "Markdown 文件"
         case (.copyCurrentDirectoryPath, true), (.copySelectedPaths, true):
             return "复制路径"
-        case (.createTextFile, false):
-            return "Text File"
-        case (.createMarkdownFile, false):
-            return "Markdown File"
         case (.copyCurrentDirectoryPath, false), (.copySelectedPaths, false):
             return "Copy Path"
+        case let (.createDocument(preset), true):
+            switch preset.fileExtension {
+            case "txt":
+                return "TXT 文件"
+            case "md":
+                return "Markdown 文件"
+            default:
+                return preset.displayName
+            }
+        case let (.createDocument(preset), false):
+            return preset.fileExtension == "txt"
+                ? "Text File"
+                : preset.displayName
+        case let (.openSelection(shortcut), _):
+            return shortcut.displayName
         }
     }
 
     static func documentSubmenuTitle(languageIdentifier: String) -> String {
         usesChinese(languageIdentifier) ? "新建文件" : "New File"
+    }
+
+    static func applicationSubmenuTitle(languageIdentifier: String) -> String {
+        usesChinese(languageIdentifier) ? "打开方式" : "Open With"
     }
 
     private static func usesChinese(_ languageIdentifier: String) -> Bool {
