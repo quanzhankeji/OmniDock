@@ -3,6 +3,8 @@ set -euo pipefail
 
 APP_NAME="OmniDock"
 BUNDLE_ID="com.quanzhankeji.OmniDock"
+FINDER_EXTENSION_NAME="OmniDockFinderSync"
+FINDER_EXTENSION_BUNDLE_ID="$BUNDLE_ID.FinderSync"
 MIN_SYSTEM_VERSION="12.3"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -19,9 +21,10 @@ BINARY_LICENSE_SHA256=""
 BUNDLED_LICENSE_NAME=""
 OUTPUT_ROOT="${OMNIDOCK_RELEASE_DIR:-$ROOT_DIR/dist/release}"
 WORK_DIR=""
-BUILT_BINARY=""
 LAST_SUBMISSION_ID=""
 RELEASE_SUCCEEDED=0
+TEAM_IDENTIFIER=""
+APP_GROUP_IDENTIFIER=""
 
 usage() {
   cat <<'USAGE'
@@ -166,8 +169,8 @@ require_command() {
 }
 
 for command_name in \
-  awk codesign date ditto dsymutil dwarfdump git hdiutil iconutil lipo ln plutil \
-  security shasum spctl stat strip swift xattr xcodebuild xcrun; do
+  awk codesign date ditto dwarfdump git hdiutil lipo ln plutil \
+  security shasum spctl stat swift xattr xcodebuild xcrun; do
   require_command "$command_name"
 done
 
@@ -186,7 +189,12 @@ for required_file in \
   "$ROOT_DIR/LICENSE" \
   "$ROOT_DIR/LICENSING.md" \
   "$ROOT_DIR/NOTICE" \
+  "$ROOT_DIR/OmniDock.xcodeproj/project.pbxproj" \
   "$ROOT_DIR/script/generate_xcode_project.py" \
+  "$ROOT_DIR/Resources/OmniDock-Development.entitlements" \
+  "$ROOT_DIR/Resources/OmniDockFinderSync.entitlements" \
+  "$ROOT_DIR/Resources/OmniDock-Info.plist" \
+  "$ROOT_DIR/Resources/OmniDockFinderSync-Info.plist" \
   "$ROOT_DIR/Resources/PrivacyInfo.xcprivacy" \
   "$ROOT_DIR/Sources/OmniDockCore/Resources/en.lproj/AppStrings.strings" \
   "$ROOT_DIR/Sources/OmniDockCore/Resources/en.lproj/InfoPlist.strings" \
@@ -223,8 +231,8 @@ case "$LICENSE_MODE" in
     die "license mode must be 'gpl' or 'eula'"
     ;;
 esac
-[[ -d "$ROOT_DIR/Resources/AppIcon.iconset" ]] \
-  || die "required release input is missing: $ROOT_DIR/Resources/AppIcon.iconset"
+[[ -d "$ROOT_DIR/Resources/Assets.xcassets" ]] \
+  || die "required release input is missing: $ROOT_DIR/Resources/Assets.xcassets"
 
 resolve_signing_identity() {
   local identity
@@ -267,6 +275,13 @@ resolve_signing_identity() {
 
 resolve_signing_identity
 
+TEAM_IDENTIFIER="$(
+  /usr/bin/sed -n 's/.*(\([A-Z0-9]\{10\}\))$/\1/p' <<<"$SIGN_IDENTITY"
+)"
+[[ "$TEAM_IDENTIFIER" =~ ^[A-Z0-9]{10}$ ]] \
+  || die "could not determine the Team Identifier from the signing identity"
+APP_GROUP_IDENTIFIER="$TEAM_IDENTIFIER.$BUNDLE_ID"
+
 log "Checking notarytool Keychain profile"
 if ! /usr/bin/xcrun notarytool history \
   --keychain-profile "$NOTARY_PROFILE" \
@@ -289,8 +304,18 @@ APP_MACOS="$APP_CONTENTS/MacOS"
 APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
-DSYM_BUNDLE="$WORK_DIR/$APP_NAME.app.dSYM"
+FINDER_EXTENSION="$APP_CONTENTS/PlugIns/$FINDER_EXTENSION_NAME.appex"
+FINDER_EXTENSION_CONTENTS="$FINDER_EXTENSION/Contents"
+FINDER_EXTENSION_BINARY="$FINDER_EXTENSION_CONTENTS/MacOS/$FINDER_EXTENSION_NAME"
+FINDER_EXTENSION_INFO_PLIST="$FINDER_EXTENSION_CONTENTS/Info.plist"
+XCODE_DERIVED_DATA="$WORK_DIR/xcode-derived-data"
+XCODE_RELEASE_DIR="$XCODE_DERIVED_DATA/Build/Products/Release"
+DSYM_DIRECTORY="$WORK_DIR/dSYMs"
+APP_DSYM="$DSYM_DIRECTORY/$APP_NAME.app.dSYM"
+FINDER_EXTENSION_DSYM="$DSYM_DIRECTORY/$FINDER_EXTENSION_NAME.appex.dSYM"
 DSYM_ZIP="$WORK_DIR/$PRIVATE_ARTIFACT_BASE.dSYM.zip"
+APP_ENTITLEMENTS="$WORK_DIR/$APP_NAME.entitlements"
+FINDER_EXTENSION_ENTITLEMENTS="$WORK_DIR/$FINDER_EXTENSION_NAME.entitlements"
 APP_NOTARY_ZIP="$WORK_DIR/$PRIVATE_ARTIFACT_BASE-notary.zip"
 APP_ZIP="$WORK_DIR/$PUBLIC_ARTIFACT_BASE.zip"
 DMG_PATH="$WORK_DIR/$PUBLIC_ARTIFACT_BASE.dmg"
@@ -306,39 +331,6 @@ git -C "$ROOT_DIR" diff --check
   --scratch-path "$WORK_DIR/tests" \
   -Xswiftc -warnings-as-errors
 
-build_architecture() {
-  local architecture="$1"
-  local scratch_path="$WORK_DIR/build-$architecture"
-  local target_triple="$architecture-apple-macosx$MIN_SYSTEM_VERSION"
-  local binary_directory
-
-  log "Building SwiftPM release for $architecture"
-  /usr/bin/swift build \
-    --package-path "$ROOT_DIR" \
-    --scratch-path "$scratch_path" \
-    --configuration release \
-    --triple "$target_triple" \
-    --disable-index-store \
-    --product "$APP_NAME" \
-    -Xswiftc -g \
-    -Xswiftc -warnings-as-errors \
-    -Xswiftc -DOMNIDOCK_APP_BUNDLE_BUILD
-
-  binary_directory="$(
-    /usr/bin/swift build \
-      --package-path "$ROOT_DIR" \
-      --scratch-path "$scratch_path" \
-      --configuration release \
-      --triple "$target_triple" \
-      --disable-index-store \
-      --show-bin-path
-  )"
-  BUILT_BINARY="$binary_directory/$APP_NAME"
-  [[ -x "$BUILT_BINARY" ]] || die "$architecture build did not produce $APP_NAME"
-  /usr/bin/lipo "$BUILT_BINARY" -verify_arch "$architecture" \
-    || die "$architecture build has an unexpected architecture"
-}
-
 verify_architectures() {
   local binary="$1"
   local architectures
@@ -353,103 +345,95 @@ verify_architectures() {
 }
 
 verify_dsym() {
+  local binary="$1"
+  local dsym="$2"
+  local label="$3"
   local architecture
   local binary_uuid
   local dsym_uuid
 
   for architecture in arm64 x86_64; do
     binary_uuid="$(
-      /usr/bin/dwarfdump --uuid "$APP_BINARY" \
+      /usr/bin/dwarfdump --uuid "$binary" \
         | /usr/bin/awk -v arch="($architecture)" '$3 == arch { print $2; exit }'
     )"
     dsym_uuid="$(
-      /usr/bin/dwarfdump --uuid "$DSYM_BUNDLE" \
+      /usr/bin/dwarfdump --uuid "$dsym" \
         | /usr/bin/awk -v arch="($architecture)" '$3 == arch { print $2; exit }'
     )"
     [[ -n "$binary_uuid" && "$binary_uuid" == "$dsym_uuid" ]] \
-      || die "dSYM UUID does not match the $architecture executable"
+      || die "$label dSYM UUID does not match the $architecture executable"
   done
 }
 
-build_architecture arm64
-ARM64_BINARY="$BUILT_BINARY"
-build_architecture x86_64
-X86_64_BINARY="$BUILT_BINARY"
+log "Building unsigned Universal 2 app and Finder extension"
+/usr/bin/xcodebuild \
+  -project "$ROOT_DIR/OmniDock.xcodeproj" \
+  -scheme "$APP_NAME" \
+  -configuration Release \
+  -destination "generic/platform=macOS" \
+  -derivedDataPath "$XCODE_DERIVED_DATA" \
+  ARCHS="arm64 x86_64" \
+  ONLY_ACTIVE_ARCH=NO \
+  CODE_SIGNING_ALLOWED=NO \
+  CODE_SIGNING_REQUIRED=NO \
+  SWIFT_ACTIVE_COMPILATION_CONDITIONS= \
+  SWIFT_TREAT_WARNINGS_AS_ERRORS=YES \
+  MARKETING_VERSION="$VERSION" \
+  CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+  build
 
-log "Creating Universal 2 executable and dSYM"
-mkdir -p "$APP_MACOS" "$APP_RESOURCES"
-/usr/bin/lipo -create "$ARM64_BINARY" "$X86_64_BINARY" -output "$APP_BINARY"
-chmod 755 "$APP_BINARY"
+[[ -d "$XCODE_RELEASE_DIR/$APP_NAME.app" ]] \
+  || die "Xcode build did not produce $APP_NAME.app"
+[[ -d "$XCODE_RELEASE_DIR/$APP_NAME.app.dSYM" ]] \
+  || die "Xcode build did not produce the app dSYM"
+[[ -d "$XCODE_RELEASE_DIR/$FINDER_EXTENSION_NAME.appex.dSYM" ]] \
+  || die "Xcode build did not produce the Finder extension dSYM"
+
+/usr/bin/ditto "$XCODE_RELEASE_DIR/$APP_NAME.app" "$APP_BUNDLE"
+mkdir -p "$DSYM_DIRECTORY"
+/usr/bin/ditto "$XCODE_RELEASE_DIR/$APP_NAME.app.dSYM" "$APP_DSYM"
+/usr/bin/ditto \
+  "$XCODE_RELEASE_DIR/$FINDER_EXTENSION_NAME.appex.dSYM" \
+  "$FINDER_EXTENSION_DSYM"
+
 verify_architectures "$APP_BINARY"
-/usr/bin/dsymutil "$APP_BINARY" -o "$DSYM_BUNDLE"
-/usr/bin/strip -S "$APP_BINARY"
-verify_dsym
+verify_architectures "$FINDER_EXTENSION_BINARY"
+verify_dsym "$APP_BINARY" "$APP_DSYM" "$APP_NAME"
+verify_dsym \
+  "$FINDER_EXTENSION_BINARY" \
+  "$FINDER_EXTENSION_DSYM" \
+  "$FINDER_EXTENSION_NAME"
 
-log "Assembling app resources"
-/usr/bin/iconutil \
-  -c icns \
-  "$ROOT_DIR/Resources/AppIcon.iconset" \
-  -o "$APP_RESOURCES/AppIcon.icns"
-/usr/bin/ditto "$ROOT_DIR/Resources/PrivacyInfo.xcprivacy" "$APP_RESOURCES/PrivacyInfo.xcprivacy"
+log "Preparing direct-distribution bundle metadata"
+/usr/bin/plutil \
+  -replace OmniDockAppGroupIdentifier \
+  -string "$APP_GROUP_IDENTIFIER" \
+  "$INFO_PLIST"
+/usr/bin/plutil \
+  -replace OmniDockAppGroupIdentifier \
+  -string "$APP_GROUP_IDENTIFIER" \
+  "$FINDER_EXTENSION_INFO_PLIST"
+rm -f "$APP_RESOURCES/COPYING.txt" "$APP_RESOURCES/EULA.txt"
 /usr/bin/ditto "$BINARY_LICENSE_PATH" "$APP_RESOURCES/$BUNDLED_LICENSE_NAME"
-for localization_dir in "$ROOT_DIR"/Sources/OmniDockCore/Resources/*.lproj; do
-  [[ -d "$localization_dir" ]] || continue
-  /usr/bin/ditto "$localization_dir" "$APP_RESOURCES/$(basename "$localization_dir")"
-done
 
-cat >"$INFO_PLIST" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleDevelopmentRegion</key>
-  <string>en</string>
-  <key>CFBundleDisplayName</key>
-  <string>$APP_NAME</string>
-  <key>CFBundleExecutable</key>
-  <string>$APP_NAME</string>
-  <key>CFBundleIconFile</key>
-  <string>AppIcon</string>
-  <key>CFBundleIconName</key>
-  <string>AppIcon</string>
-  <key>CFBundleIdentifier</key>
-  <string>$BUNDLE_ID</string>
-  <key>CFBundleInfoDictionaryVersion</key>
-  <string>6.0</string>
-  <key>CFBundleLocalizations</key>
-  <array>
-    <string>en</string>
-    <string>zh-Hans</string>
-  </array>
-  <key>CFBundleName</key>
-  <string>$APP_NAME</string>
-  <key>CFBundlePackageType</key>
-  <string>APPL</string>
-  <key>CFBundleShortVersionString</key>
-  <string>$VERSION</string>
-  <key>CFBundleVersion</key>
-  <string>$BUILD_NUMBER</string>
-  <key>ITSAppUsesNonExemptEncryption</key>
-  <false/>
-  <key>LSApplicationCategoryType</key>
-  <string>public.app-category.utilities</string>
-  <key>LSMinimumSystemVersion</key>
-  <string>$MIN_SYSTEM_VERSION</string>
-  <key>LSUIElement</key>
-  <true/>
-  <key>NSHighResolutionCapable</key>
-  <true/>
-  <key>NSHumanReadableCopyright</key>
-  <string>Copyright (c) 2026 Chengdu Quanzhan Technology Co., Ltd</string>
-  <key>NSInputMonitoringUsageDescription</key>
-  <string>OmniDock uses Input Monitoring permission to detect repeated Dock icon clicks.</string>
-  <key>NSPrincipalClass</key>
-  <string>NSApplication</string>
-  <key>NSScreenCaptureUsageDescription</key>
-  <string>OmniDock uses Screen Recording permission to create window thumbnails, including live images and one-time static snapshots, above Dock icons.</string>
-</dict>
-</plist>
-PLIST
+/usr/bin/ditto "$ROOT_DIR/Resources/OmniDock-Development.entitlements" "$APP_ENTITLEMENTS"
+/usr/bin/ditto \
+  "$ROOT_DIR/Resources/OmniDockFinderSync.entitlements" \
+  "$FINDER_EXTENSION_ENTITLEMENTS"
+/usr/bin/plutil \
+  -replace "com\\.apple\\.security\\.application-groups.0" \
+  -string "$APP_GROUP_IDENTIFIER" \
+  "$APP_ENTITLEMENTS"
+/usr/bin/plutil \
+  -replace "com\\.apple\\.security\\.application-groups.0" \
+  -string "$APP_GROUP_IDENTIFIER" \
+  "$FINDER_EXTENSION_ENTITLEMENTS"
+
+[[ "$(/usr/bin/plutil -extract "com\\.apple\\.security\\.app-sandbox" raw "$APP_ENTITLEMENTS" 2>/dev/null || true)" != "true" ]] \
+  || die "direct-distribution main app must not be sandboxed"
+[[ "$(/usr/bin/plutil -extract "com\\.apple\\.security\\.app-sandbox" raw "$FINDER_EXTENSION_ENTITLEMENTS")" == "true" ]] \
+  || die "Finder extension must be sandboxed"
 
 plist_value() {
   /usr/libexec/PlistBuddy -c "Print :$2" "$1"
@@ -517,7 +501,10 @@ verify_bundle_resources() {
   for required_file in \
     "$contents/Info.plist" \
     "$contents/MacOS/$APP_NAME" \
+    "$contents/PlugIns/$FINDER_EXTENSION_NAME.appex/Contents/Info.plist" \
+    "$contents/PlugIns/$FINDER_EXTENSION_NAME.appex/Contents/MacOS/$FINDER_EXTENSION_NAME" \
     "$resources/AppIcon.icns" \
+    "$resources/Assets.car" \
     "$resources/$BUNDLED_LICENSE_NAME" \
     "$resources/PrivacyInfo.xcprivacy" \
     "$resources/en.lproj/AppStrings.strings" \
@@ -528,7 +515,12 @@ verify_bundle_resources() {
   done
 
   [[ -x "$contents/MacOS/$APP_NAME" ]] || die "app executable is not executable"
+  [[ -x "$contents/PlugIns/$FINDER_EXTENSION_NAME.appex/Contents/MacOS/$FINDER_EXTENSION_NAME" ]] \
+    || die "Finder extension executable is not executable"
   /usr/bin/plutil -lint "$contents/Info.plist" >/dev/null
+  /usr/bin/plutil \
+    -lint "$contents/PlugIns/$FINDER_EXTENSION_NAME.appex/Contents/Info.plist" \
+    >/dev/null
   /usr/bin/plutil -lint "$resources/PrivacyInfo.xcprivacy" >/dev/null
   /usr/bin/plutil -lint "$resources/en.lproj/AppStrings.strings" >/dev/null
   /usr/bin/plutil -lint "$resources/en.lproj/InfoPlist.strings" >/dev/null
@@ -540,6 +532,38 @@ verify_bundle_resources() {
   assert_plist_value "$contents/Info.plist" CFBundleShortVersionString "$VERSION"
   assert_plist_value "$contents/Info.plist" CFBundleVersion "$BUILD_NUMBER"
   assert_plist_value "$contents/Info.plist" LSMinimumSystemVersion "$MIN_SYSTEM_VERSION"
+  assert_plist_value \
+    "$contents/Info.plist" \
+    OmniDockAppGroupIdentifier \
+    "$APP_GROUP_IDENTIFIER"
+  assert_plist_value \
+    "$contents/PlugIns/$FINDER_EXTENSION_NAME.appex/Contents/Info.plist" \
+    CFBundleIdentifier \
+    "$FINDER_EXTENSION_BUNDLE_ID"
+  assert_plist_value \
+    "$contents/PlugIns/$FINDER_EXTENSION_NAME.appex/Contents/Info.plist" \
+    CFBundleShortVersionString \
+    "$VERSION"
+  assert_plist_value \
+    "$contents/PlugIns/$FINDER_EXTENSION_NAME.appex/Contents/Info.plist" \
+    CFBundleVersion \
+    "$BUILD_NUMBER"
+  assert_plist_value \
+    "$contents/PlugIns/$FINDER_EXTENSION_NAME.appex/Contents/Info.plist" \
+    LSMinimumSystemVersion \
+    "$MIN_SYSTEM_VERSION"
+  assert_plist_value \
+    "$contents/PlugIns/$FINDER_EXTENSION_NAME.appex/Contents/Info.plist" \
+    NSExtension:NSExtensionPointIdentifier \
+    "com.apple.FinderSync"
+  assert_plist_value \
+    "$contents/PlugIns/$FINDER_EXTENSION_NAME.appex/Contents/Info.plist" \
+    NSExtension:NSExtensionPrincipalClass \
+    "$FINDER_EXTENSION_NAME.FinderMenuExtension"
+  assert_plist_value \
+    "$contents/PlugIns/$FINDER_EXTENSION_NAME.appex/Contents/Info.plist" \
+    OmniDockAppGroupIdentifier \
+    "$APP_GROUP_IDENTIFIER"
   verify_privacy_reason \
     "$resources/PrivacyInfo.xcprivacy" \
     NSPrivacyAccessedAPICategoryUserDefaults \
@@ -549,18 +573,72 @@ verify_bundle_resources() {
     NSPrivacyAccessedAPICategorySystemBootTime \
     35F9.1
   verify_architectures "$contents/MacOS/$APP_NAME"
+  verify_architectures \
+    "$contents/PlugIns/$FINDER_EXTENSION_NAME.appex/Contents/MacOS/$FINDER_EXTENSION_NAME"
+}
+
+verify_developer_id_signature() {
+  local bundle="$1"
+  local label="$2"
+  local details
+
+  /usr/bin/codesign --verify --strict --verbose=4 "$bundle"
+  details="$(/usr/bin/codesign --display --verbose=4 "$bundle" 2>&1)"
+  [[ "$details" == *"Authority=Developer ID Application:"* ]] \
+    || die "$label is not signed with Developer ID Application"
+  [[ "$details" == *"runtime"* ]] || die "$label hardened runtime is not enabled"
+  [[ "$details" == *"Timestamp="* ]] || die "$label signature has no secure timestamp"
 }
 
 verify_signed_app() {
   local bundle="$1"
-  local details
+  local extension="$bundle/Contents/PlugIns/$FINDER_EXTENSION_NAME.appex"
+  local app_entitlements="$WORK_DIR/signed-app-entitlements.plist"
+  local extension_entitlements="$WORK_DIR/signed-extension-entitlements.plist"
+  local app_sandbox
+  local extension_sandbox
+  local app_group
+  local extension_group
 
   /usr/bin/codesign --verify --deep --strict --verbose=4 "$bundle"
-  details="$(/usr/bin/codesign --display --verbose=4 "$bundle" 2>&1)"
-  [[ "$details" == *"Authority=Developer ID Application:"* ]] \
-    || die "app is not signed with Developer ID Application"
-  [[ "$details" == *"runtime"* ]] || die "hardened runtime is not enabled"
-  [[ "$details" == *"Timestamp="* ]] || die "app signature has no secure timestamp"
+  verify_developer_id_signature "$extension" "Finder extension"
+  verify_developer_id_signature "$bundle" "app"
+
+  /usr/bin/codesign -d --entitlements :- "$bundle" >"$app_entitlements" 2>/dev/null
+  /usr/bin/codesign \
+    -d --entitlements :- "$extension" >"$extension_entitlements" 2>/dev/null
+  /usr/bin/plutil -lint "$app_entitlements" >/dev/null
+  /usr/bin/plutil -lint "$extension_entitlements" >/dev/null
+
+  app_sandbox="$(
+    /usr/bin/plutil \
+      -extract "com\\.apple\\.security\\.app-sandbox" raw \
+      "$app_entitlements" 2>/dev/null || true
+  )"
+  extension_sandbox="$(
+    /usr/bin/plutil \
+      -extract "com\\.apple\\.security\\.app-sandbox" raw \
+      "$extension_entitlements"
+  )"
+  app_group="$(
+    /usr/bin/plutil \
+      -extract "com\\.apple\\.security\\.application-groups.0" raw \
+      "$app_entitlements"
+  )"
+  extension_group="$(
+    /usr/bin/plutil \
+      -extract "com\\.apple\\.security\\.application-groups.0" raw \
+      "$extension_entitlements"
+  )"
+
+  [[ "$app_sandbox" != "true" ]] \
+    || die "direct-distribution main app must not be sandboxed"
+  [[ "$extension_sandbox" == "true" ]] \
+    || die "Finder extension signature is missing App Sandbox"
+  [[ "$app_group" == "$APP_GROUP_IDENTIFIER" ]] \
+    || die "main app signature has an unexpected App Group"
+  [[ "$extension_group" == "$APP_GROUP_IDENTIFIER" ]] \
+    || die "Finder extension signature has an unexpected App Group"
 }
 
 notarize() {
@@ -636,11 +714,19 @@ verify_bundle_resources "$APP_BUNDLE"
 
 log "Clearing extended attributes and signing app"
 /usr/bin/xattr -cr "$APP_BUNDLE"
-/usr/bin/xattr -cr "$DSYM_BUNDLE"
+/usr/bin/xattr -cr "$DSYM_DIRECTORY"
 /usr/bin/codesign \
   --force \
   --options runtime \
   --timestamp \
+  --entitlements "$FINDER_EXTENSION_ENTITLEMENTS" \
+  --sign "$SIGN_IDENTITY" \
+  "$FINDER_EXTENSION"
+/usr/bin/codesign \
+  --force \
+  --options runtime \
+  --timestamp \
+  --entitlements "$APP_ENTITLEMENTS" \
   --sign "$SIGN_IDENTITY" \
   "$APP_BUNDLE"
 verify_signed_app "$APP_BUNDLE"
@@ -659,7 +745,7 @@ log "Creating public ZIP and private dSYM archive"
 [[ -z "$(git -C "$ROOT_DIR" status --porcelain=v1 --untracked-files=all)" ]] \
   || die "worktree changed while the release was being built"
 /usr/bin/ditto -c -k --keepParent "$APP_BUNDLE" "$APP_ZIP"
-/usr/bin/ditto -c -k --keepParent "$DSYM_BUNDLE" "$DSYM_ZIP"
+/usr/bin/ditto -c -k "$DSYM_DIRECTORY" "$DSYM_ZIP"
 
 log "Creating, signing, and notarizing DMG"
 mkdir -p "$DMG_STAGING_DIR"

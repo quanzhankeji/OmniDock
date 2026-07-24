@@ -1,8 +1,9 @@
-# OmniDock 1.0
+# OmniDock 1.1.0
 
-- Preview and manage application windows from the Dock and Command-Tab.
-- Switch directly between windows with the optional Option-Tab window switcher.
-- Assign per-application shortcuts to launch, bring forward, or hide applications.
-- Add optional Finder commands for copying paths and creating empty TXT or Markdown files in supported local folders.
+- Add configurable Finder context menu actions for supported local folders.
+- Copy the current folder path or selected item paths.
+- Create empty files from built-in or custom file types.
+- Open selected files with applications chosen in OmniDock settings.
+- Improve Finder extension permissions and settings.
 
-Finder commands are available only in local locations that Finder Sync can monitor. macOS does not expose third-party Finder Sync menus in File Provider-managed locations, including Desktop and Documents when those folders are managed by iCloud Drive.
+Finder actions are available only in locations that Finder Sync can monitor. macOS does not expose third-party Finder Sync menus in File Provider-managed locations, including Desktop and Documents when those folders are managed by iCloud Drive.

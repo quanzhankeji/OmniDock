@@ -11,7 +11,7 @@ OmniDock is a local macOS menu bar utility that makes Dock window switching fast
 - Drag a file over a preview thumbnail to raise that window and continue dropping the file.
 - Optionally switch between individual windows with Alt-Tab (Option-Tab), using static previews and the same close and quit controls.
 - Assign per-app global shortcuts to launch, bring forward, or hide apps with the same toggle behavior.
-- Optionally add Finder right-click commands for creating an empty text file and copying the current or selected paths.
+- Optionally add configurable Finder right-click commands for copying paths, creating empty files, and opening selected items with chosen applications.
 - Avoid browser tab navigation shortcuts so those shortcuts stay with the browser.
 
 OmniDock does not include analytics, advertising SDKs, or third-party packages. It uses Apple system frameworks only.
@@ -62,7 +62,7 @@ For a local build that includes the Finder right-click extension, use:
 
 The Finder extension is off by default. Open `OD` > `Settings` > `Finder Extension`, then turn on `Enable`. macOS may open its extension management page; enable OmniDock there to let Finder load the menu.
 
-When enabled, right-clicking an empty area in a Finder Sync-monitored local folder offers **Copy Path** and a **New File** submenu with text and Markdown file choices. Right-clicking selected items offers **Copy Path** and copies every selected path on a separate line. New files are created in the selected folder as `NewFile.txt` or `NewFile.md`, with a number added when needed to avoid conflicts.
+When enabled, right-clicking an empty area in a Finder Sync-monitored local folder offers **Copy Path** and a configurable **New File** submenu. Text and Markdown are included by default, and additional file types can be added in OmniDock settings. Right-clicking selected items offers **Copy Path** and optional shortcuts for opening the selection with chosen applications. Copied selections place every path on a separate line, and new files use an available `NewFile.<extension>` name without overwriting existing files.
 
 Finder Sync menus are available only in locations that macOS lets third-party Finder Sync extensions monitor. They do not appear in File Provider-managed locations, including Desktop and Documents when those folders are managed by iCloud Drive.
 
