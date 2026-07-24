@@ -366,6 +366,43 @@ verify_dsym() {
   done
 }
 
+set_application_group_entitlement() {
+  local entitlements="$1"
+
+  /usr/libexec/PlistBuddy \
+    -c "Delete :com.apple.security.application-groups" \
+    "$entitlements" 2>/dev/null || true
+  /usr/libexec/PlistBuddy \
+    -c "Add :com.apple.security.application-groups array" \
+    "$entitlements"
+  /usr/libexec/PlistBuddy \
+    -c "Add :com.apple.security.application-groups:0 string $APP_GROUP_IDENTIFIER" \
+    "$entitlements"
+}
+
+verify_application_group_entitlement() {
+  local entitlements="$1"
+  local label="$2"
+  local app_group
+  local unexpected_group
+
+  app_group="$(
+    /usr/libexec/PlistBuddy \
+      -c "Print :com.apple.security.application-groups:0" \
+      "$entitlements"
+  )"
+  unexpected_group="$(
+    /usr/libexec/PlistBuddy \
+      -c "Print :com.apple.security.application-groups:1" \
+      "$entitlements" 2>/dev/null || true
+  )"
+
+  [[ "$app_group" == "$APP_GROUP_IDENTIFIER" ]] \
+    || die "$label has an unexpected App Group"
+  [[ -z "$unexpected_group" ]] \
+    || die "$label must contain exactly one App Group"
+}
+
 log "Building unsigned Universal 2 app and Finder extension"
 /usr/bin/xcodebuild \
   -project "$ROOT_DIR/OmniDock.xcodeproj" \
@@ -421,14 +458,12 @@ rm -f "$APP_RESOURCES/COPYING.txt" "$APP_RESOURCES/EULA.txt"
 /usr/bin/ditto \
   "$ROOT_DIR/Resources/OmniDockFinderSync.entitlements" \
   "$FINDER_EXTENSION_ENTITLEMENTS"
-/usr/bin/plutil \
-  -replace "com\\.apple\\.security\\.application-groups.0" \
-  -string "$APP_GROUP_IDENTIFIER" \
-  "$APP_ENTITLEMENTS"
-/usr/bin/plutil \
-  -replace "com\\.apple\\.security\\.application-groups.0" \
-  -string "$APP_GROUP_IDENTIFIER" \
-  "$FINDER_EXTENSION_ENTITLEMENTS"
+set_application_group_entitlement "$APP_ENTITLEMENTS"
+set_application_group_entitlement "$FINDER_EXTENSION_ENTITLEMENTS"
+verify_application_group_entitlement "$APP_ENTITLEMENTS" "main app entitlements"
+verify_application_group_entitlement \
+  "$FINDER_EXTENSION_ENTITLEMENTS" \
+  "Finder extension entitlements"
 
 [[ "$(/usr/bin/plutil -extract "com\\.apple\\.security\\.app-sandbox" raw "$APP_ENTITLEMENTS" 2>/dev/null || true)" != "true" ]] \
   || die "direct-distribution main app must not be sandboxed"
@@ -597,8 +632,6 @@ verify_signed_app() {
   local extension_entitlements="$WORK_DIR/signed-extension-entitlements.plist"
   local app_sandbox
   local extension_sandbox
-  local app_group
-  local extension_group
 
   /usr/bin/codesign --verify --deep --strict --verbose=4 "$bundle"
   verify_developer_id_signature "$extension" "Finder extension"
@@ -620,25 +653,16 @@ verify_signed_app() {
       -extract "com\\.apple\\.security\\.app-sandbox" raw \
       "$extension_entitlements"
   )"
-  app_group="$(
-    /usr/bin/plutil \
-      -extract "com\\.apple\\.security\\.application-groups.0" raw \
-      "$app_entitlements"
-  )"
-  extension_group="$(
-    /usr/bin/plutil \
-      -extract "com\\.apple\\.security\\.application-groups.0" raw \
-      "$extension_entitlements"
-  )"
-
   [[ "$app_sandbox" != "true" ]] \
     || die "direct-distribution main app must not be sandboxed"
   [[ "$extension_sandbox" == "true" ]] \
     || die "Finder extension signature is missing App Sandbox"
-  [[ "$app_group" == "$APP_GROUP_IDENTIFIER" ]] \
-    || die "main app signature has an unexpected App Group"
-  [[ "$extension_group" == "$APP_GROUP_IDENTIFIER" ]] \
-    || die "Finder extension signature has an unexpected App Group"
+  verify_application_group_entitlement \
+    "$app_entitlements" \
+    "main app signature"
+  verify_application_group_entitlement \
+    "$extension_entitlements" \
+    "Finder extension signature"
 }
 
 notarize() {

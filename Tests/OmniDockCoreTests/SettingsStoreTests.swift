@@ -73,6 +73,58 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertEqual(reloaded.appHotkeyBindings.first?.recordedShortcut, RecordedShortcut(keyCode: 45, modifierFlags: 1_048_576))
     }
 
+    func testMigratesSupportedSettingsFromSandboxPreferencesOnce() throws {
+        let defaults = isolatedDefaults()
+        let binding = AppHotkeyBinding(
+            appName: "Sample",
+            bundleURLString: "file:///Applications/Sample.app",
+            bundleIdentifier: "com.example.Sample",
+            keyCode: 18,
+            modifierFlags: 1_048_576
+        )
+        let bindingData = try JSONEncoder().encode([binding])
+        let bookmarkData = Data([1, 2, 3])
+        let sandboxPreferences: [String: Any] = [
+            "showDockPreviews": true,
+            "toggleAppVisibilityOnDockClick": true,
+            "hotkeysEnabled": true,
+            "hotkeyAssignments": bindingData,
+            "finderExtensionEnabled": true,
+            "finderExtensionDirectoryBookmarks": bookmarkData,
+            "NSStatusItem Preferred Position Item-0": 999
+        ]
+
+        let store = SettingsStore(
+            defaults: defaults,
+            livePreviewLimitProvider: { 8 },
+            sandboxPreferences: sandboxPreferences
+        )
+
+        XCTAssertTrue(store.showDockPreviews)
+        XCTAssertTrue(store.toggleAppVisibilityOnDockClick)
+        XCTAssertTrue(store.hotkeysEnabled)
+        XCTAssertEqual(store.appHotkeyBindings, [binding])
+        XCTAssertTrue(store.finderExtensionEnabled)
+        XCTAssertEqual(
+            defaults.data(forKey: "finderExtensionDirectoryBookmarks"),
+            bookmarkData
+        )
+        XCTAssertNil(defaults.object(forKey: "NSStatusItem Preferred Position Item-0"))
+        XCTAssertEqual(defaults.integer(forKey: "sandboxSettingsMigrationVersion"), 1)
+
+        _ = SettingsStore(
+            defaults: defaults,
+            livePreviewLimitProvider: { 8 },
+            sandboxPreferences: [
+                "showDockPreviews": false,
+                "hotkeysEnabled": false
+            ]
+        )
+
+        XCTAssertTrue(store.showDockPreviews)
+        XCTAssertTrue(store.hotkeysEnabled)
+    }
+
     func testMigratesLegacyMinimizePreference() {
         let defaults = isolatedDefaults()
         defaults.set(false, forKey: "minimizeOnRepeatedDockClick")

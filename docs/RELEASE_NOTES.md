@@ -1,9 +1,9 @@
-# OmniDock 1.1.0
+# OmniDock 1.1.1
 
-- Add configurable Finder context menu actions for supported local folders.
-- Copy the current folder path or selected item paths.
-- Create empty files from built-in or custom file types.
-- Open selected files with applications chosen in OmniDock settings.
-- Improve Finder extension permissions and settings.
+- Fix Finder extension App Group configuration for direct installations.
+- Keep Finder actions independent from Accessibility permission.
+- Restore enabled features automatically after their permissions return.
+- Preserve settings when moving from sandboxed builds to direct downloads.
+- Install the complete app with its Finder extension in local builds.
 
-Finder actions are available only in locations that Finder Sync can monitor. macOS does not expose third-party Finder Sync menus in File Provider-managed locations, including Desktop and Documents when those folders are managed by iCloud Drive.
+Finder actions remain available only in locations that Finder Sync can monitor. macOS does not expose third-party Finder Sync menus in File Provider-managed locations, including Desktop and Documents when those folders are managed by iCloud Drive.

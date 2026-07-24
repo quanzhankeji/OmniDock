@@ -5,8 +5,8 @@ MODE="${1:-run}"
 APP_NAME="OmniDock"
 BUNDLE_ID="com.quanzhankeji.OmniDock"
 MIN_SYSTEM_VERSION="12.3"
-MARKETING_VERSION="1.1.0"
-BUILD_NUMBER="4"
+MARKETING_VERSION="1.1.1"
+BUILD_NUMBER="8"
 
 usage() {
   echo "usage: $0 [run|--stage|--debug|--logs|--telemetry|--verify|--install|--install-finder-extension]" >&2
@@ -226,16 +226,32 @@ install_app() {
 }
 
 development_team() {
+  local identity
+  local identities=()
+  local subject
+  local team
+
   if [[ -n "${OMNIDOCK_DEVELOPMENT_TEAM:-}" ]]; then
     printf '%s\n' "$OMNIDOCK_DEVELOPMENT_TEAM"
     return
   fi
 
-  if [[ -d "$INSTALLED_APP" ]]; then
-    /usr/bin/codesign -dvvv "$INSTALLED_APP" 2>&1 \
-      | /usr/bin/sed -n 's/^TeamIdentifier=//p' \
-      | /usr/bin/head -n 1
-  fi
+  while IFS= read -r identity; do
+    [[ -n "$identity" ]] && identities+=("$identity")
+  done < <(
+    /usr/bin/security find-identity -p codesigning -v 2>/dev/null \
+      | /usr/bin/awk -F '"' '/Apple Development:/ { print $2 }'
+  )
+
+  [[ "${#identities[@]}" -eq 1 ]] || return
+  subject="$(
+    /usr/bin/security find-certificate -c "${identities[0]}" -p 2>/dev/null \
+      | /usr/bin/openssl x509 -noout -subject -nameopt RFC2253 2>/dev/null
+  )"
+  team="$(
+    /usr/bin/sed -n 's/.*OU=\([A-Z0-9]\{10\}\).*/\1/p' <<<"$subject"
+  )"
+  [[ "$team" =~ ^[A-Z0-9]{10}$ ]] && printf '%s\n' "$team"
 }
 
 verify_finder_extension_bundle() {
@@ -339,7 +355,7 @@ install_finder_extension_app() {
 
 case "$MODE" in
   run)
-    install_app
+    install_finder_extension_app
     ;;
   --stage|stage)
     open_app
@@ -362,7 +378,7 @@ case "$MODE" in
     echo "Verified staged app: $APP_BUNDLE"
     ;;
   --install|install)
-    install_app
+    install_finder_extension_app
     ;;
   --install-finder-extension|install-finder-extension)
     install_finder_extension_app

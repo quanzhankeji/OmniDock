@@ -40,19 +40,19 @@ brew install --cask omnidock
 ./script/build_and_run.sh
 ```
 
-The script builds a stripped release executable by default, stages an `OmniDock.app` bundle, signs it with a local Apple Development signing identity, installs it to `/Applications/OmniDock.app`, and launches it.
+The script builds the complete `OmniDock.app`, including its Finder Sync extension, signs both targets with the local Apple Development identity, installs the app to `/Applications`, and launches it.
 
 Building requires Xcode Command Line Tools or Xcode with a Swift 5.9-compatible toolchain. If no Apple Development identity is available, the script uses ad-hoc signing and warns that macOS permission grants may reset after rebuilding. If more than one development identity is available, set `OMNIDOCK_SIGN_IDENTITY` explicitly.
 
 Set `OMNIDOCK_APP_DIR` to change the staging directory. Set `OMNIDOCK_BUILD_CONFIGURATION=debug` to force a debug build.
 
-To install a local copy into Applications:
+To install the complete local app into Applications:
 
 ```bash
 ./script/build_and_run.sh --install
 ```
 
-For a local build that includes the Finder right-click extension, use:
+The explicit Finder extension command remains available as an alias:
 
 ```bash
 ./script/build_and_run.sh --install-finder-extension
