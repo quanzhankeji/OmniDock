@@ -15,6 +15,8 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(store.minimizeWindowsOnDockClickInsteadOfHide)
         XCTAssertTrue(store.hotkeysEnabled)
         XCTAssertFalse(store.finderExtensionEnabled)
+        XCTAssertFalse(store.clipboardHistoryEnabled)
+        XCTAssertEqual(store.clipboardHistoryLimit, 200)
         XCTAssertEqual(store.appLanguage, .system)
         XCTAssertEqual(store.appAppearance, .system)
         XCTAssertFalse(store.permissionOnboardingCompleted)
@@ -36,6 +38,8 @@ final class SettingsStoreTests: XCTestCase {
         store.minimizeWindowsOnDockClickInsteadOfHide = true
         store.hotkeysEnabled = false
         store.finderExtensionEnabled = true
+        store.clipboardHistoryEnabled = true
+        store.clipboardHistoryLimit = 350
         store.appLanguage = .en
         store.appAppearance = .dark
         store.permissionOnboardingCompleted = true
@@ -62,6 +66,8 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(reloaded.minimizeWindowsOnDockClickInsteadOfHide)
         XCTAssertFalse(reloaded.hotkeysEnabled)
         XCTAssertTrue(reloaded.finderExtensionEnabled)
+        XCTAssertTrue(reloaded.clipboardHistoryEnabled)
+        XCTAssertEqual(reloaded.clipboardHistoryLimit, 350)
         XCTAssertEqual(reloaded.appLanguage, .en)
         XCTAssertEqual(reloaded.appAppearance, .dark)
         XCTAssertTrue(reloaded.permissionOnboardingCompleted)
@@ -189,6 +195,8 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(SettingsChange.dockClick.affectsDockInteraction)
         XCTAssertTrue(SettingsChange.windowCycle.affectsWindowCycle)
         XCTAssertTrue(SettingsChange.hotkeys.affectsAppHotkeys)
+        XCTAssertTrue(SettingsChange.clipboardHistory.affectsAppHotkeys)
+        XCTAssertTrue(SettingsChange.clipboardHistory.affectsClipboardHistory)
     }
 
     private func isolatedDefaults() -> UserDefaults {

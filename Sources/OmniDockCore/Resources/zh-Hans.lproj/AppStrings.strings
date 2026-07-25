@@ -14,6 +14,7 @@
 "tabPreview" = "预览";
 "tabHotkeys" = "快捷键";
 "tabFinderExtension" = "右键扩展";
+"tabClipboardHistory" = "剪贴板历史";
 "menuSettings" = "设置";
 "menuHotkeys" = "快捷键";
 "menuQuit" = "退出";
@@ -127,6 +128,33 @@
 "hotkeySystemConflict" = "这个快捷键已被 macOS 系统使用，请换一个组合。";
 "hotkeyRegistrationOccupied" = "这个快捷键已被系统或其它应用占用，请换一个组合。";
 "hotkeyRegistrationFailed" = "这个快捷键注册失败，请换一个组合。";
+"hotkeyReservedForClipboardHistory" = "剪贴板历史启用时会占用这个快捷键。";
+
+"clipboardEnableTitle" = "启用剪贴板历史";
+"clipboardEnableDetail" = "在本机保存并搜索复制过的文本、图片、链接和文件。";
+"clipboardShortcutTitle" = "键盘快捷键";
+"clipboardShortcutDetail" = "按下 ⌘⇧C 打开或关闭剪贴板历史。";
+"clipboardShortcutConflict" = "Command-Shift-C 已被 macOS、其它应用或 OmniDock 应用快捷键占用。";
+"clipboardLimitTitle" = "历史数量";
+"clipboardLimitDetail" = "保留最近 1 到 999 条剪贴板记录。";
+"clipboardPrivacyNote" = "剪贴板历史只保存在本机；临时、保密和自动生成的剪贴板内容不会被保存。";
+"clipboardSearchPlaceholder" = "搜索剪贴板历史";
+"clipboardEmpty" = "还没有剪贴板历史";
+"clipboardClearAll" = "全部清空";
+"clipboardClearTitle" = "清空剪贴板历史？";
+"clipboardClearDetail" = "此操作会永久删除所有已保存的剪贴板记录。";
+"clipboardCopy" = "复制";
+"clipboardDelete" = "删除";
+"clipboardImage" = "图片";
+"clipboardImageCount" = "%d 张图片";
+"clipboardUnknownContent" = "剪贴板内容";
+"clipboardStorageUnavailable" = "无法将剪贴板历史保存到磁盘；本次运行的新记录只会保留在内存中。";
+"clipboardCopyFailed" = "无法复制这条历史记录。";
+"clipboardPasteNeedsAccessibility" = "已复制；自动粘贴需要辅助功能权限。";
+"clipboardPreviewFirstCopied" = "首次复制：%@";
+"clipboardPreviewLastCopied" = "最近复制：%@";
+"clipboardPreviewCopyCount" = "复制次数：%d";
+"clipboardPreviewFiles" = "文件";
 
 "pickerTitle" = "选择应用";
 "pickerSearchPlaceholder" = "搜索应用";

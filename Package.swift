@@ -21,9 +21,11 @@ let package = Package(
                 .linkedFramework("AppKit"),
                 .linkedFramework("ApplicationServices"),
                 .linkedFramework("Carbon"),
+                .linkedFramework("CoreData"),
                 .linkedFramework("CoreGraphics"),
                 .linkedFramework("CoreImage"),
                 .linkedFramework("CoreMedia"),
+                .linkedFramework("CryptoKit"),
                 .linkedFramework("FinderSync"),
                 .linkedFramework("IOKit"),
                 .linkedFramework("ScreenCaptureKit")

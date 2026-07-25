@@ -1,8 +1,8 @@
 # OmniDock Privacy Policy
 
-Effective date: July 15, 2026
+Effective date: July 25, 2026
 
-OmniDock is a local macOS utility for Dock window previews, Dock click window toggling, Finder right-click commands, and per-app keyboard shortcuts. OmniDock is currently distributed as source code only. This policy explains what data the app handles and how it is used.
+OmniDock is a local macOS utility for Dock window previews, Dock click window toggling, Finder right-click commands, per-app keyboard shortcuts, and optional clipboard history. This policy explains what data the app handles and how it is used.
 
 ## Data Collection
 
@@ -18,11 +18,13 @@ When OmniDock captures one-time snapshots before hiding an app, eligible preview
 
 The optional Finder extension reads only the current right-click target or the items selected in Finder to build its menu. Copy commands place the requested paths on the local pasteboard. New File sends a short-lived request identifying the Finder-selected destination folder to OmniDock's containing app; the request is removed when consumed and expires after five minutes. If macOS requires additional access, OmniDock asks the user to approve that folder or one of its parents and stores only the resulting security-scoped bookmark. OmniDock does not scan folders, index files, or retain the contents of those folders.
 
+Clipboard History is disabled by default. When the user enables it, OmniDock stores supported clipboard entries in the app's local Application Support directory. A history entry may contain copied text, rich text, HTML, links, image data, or file URLs, along with the source app's name and bundle identifier, the copy time, and a content fingerprint used for deduplication. Temporary, concealed, and automatically generated pasteboard entries are ignored. Clipboard history is not uploaded, can be limited from 1 to 999 entries, and can be deleted individually or cleared completely from the app.
+
 ## System Permissions
 
 OmniDock may request the following macOS permissions:
 
-- Accessibility: used to identify Dock items, raise windows, focus windows, and close previewed windows when requested.
+- Accessibility: used to identify Dock items, raise windows, focus windows, close previewed windows when requested, and perform automatic paste only when the user explicitly chooses that clipboard action.
 - Input Monitoring: used to detect Dock icon click gestures.
 - Screen Recording: used to generate window thumbnails, including live images and one-time static snapshots.
 

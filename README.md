@@ -12,6 +12,7 @@ OmniDock is a local macOS menu bar utility that makes Dock window switching fast
 - Optionally switch between individual windows with Alt-Tab (Option-Tab), using static previews and the same close and quit controls.
 - Assign per-app global shortcuts to launch, bring forward, or hide apps with the same toggle behavior.
 - Optionally add configurable Finder right-click commands for copying paths, creating empty files, and opening selected items with chosen applications.
+- Optionally keep a local, searchable clipboard history for text, formatted content, links, images, and files, opened with `Command-Shift-C`.
 - Avoid browser tab navigation shortcuts so those shortcuts stay with the browser.
 
 OmniDock does not include analytics, advertising SDKs, or third-party packages. It uses Apple system frameworks only.
@@ -66,6 +67,12 @@ When enabled, right-clicking an empty area in a Finder Sync-monitored local fold
 
 Finder Sync menus are available only in locations that macOS lets third-party Finder Sync extensions monitor. They do not appear in File Provider-managed locations, including Desktop and Documents when those folders are managed by iCloud Drive.
 
+## Clipboard History
+
+Clipboard History is off by default. Enable it from `OD` > `Settings` > `Clipboard History`. While enabled, OmniDock checks the system pasteboard for changes and stores supported entries locally on this Mac. Press `Command-Shift-C` to search the history, use the arrow keys to select an entry, and press Return to copy it back. Hold Option while confirming to paste into the app that was active before the history panel opened.
+
+Temporary, confidential, and automatically generated pasteboard entries are ignored. The history limit can be set from 1 to 999 entries, and individual entries or the entire history can be deleted from settings.
+
 To launch only the staged bundle:
 
 ```bash
@@ -94,7 +101,7 @@ Contributions are welcome under the process in [CONTRIBUTING.md](CONTRIBUTING.md
 
 ## Privacy
 
-OmniDock runs locally on your Mac. Preferences and shortcut bindings are stored locally. A shortcut binding includes the selected app's name, bundle identifier, application URL or path, shortcut keys, and enabled state.
+OmniDock runs locally on your Mac. Preferences, shortcut bindings, and optional clipboard history are stored locally. A shortcut binding includes the selected app's name, bundle identifier, application URL or path, shortcut keys, and enabled state. Clipboard History remains disabled until the user turns it on and can be cleared at any time.
 
 One-time preview snapshot cache entries expire 45 seconds after capture so hidden-window previews can be shown briefly. If a cached preview is open when its entry expires, OmniDock releases its displayed image references during the next preview validation pass. Preview images are not written to disk. OmniDock does not collect or transmit personal data.
 

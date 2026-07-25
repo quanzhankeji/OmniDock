@@ -72,7 +72,8 @@ enum ShortcutRecorderValidation {
         for shortcut: RecordedShortcut,
         existingBindings: [AppHotkeyBinding] = [],
         excluding excludedID: UUID? = nil,
-        systemShortcuts: Set<RecordedShortcut> = SystemHotkeyConflictChecker.enabledSystemShortcuts()
+        systemShortcuts: Set<RecordedShortcut> = SystemHotkeyConflictChecker.enabledSystemShortcuts(),
+        reservedShortcuts: Set<RecordedShortcut> = []
     ) -> String? {
         if let reason = unsupportedStoredModifierRejectionReason(for: shortcut) {
             return reason
@@ -84,6 +85,10 @@ enum ShortcutRecorderValidation {
 
         if let reason = minimumModifierRejectionReason(for: shortcut) {
             return reason
+        }
+
+        if reservedShortcuts.contains(shortcut) {
+            return AppStrings.text(.hotkeyReservedForClipboardHistory)
         }
 
         if let reason = HotkeyShortcutPolicy.rejectionReason(

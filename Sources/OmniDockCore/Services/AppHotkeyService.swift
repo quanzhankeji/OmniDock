@@ -69,12 +69,16 @@ public final class AppHotkeyService {
 
         var claimedShortcuts = Set<RecordedShortcut>()
         let systemShortcuts = SystemHotkeyConflictChecker.enabledSystemShortcuts()
+        let reservedShortcuts: Set<RecordedShortcut> = settings.clipboardHistoryEnabled
+            ? [ClipboardHistoryShortcut.recorded]
+            : []
         var registrations: [(AppHotkeyBinding, RecordedShortcut)] = []
         for binding in settings.appHotkeyBindings where binding.isEnabled {
             guard let shortcut = binding.recordedShortcut,
                   ShortcutRecorderValidation.rejectionReason(
                       for: shortcut,
-                      systemShortcuts: systemShortcuts
+                      systemShortcuts: systemShortcuts,
+                      reservedShortcuts: reservedShortcuts
                   ) == nil,
                   claimedShortcuts.insert(shortcut).inserted
             else {

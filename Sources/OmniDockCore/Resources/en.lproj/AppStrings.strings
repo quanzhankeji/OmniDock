@@ -14,6 +14,7 @@
 "tabPreview" = "Preview";
 "tabHotkeys" = "Hotkeys";
 "tabFinderExtension" = "Finder Extension";
+"tabClipboardHistory" = "Clipboard History";
 "menuSettings" = "Settings";
 "menuHotkeys" = "Hotkeys";
 "menuQuit" = "Quit";
@@ -127,6 +128,33 @@
 "hotkeySystemConflict" = "This shortcut is already used by macOS. Choose another combination.";
 "hotkeyRegistrationOccupied" = "This shortcut is already used by the system or another app. Choose another combination.";
 "hotkeyRegistrationFailed" = "Shortcut registration failed. Choose another combination.";
+"hotkeyReservedForClipboardHistory" = "This shortcut is reserved for Clipboard History while that feature is enabled.";
+
+"clipboardEnableTitle" = "Enable Clipboard History";
+"clipboardEnableDetail" = "Keep a searchable history of copied text, images, links, and files on this Mac.";
+"clipboardShortcutTitle" = "Keyboard Shortcut";
+"clipboardShortcutDetail" = "Press ⌘⇧C to open or close Clipboard History.";
+"clipboardShortcutConflict" = "Command-Shift-C is already used by macOS, another app, or an OmniDock app hotkey.";
+"clipboardLimitTitle" = "History Limit";
+"clipboardLimitDetail" = "Keep between 1 and 999 recent clipboard entries.";
+"clipboardPrivacyNote" = "Clipboard history stays on this Mac. Temporary, confidential, and automatically generated pasteboard content is not saved.";
+"clipboardSearchPlaceholder" = "Search clipboard history";
+"clipboardEmpty" = "No clipboard history yet";
+"clipboardClearAll" = "Clear All";
+"clipboardClearTitle" = "Clear Clipboard History?";
+"clipboardClearDetail" = "This permanently removes every saved clipboard entry.";
+"clipboardCopy" = "Copy";
+"clipboardDelete" = "Delete";
+"clipboardImage" = "Image";
+"clipboardImageCount" = "%d images";
+"clipboardUnknownContent" = "Clipboard content";
+"clipboardStorageUnavailable" = "Clipboard history could not be saved to disk. New entries will be kept only for this session.";
+"clipboardCopyFailed" = "Unable to copy this history item.";
+"clipboardPasteNeedsAccessibility" = "Copied. Automatic paste requires Accessibility permission.";
+"clipboardPreviewFirstCopied" = "First copied: %@";
+"clipboardPreviewLastCopied" = "Last copied: %@";
+"clipboardPreviewCopyCount" = "Copies: %d";
+"clipboardPreviewFiles" = "Files";
 
 "pickerTitle" = "Choose App";
 "pickerSearchPlaceholder" = "Search apps";

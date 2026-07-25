@@ -7,6 +7,8 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
     private let coordinator: DockInteractionCoordinator
     private let hotkeyRegistrationStatus: AppHotkeyRegistrationStatusStore
     private let windowCycleRegistrationStatus: WindowCycleRegistrationStatusStore
+    private let clipboardHistoryService: ClipboardHistoryService?
+    private let clipboardHistoryRegistrationStatus: ClipboardHistoryRegistrationStatus
     private let presentationCoordinator: ApplicationPresentationCoordinator
     private let onPermissionGateRequired: (PermissionFeature) -> Void
     private let onOpenPermissionOnboarding: () -> Void
@@ -18,6 +20,8 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
         coordinator: coordinator,
         hotkeyRegistrationStatus: hotkeyRegistrationStatus,
         windowCycleRegistrationStatus: windowCycleRegistrationStatus,
+        clipboardHistoryService: clipboardHistoryService,
+        clipboardHistoryRegistrationStatus: clipboardHistoryRegistrationStatus,
         presentationCoordinator: presentationCoordinator,
         onPermissionGateRequired: onPermissionGateRequired,
         onOpenPermissionOnboarding: onOpenPermissionOnboarding
@@ -29,6 +33,8 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
         coordinator: DockInteractionCoordinator,
         hotkeyRegistrationStatus: AppHotkeyRegistrationStatusStore,
         windowCycleRegistrationStatus: WindowCycleRegistrationStatusStore? = nil,
+        clipboardHistoryService: ClipboardHistoryService? = nil,
+        clipboardHistoryRegistrationStatus: ClipboardHistoryRegistrationStatus? = nil,
         onPermissionGateRequired: @escaping (PermissionFeature) -> Void,
         onOpenPermissionOnboarding: @escaping () -> Void = {}
     ) {
@@ -39,6 +45,9 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
             hotkeyRegistrationStatus: hotkeyRegistrationStatus,
             windowCycleRegistrationStatus: windowCycleRegistrationStatus
                 ?? WindowCycleRegistrationStatusStore(),
+            clipboardHistoryService: clipboardHistoryService,
+            clipboardHistoryRegistrationStatus: clipboardHistoryRegistrationStatus
+                ?? ClipboardHistoryRegistrationStatus(),
             presentationCoordinator: ApplicationPresentationCoordinator(),
             onPermissionGateRequired: onPermissionGateRequired,
             onOpenPermissionOnboarding: onOpenPermissionOnboarding
@@ -51,6 +60,8 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
         coordinator: DockInteractionCoordinator,
         hotkeyRegistrationStatus: AppHotkeyRegistrationStatusStore,
         windowCycleRegistrationStatus: WindowCycleRegistrationStatusStore,
+        clipboardHistoryService: ClipboardHistoryService? = nil,
+        clipboardHistoryRegistrationStatus: ClipboardHistoryRegistrationStatus? = nil,
         presentationCoordinator: ApplicationPresentationCoordinator,
         onPermissionGateRequired: @escaping (PermissionFeature) -> Void,
         onOpenPermissionOnboarding: @escaping () -> Void
@@ -60,6 +71,9 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
         self.coordinator = coordinator
         self.hotkeyRegistrationStatus = hotkeyRegistrationStatus
         self.windowCycleRegistrationStatus = windowCycleRegistrationStatus
+        self.clipboardHistoryService = clipboardHistoryService
+        self.clipboardHistoryRegistrationStatus = clipboardHistoryRegistrationStatus
+            ?? ClipboardHistoryRegistrationStatus()
         self.presentationCoordinator = presentationCoordinator
         self.onPermissionGateRequired = onPermissionGateRequired
         self.onOpenPermissionOnboarding = onOpenPermissionOnboarding
