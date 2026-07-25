@@ -14,6 +14,7 @@
 		D4ED1E90E64A329F70087940 /* AppAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12703A6B33AD1DCF8080FC73 /* AppAppearance.swift */; };
 		2145A12C734E8EC3CE14C5B4 /* AppHotkeyBinding.swift in Sources */ = {isa = PBXBuildFile; fileRef = B18F9E45D6B0D0F72B6296F5 /* AppHotkeyBinding.swift */; };
 		350841FA8C54AC4970114FFE /* AppLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78CC0AEA502E82DF49D99A06 /* AppLanguage.swift */; };
+		207EACC32A03FEF0ECA73ECB /* ClipboardHistoryRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72B6406929E3E5433D14D246 /* ClipboardHistoryRecord.swift */; };
 		A75D0D534051023B5E7A00B0 /* DockAppTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C32CE50C290DAC1E3808587 /* DockAppTarget.swift */; };
 		889A7784724953BBB9918F3A /* PreviewWindowInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 376F2272960824D6BAC50C6B /* PreviewWindowInfo.swift */; };
 		18EE1F35D72CF68A1A53A338 /* AppHotkeyRegistrationStatusStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19338243A57ECECAE299BE22 /* AppHotkeyRegistrationStatusStore.swift */; };
@@ -21,6 +22,9 @@
 		215983A2C66D3BE46DB11D4E /* AppLocalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = AACED853BFBA6434A2140D8F /* AppLocalization.swift */; };
 		4AC80169CFFF36CDE4D25817 /* ApplicationPresentationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E10EED6D6A911629989ECC7 /* ApplicationPresentationCoordinator.swift */; };
 		89182724F61B136567EF01D2 /* CGWindowDictionary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E00C378893CB08991CC38B /* CGWindowDictionary.swift */; };
+		EB24CA44E5E925CBAFA9B9D2 /* ClipboardHistoryCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACDDD18EF72F718165F4AEE /* ClipboardHistoryCodec.swift */; };
+		88433CD632897E2A9701AFCF /* ClipboardHistoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43C87C5B4CF8F120EABBA5AD /* ClipboardHistoryService.swift */; };
+		770FDD328B9797377E657550 /* ClipboardHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD15823E751D6633175D5FFD /* ClipboardHistoryStore.swift */; };
 		DB3C3B2AD9695840B551A626 /* CmdTabPreviewObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C4EB1D89238D6025CE26B38 /* CmdTabPreviewObserver.swift */; };
 		DD461374FA08ADFFCCB5AFA1 /* CmdTabPreviewService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E878B65A3DF0E8FA7E681D97 /* CmdTabPreviewService.swift */; };
 		7DFFB218B7CD5DDC50321F6F /* DisplayCoordinateConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0810B0CF8B8B494AADDCC2DC /* DisplayCoordinateConverter.swift */; };
@@ -63,6 +67,8 @@
 		ACC329CCA36B682B1C13F6F2 /* ApplicationPickerIconLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4C0C527186341931A5D33A /* ApplicationPickerIconLoader.swift */; };
 		50BDFA5890FCEE29216A091D /* ApplicationPickerWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F7B3B90E6D3D55F71A15F07 /* ApplicationPickerWindowController.swift */; };
 		A8862B835526D889CF75F05D /* ApplicationSelectionCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 562101DBA24FFAD470D3FB59 /* ApplicationSelectionCatalog.swift */; };
+		2C9D2B701CD558546501BCED /* ClipboardInspectorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3483CBD6B13CDB4562E9CD28 /* ClipboardInspectorPanel.swift */; };
+		BB936BB462FC57F1A89BEC22 /* ClipboardPaletteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 105E8920C60506E064E693A9 /* ClipboardPaletteController.swift */; };
 		72F6A12BB3E197ABCC29EEE3 /* FinderDocumentTypeFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B8EB8BBB990A69F07FBA8AC /* FinderDocumentTypeFormView.swift */; };
 		4B25A6E2CCE956FCA6803215 /* OmniDockTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B27BA2F9693182C1AD68617 /* OmniDockTheme.swift */; };
 		2E5446BE6F842A50575D5658 /* PermissionOnboardingWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE1FB8E57F55CD535BC669CD /* PermissionOnboardingWindowController.swift */; };
@@ -81,9 +87,11 @@
 		55FBC9A47D2AA15E4B465D15 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9694B95F4FBF087BF05D19FB /* AppKit.framework */; };
 		C844FAEF0692AF76F8987325 /* ApplicationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B5BD692039D91AE04FEBC310 /* ApplicationServices.framework */; };
 		1140BFE5BC906A3C03E724B0 /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8655F244D0DBE899D1CB49B8 /* Carbon.framework */; };
+		C1B06805AC7BF6E0A8ADF174 /* CoreData.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7CDE03D27B379DFC124900C1 /* CoreData.framework */; };
 		190482F86594E50C520ECD96 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = FB95B506FAA940469C15D964 /* CoreGraphics.framework */; };
 		FEE3C5941D2A8E78F8DCCBF5 /* CoreImage.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AC2446436B7AE5A9EC884AD4 /* CoreImage.framework */; };
 		34DB4B2625A7C6BBA0BA6D7C /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F27031DFE9CE9368FFA54C1B /* CoreMedia.framework */; };
+		8435C4E4C7D38097D244A2D3 /* CryptoKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E58567BD59BB1D6E1C32CE0 /* CryptoKit.framework */; };
 		0D93FEAA735A8D683EE82E0E /* FinderSync.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 64C86E046410F4E6C6D059AB /* FinderSync.framework */; };
 		88881090E765C6BA7C7B0F76 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 20530C1F3D99DF1367A53B4B /* IOKit.framework */; };
 		2315E02A7D31A3AF943E2C42 /* ScreenCaptureKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 00705383266DD4C2CCC5547B /* ScreenCaptureKit.framework */; };
@@ -104,6 +112,7 @@
 		12703A6B33AD1DCF8080FC73 /* AppAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Models/AppAppearance.swift"; sourceTree = SOURCE_ROOT; };
 		B18F9E45D6B0D0F72B6296F5 /* AppHotkeyBinding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Models/AppHotkeyBinding.swift"; sourceTree = SOURCE_ROOT; };
 		78CC0AEA502E82DF49D99A06 /* AppLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Models/AppLanguage.swift"; sourceTree = SOURCE_ROOT; };
+		72B6406929E3E5433D14D246 /* ClipboardHistoryRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Models/ClipboardHistoryRecord.swift"; sourceTree = SOURCE_ROOT; };
 		9C32CE50C290DAC1E3808587 /* DockAppTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Models/DockAppTarget.swift"; sourceTree = SOURCE_ROOT; };
 		376F2272960824D6BAC50C6B /* PreviewWindowInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Models/PreviewWindowInfo.swift"; sourceTree = SOURCE_ROOT; };
 		19338243A57ECECAE299BE22 /* AppHotkeyRegistrationStatusStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/AppHotkeyRegistrationStatusStore.swift"; sourceTree = SOURCE_ROOT; };
@@ -111,6 +120,9 @@
 		AACED853BFBA6434A2140D8F /* AppLocalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/AppLocalization.swift"; sourceTree = SOURCE_ROOT; };
 		2E10EED6D6A911629989ECC7 /* ApplicationPresentationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/ApplicationPresentationCoordinator.swift"; sourceTree = SOURCE_ROOT; };
 		27E00C378893CB08991CC38B /* CGWindowDictionary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/CGWindowDictionary.swift"; sourceTree = SOURCE_ROOT; };
+		4ACDDD18EF72F718165F4AEE /* ClipboardHistoryCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/ClipboardHistoryCodec.swift"; sourceTree = SOURCE_ROOT; };
+		43C87C5B4CF8F120EABBA5AD /* ClipboardHistoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/ClipboardHistoryService.swift"; sourceTree = SOURCE_ROOT; };
+		CD15823E751D6633175D5FFD /* ClipboardHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/ClipboardHistoryStore.swift"; sourceTree = SOURCE_ROOT; };
 		7C4EB1D89238D6025CE26B38 /* CmdTabPreviewObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/CmdTabPreviewObserver.swift"; sourceTree = SOURCE_ROOT; };
 		E878B65A3DF0E8FA7E681D97 /* CmdTabPreviewService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/CmdTabPreviewService.swift"; sourceTree = SOURCE_ROOT; };
 		0810B0CF8B8B494AADDCC2DC /* DisplayCoordinateConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/DisplayCoordinateConverter.swift"; sourceTree = SOURCE_ROOT; };
@@ -153,6 +165,8 @@
 		5B4C0C527186341931A5D33A /* ApplicationPickerIconLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/ApplicationPickerIconLoader.swift"; sourceTree = SOURCE_ROOT; };
 		6F7B3B90E6D3D55F71A15F07 /* ApplicationPickerWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/ApplicationPickerWindowController.swift"; sourceTree = SOURCE_ROOT; };
 		562101DBA24FFAD470D3FB59 /* ApplicationSelectionCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/ApplicationSelectionCatalog.swift"; sourceTree = SOURCE_ROOT; };
+		3483CBD6B13CDB4562E9CD28 /* ClipboardInspectorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/ClipboardInspectorPanel.swift"; sourceTree = SOURCE_ROOT; };
+		105E8920C60506E064E693A9 /* ClipboardPaletteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/ClipboardPaletteController.swift"; sourceTree = SOURCE_ROOT; };
 		2B8EB8BBB990A69F07FBA8AC /* FinderDocumentTypeFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/FinderDocumentTypeFormView.swift"; sourceTree = SOURCE_ROOT; };
 		5B27BA2F9693182C1AD68617 /* OmniDockTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/OmniDockTheme.swift"; sourceTree = SOURCE_ROOT; };
 		DE1FB8E57F55CD535BC669CD /* PermissionOnboardingWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/PermissionOnboardingWindowController.swift"; sourceTree = SOURCE_ROOT; };
@@ -179,9 +193,11 @@
 		9694B95F4FBF087BF05D19FB /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "AppKit.framework"; path = "System/Library/Frameworks/AppKit.framework"; sourceTree = SDKROOT; };
 		B5BD692039D91AE04FEBC310 /* ApplicationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "ApplicationServices.framework"; path = "System/Library/Frameworks/ApplicationServices.framework"; sourceTree = SDKROOT; };
 		8655F244D0DBE899D1CB49B8 /* Carbon.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "Carbon.framework"; path = "System/Library/Frameworks/Carbon.framework"; sourceTree = SDKROOT; };
+		7CDE03D27B379DFC124900C1 /* CoreData.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "CoreData.framework"; path = "System/Library/Frameworks/CoreData.framework"; sourceTree = SDKROOT; };
 		FB95B506FAA940469C15D964 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "CoreGraphics.framework"; path = "System/Library/Frameworks/CoreGraphics.framework"; sourceTree = SDKROOT; };
 		AC2446436B7AE5A9EC884AD4 /* CoreImage.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "CoreImage.framework"; path = "System/Library/Frameworks/CoreImage.framework"; sourceTree = SDKROOT; };
 		F27031DFE9CE9368FFA54C1B /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "CoreMedia.framework"; path = "System/Library/Frameworks/CoreMedia.framework"; sourceTree = SDKROOT; };
+		0E58567BD59BB1D6E1C32CE0 /* CryptoKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "CryptoKit.framework"; path = "System/Library/Frameworks/CryptoKit.framework"; sourceTree = SDKROOT; };
 		64C86E046410F4E6C6D059AB /* FinderSync.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "FinderSync.framework"; path = "System/Library/Frameworks/FinderSync.framework"; sourceTree = SDKROOT; };
 		20530C1F3D99DF1367A53B4B /* IOKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "IOKit.framework"; path = "System/Library/Frameworks/IOKit.framework"; sourceTree = SDKROOT; };
 		00705383266DD4C2CCC5547B /* ScreenCaptureKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "ScreenCaptureKit.framework"; path = "System/Library/Frameworks/ScreenCaptureKit.framework"; sourceTree = SDKROOT; };
@@ -209,9 +225,11 @@
 				55FBC9A47D2AA15E4B465D15 /* AppKit.framework in Frameworks */,
 				C844FAEF0692AF76F8987325 /* ApplicationServices.framework in Frameworks */,
 				1140BFE5BC906A3C03E724B0 /* Carbon.framework in Frameworks */,
+				C1B06805AC7BF6E0A8ADF174 /* CoreData.framework in Frameworks */,
 				190482F86594E50C520ECD96 /* CoreGraphics.framework in Frameworks */,
 				FEE3C5941D2A8E78F8DCCBF5 /* CoreImage.framework in Frameworks */,
 				34DB4B2625A7C6BBA0BA6D7C /* CoreMedia.framework in Frameworks */,
+				8435C4E4C7D38097D244A2D3 /* CryptoKit.framework in Frameworks */,
 				0D93FEAA735A8D683EE82E0E /* FinderSync.framework in Frameworks */,
 				88881090E765C6BA7C7B0F76 /* IOKit.framework in Frameworks */,
 				2315E02A7D31A3AF943E2C42 /* ScreenCaptureKit.framework in Frameworks */,
@@ -251,6 +269,7 @@
 				12703A6B33AD1DCF8080FC73 /* AppAppearance.swift */,
 				B18F9E45D6B0D0F72B6296F5 /* AppHotkeyBinding.swift */,
 				78CC0AEA502E82DF49D99A06 /* AppLanguage.swift */,
+				72B6406929E3E5433D14D246 /* ClipboardHistoryRecord.swift */,
 				9C32CE50C290DAC1E3808587 /* DockAppTarget.swift */,
 				376F2272960824D6BAC50C6B /* PreviewWindowInfo.swift */,
 				19338243A57ECECAE299BE22 /* AppHotkeyRegistrationStatusStore.swift */,
@@ -258,6 +277,9 @@
 				AACED853BFBA6434A2140D8F /* AppLocalization.swift */,
 				2E10EED6D6A911629989ECC7 /* ApplicationPresentationCoordinator.swift */,
 				27E00C378893CB08991CC38B /* CGWindowDictionary.swift */,
+				4ACDDD18EF72F718165F4AEE /* ClipboardHistoryCodec.swift */,
+				43C87C5B4CF8F120EABBA5AD /* ClipboardHistoryService.swift */,
+				CD15823E751D6633175D5FFD /* ClipboardHistoryStore.swift */,
 				7C4EB1D89238D6025CE26B38 /* CmdTabPreviewObserver.swift */,
 				E878B65A3DF0E8FA7E681D97 /* CmdTabPreviewService.swift */,
 				0810B0CF8B8B494AADDCC2DC /* DisplayCoordinateConverter.swift */,
@@ -300,6 +322,8 @@
 				5B4C0C527186341931A5D33A /* ApplicationPickerIconLoader.swift */,
 				6F7B3B90E6D3D55F71A15F07 /* ApplicationPickerWindowController.swift */,
 				562101DBA24FFAD470D3FB59 /* ApplicationSelectionCatalog.swift */,
+				3483CBD6B13CDB4562E9CD28 /* ClipboardInspectorPanel.swift */,
+				105E8920C60506E064E693A9 /* ClipboardPaletteController.swift */,
 				2B8EB8BBB990A69F07FBA8AC /* FinderDocumentTypeFormView.swift */,
 				5B27BA2F9693182C1AD68617 /* OmniDockTheme.swift */,
 				DE1FB8E57F55CD535BC669CD /* PermissionOnboardingWindowController.swift */,
@@ -340,9 +364,11 @@
 				9694B95F4FBF087BF05D19FB /* AppKit.framework */,
 				B5BD692039D91AE04FEBC310 /* ApplicationServices.framework */,
 				8655F244D0DBE899D1CB49B8 /* Carbon.framework */,
+				7CDE03D27B379DFC124900C1 /* CoreData.framework */,
 				FB95B506FAA940469C15D964 /* CoreGraphics.framework */,
 				AC2446436B7AE5A9EC884AD4 /* CoreImage.framework */,
 				F27031DFE9CE9368FFA54C1B /* CoreMedia.framework */,
+				0E58567BD59BB1D6E1C32CE0 /* CryptoKit.framework */,
 				64C86E046410F4E6C6D059AB /* FinderSync.framework */,
 				20530C1F3D99DF1367A53B4B /* IOKit.framework */,
 				00705383266DD4C2CCC5547B /* ScreenCaptureKit.framework */,
@@ -507,6 +533,7 @@
 				D4ED1E90E64A329F70087940 /* AppAppearance.swift in Sources */,
 				2145A12C734E8EC3CE14C5B4 /* AppHotkeyBinding.swift in Sources */,
 				350841FA8C54AC4970114FFE /* AppLanguage.swift in Sources */,
+				207EACC32A03FEF0ECA73ECB /* ClipboardHistoryRecord.swift in Sources */,
 				A75D0D534051023B5E7A00B0 /* DockAppTarget.swift in Sources */,
 				889A7784724953BBB9918F3A /* PreviewWindowInfo.swift in Sources */,
 				18EE1F35D72CF68A1A53A338 /* AppHotkeyRegistrationStatusStore.swift in Sources */,
@@ -514,6 +541,9 @@
 				215983A2C66D3BE46DB11D4E /* AppLocalization.swift in Sources */,
 				4AC80169CFFF36CDE4D25817 /* ApplicationPresentationCoordinator.swift in Sources */,
 				89182724F61B136567EF01D2 /* CGWindowDictionary.swift in Sources */,
+				EB24CA44E5E925CBAFA9B9D2 /* ClipboardHistoryCodec.swift in Sources */,
+				88433CD632897E2A9701AFCF /* ClipboardHistoryService.swift in Sources */,
+				770FDD328B9797377E657550 /* ClipboardHistoryStore.swift in Sources */,
 				DB3C3B2AD9695840B551A626 /* CmdTabPreviewObserver.swift in Sources */,
 				DD461374FA08ADFFCCB5AFA1 /* CmdTabPreviewService.swift in Sources */,
 				7DFFB218B7CD5DDC50321F6F /* DisplayCoordinateConverter.swift in Sources */,
@@ -556,6 +586,8 @@
 				ACC329CCA36B682B1C13F6F2 /* ApplicationPickerIconLoader.swift in Sources */,
 				50BDFA5890FCEE29216A091D /* ApplicationPickerWindowController.swift in Sources */,
 				A8862B835526D889CF75F05D /* ApplicationSelectionCatalog.swift in Sources */,
+				2C9D2B701CD558546501BCED /* ClipboardInspectorPanel.swift in Sources */,
+				BB936BB462FC57F1A89BEC22 /* ClipboardPaletteController.swift in Sources */,
 				72F6A12BB3E197ABCC29EEE3 /* FinderDocumentTypeFormView.swift in Sources */,
 				4B25A6E2CCE956FCA6803215 /* OmniDockTheme.swift in Sources */,
 				2E5446BE6F842A50575D5658 /* PermissionOnboardingWindowController.swift in Sources */,

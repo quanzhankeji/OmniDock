@@ -11,6 +11,7 @@ public enum SettingsChange: String, Equatable {
     case minimizeDockClick
     case hotkeys
     case hotkeyBindings
+    case clipboardHistory
     case language
     case appearance
     case permissionState
@@ -23,7 +24,8 @@ public enum SettingsChange: String, Equatable {
         case .preview, .livePreview, .livePreviewLimit, .dockClick, .all:
             return true
         case .commandTabPreview, .windowCycle, .finderExtension, .minimizeDockClick,
-             .hotkeys, .hotkeyBindings, .language, .appearance, .permissionState:
+             .hotkeys, .hotkeyBindings, .clipboardHistory, .language, .appearance,
+             .permissionState:
             return false
         }
     }
@@ -33,7 +35,8 @@ public enum SettingsChange: String, Equatable {
         case .preview, .commandTabPreview, .all:
             return true
         case .windowCycle, .finderExtension, .livePreview, .livePreviewLimit, .dockClick,
-             .minimizeDockClick, .hotkeys, .hotkeyBindings, .language, .appearance, .permissionState:
+             .minimizeDockClick, .hotkeys, .hotkeyBindings, .clipboardHistory, .language,
+             .appearance, .permissionState:
             return false
         }
     }
@@ -43,17 +46,30 @@ public enum SettingsChange: String, Equatable {
         case .preview, .windowCycle, .all:
             return true
         case .commandTabPreview, .finderExtension, .livePreview, .livePreviewLimit, .dockClick,
-             .minimizeDockClick, .hotkeys, .hotkeyBindings, .language, .appearance, .permissionState:
+             .minimizeDockClick, .hotkeys, .hotkeyBindings, .clipboardHistory, .language,
+             .appearance, .permissionState:
             return false
         }
     }
 
     public var affectsAppHotkeys: Bool {
         switch self {
-        case .hotkeys, .hotkeyBindings, .all:
+        case .hotkeys, .hotkeyBindings, .clipboardHistory, .all:
             return true
         case .preview, .commandTabPreview, .windowCycle, .finderExtension, .livePreview,
-             .livePreviewLimit, .dockClick, .minimizeDockClick, .language, .appearance, .permissionState:
+             .livePreviewLimit, .dockClick, .minimizeDockClick, .language,
+             .appearance, .permissionState:
+            return false
+        }
+    }
+
+    public var affectsClipboardHistory: Bool {
+        switch self {
+        case .clipboardHistory, .all:
+            return true
+        case .preview, .commandTabPreview, .windowCycle, .finderExtension, .livePreview,
+             .livePreviewLimit, .dockClick, .minimizeDockClick, .hotkeys, .hotkeyBindings,
+             .language, .appearance, .permissionState:
             return false
         }
     }
@@ -77,6 +93,8 @@ public final class SettingsStore {
         case minimizeWindowsOnDockClickInsteadOfHide = "minimizeWindowsOnDockClickInsteadOfHide"
         case hotkeysEnabled = "hotkeysEnabled"
         case hotkeyAssignments = "hotkeyAssignments"
+        case clipboardHistoryEnabled = "clipboardHistoryEnabled"
+        case clipboardHistoryLimit = "clipboardHistoryLimit"
         case minimizeOnRepeatedDockClick = "minimizeOnRepeatedDockClick"
         case appLanguage = "appLanguage"
         case appAppearance = "appAppearance"
@@ -122,6 +140,8 @@ public final class SettingsStore {
             Key.liveDockPreviewsEnabled.rawValue: true,
             Key.livePreviewWindowLimit.rawValue: min(6, max(0, livePreviewLimitProvider())),
             Key.hotkeysEnabled.rawValue: true,
+            Key.clipboardHistoryEnabled.rawValue: false,
+            Key.clipboardHistoryLimit.rawValue: 200,
             Key.appLanguage.rawValue: AppLanguage.system.rawValue,
             Key.appAppearance.rawValue: AppAppearance.system.rawValue,
             Key.permissionOnboardingCompleted.rawValue: false,
@@ -258,6 +278,21 @@ public final class SettingsStore {
             return value
         }
         set { set(newValue, for: .hotkeysEnabled) }
+    }
+
+    public var clipboardHistoryEnabled: Bool {
+        get { defaults.bool(forKey: Key.clipboardHistoryEnabled.rawValue) }
+        set { set(newValue, for: .clipboardHistoryEnabled) }
+    }
+
+    public var clipboardHistoryLimit: Int {
+        get {
+            let stored = defaults.integer(forKey: Key.clipboardHistoryLimit.rawValue)
+            return min(max(stored, 1), 999)
+        }
+        set {
+            set(min(max(newValue, 1), 999), for: .clipboardHistoryLimit)
+        }
     }
 
     public var appLanguage: AppLanguage {
@@ -465,6 +500,8 @@ public final class SettingsStore {
             return .hotkeys
         case .hotkeyAssignments:
             return .hotkeyBindings
+        case .clipboardHistoryEnabled, .clipboardHistoryLimit:
+            return .clipboardHistory
         case .appLanguage:
             return .language
         case .appAppearance:

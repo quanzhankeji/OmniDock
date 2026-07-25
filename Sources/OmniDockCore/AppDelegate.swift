@@ -6,6 +6,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let permissionService = PermissionService()
     private let hotkeyRegistrationStatus = AppHotkeyRegistrationStatusStore()
     private let windowCycleRegistrationStatus = WindowCycleRegistrationStatusStore()
+    private let clipboardHistoryRegistrationStatus = ClipboardHistoryRegistrationStatus()
     private let presentationCoordinator = ApplicationPresentationCoordinator()
     private var permissionFeatureActivationQueue = PermissionFeatureActivationQueue()
     private var isRefreshingPermissionState = false
@@ -53,12 +54,23 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     )
     private lazy var finderFileCommandCoordinator = FinderFileCommandCoordinator()
+    private lazy var clipboardHistoryStore = ClipboardHistoryStore()
+    private lazy var clipboardHistoryPanelController = ClipboardPaletteController()
+    private lazy var clipboardHistoryService = ClipboardHistoryService(
+        settings: settings,
+        permissionService: permissionService,
+        store: clipboardHistoryStore,
+        panelController: clipboardHistoryPanelController,
+        registrationStatus: clipboardHistoryRegistrationStatus
+    )
     private lazy var statusMenuController = StatusMenuController(
         settings: settings,
         permissionService: permissionService,
         coordinator: coordinator,
         hotkeyRegistrationStatus: hotkeyRegistrationStatus,
         windowCycleRegistrationStatus: windowCycleRegistrationStatus,
+        clipboardHistoryService: clipboardHistoryService,
+        clipboardHistoryRegistrationStatus: clipboardHistoryRegistrationStatus,
         presentationCoordinator: presentationCoordinator,
         onPermissionGateRequired: { [weak self] feature in
             self?.showPermissionOnboarding(for: feature)
@@ -111,6 +123,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         cmdTabPreviewService.start()
         windowCycleService.start()
         hotkeyService.start()
+        clipboardHistoryService.start()
         showPermissionOnboardingIfNeeded()
         schedulePermissionRecheckAfterLaunch()
     }
@@ -122,6 +135,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     public func applicationWillTerminate(_ notification: Notification) {
         NotificationCenter.default.removeObserver(self)
         finderFileCommandCoordinator.stop()
+        clipboardHistoryService.stop()
         hotkeyService.stop()
         windowCycleService.stop()
         cmdTabPreviewService.stop()

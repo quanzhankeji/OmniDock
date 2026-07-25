@@ -16,6 +16,7 @@ enum AppStringKey: String, CaseIterable {
     case tabPreview
     case tabHotkeys
     case tabFinderExtension
+    case tabClipboardHistory
     case menuSettings
     case menuHotkeys
     case menuQuit
@@ -129,6 +130,33 @@ enum AppStringKey: String, CaseIterable {
     case hotkeySystemConflict
     case hotkeyRegistrationOccupied
     case hotkeyRegistrationFailed
+    case hotkeyReservedForClipboardHistory
+
+    case clipboardEnableTitle
+    case clipboardEnableDetail
+    case clipboardShortcutTitle
+    case clipboardShortcutDetail
+    case clipboardShortcutConflict
+    case clipboardLimitTitle
+    case clipboardLimitDetail
+    case clipboardPrivacyNote
+    case clipboardSearchPlaceholder
+    case clipboardEmpty
+    case clipboardClearAll
+    case clipboardClearTitle
+    case clipboardClearDetail
+    case clipboardCopy
+    case clipboardDelete
+    case clipboardImage
+    case clipboardImageCount
+    case clipboardUnknownContent
+    case clipboardStorageUnavailable
+    case clipboardCopyFailed
+    case clipboardPasteNeedsAccessibility
+    case clipboardPreviewFirstCopied
+    case clipboardPreviewLastCopied
+    case clipboardPreviewCopyCount
+    case clipboardPreviewFiles
 
     case pickerTitle
     case pickerSearchPlaceholder
