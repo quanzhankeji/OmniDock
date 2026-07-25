@@ -5,8 +5,8 @@ MODE="${1:-run}"
 APP_NAME="OmniDock"
 BUNDLE_ID="com.quanzhankeji.OmniDock"
 MIN_SYSTEM_VERSION="12.3"
-MARKETING_VERSION="1.1.1"
-BUILD_NUMBER="8"
+MARKETING_VERSION="1.1.2"
+BUILD_NUMBER="9"
 
 usage() {
   echo "usage: $0 [run|--stage|--debug|--logs|--telemetry|--verify|--install|--install-finder-extension]" >&2
@@ -210,12 +210,41 @@ fi
 /usr/bin/xattr -cr "$APP_BUNDLE" >/dev/null 2>&1 || true
 /usr/bin/codesign --verify --deep --strict --verbose=4 "$APP_BUNDLE" >/dev/null
 
+signing_authority() {
+  local bundle="$1"
+
+  /usr/bin/codesign -d --verbose=2 "$bundle" 2>&1 \
+    | /usr/bin/sed -n 's/^Authority=//p' \
+    | /usr/bin/head -n 1
+}
+
+is_developer_id_signed() {
+  [[ "$(signing_authority "$1")" == Developer\ ID\ Application:* ]]
+}
+
+verify_install_signature_transition() {
+  local candidate="$1"
+
+  [[ -d "$INSTALLED_APP" ]] || return
+  if is_developer_id_signed "$INSTALLED_APP" && ! is_developer_id_signed "$candidate"; then
+    if [[ "${OMNIDOCK_ALLOW_SIGNING_IDENTITY_CHANGE:-0}" == "1" ]]; then
+      echo "Warning: replacing a Developer ID build with a development-signed build." >&2
+      return
+    fi
+    echo "Refusing to replace the Developer ID installation with a development-signed build." >&2
+    echo "This would detach existing macOS privacy permissions." >&2
+    echo "Set OMNIDOCK_ALLOW_SIGNING_IDENTITY_CHANGE=1 only for an intentional reset." >&2
+    exit 1
+  fi
+}
+
 open_app() {
   pkill -x "$APP_NAME" >/dev/null 2>&1 || true
   /usr/bin/open -n "$APP_BUNDLE"
 }
 
 install_app() {
+  verify_install_signature_transition "$APP_BUNDLE"
   pkill -x "$APP_NAME" >/dev/null 2>&1 || true
   rm -rf "$INSTALLED_APP"
   /usr/bin/ditto "$APP_BUNDLE" "$INSTALLED_APP"
@@ -252,6 +281,97 @@ development_team() {
     /usr/bin/sed -n 's/.*OU=\([A-Z0-9]\{10\}\).*/\1/p' <<<"$subject"
   )"
   [[ "$team" =~ ^[A-Z0-9]{10}$ ]] && printf '%s\n' "$team"
+}
+
+developer_id_identity() {
+  local identity
+  local identities=()
+
+  if [[ -n "${OMNIDOCK_LOCAL_DEVELOPER_IDENTITY:-}" ]]; then
+    printf '%s\n' "$OMNIDOCK_LOCAL_DEVELOPER_IDENTITY"
+    return
+  fi
+
+  while IFS= read -r identity; do
+    [[ -n "$identity" ]] && identities+=("$identity")
+  done < <(
+    /usr/bin/security find-identity -p codesigning -v 2>/dev/null \
+      | /usr/bin/awk -F '"' '/Developer ID Application:/ { print $2 }'
+  )
+
+  case "${#identities[@]}" in
+    0)
+      return 1
+      ;;
+    1)
+      printf '%s\n' "${identities[0]}"
+      ;;
+    *)
+      echo "Multiple Developer ID identities found. Set OMNIDOCK_LOCAL_DEVELOPER_IDENTITY." >&2
+      exit 1
+      ;;
+  esac
+}
+
+team_identifier_from_identity() {
+  /usr/bin/sed -n 's/.*(\([A-Z0-9]\{10\}\))$/\1/p' <<<"$1"
+}
+
+sign_stable_local_candidate() {
+  local candidate="$1"
+  local identity="$2"
+  local team
+  local app_group
+  local extension
+  local temporary_directory
+  local app_entitlements
+  local extension_entitlements
+
+  team="$(team_identifier_from_identity "$identity")"
+  if [[ ! "$team" =~ ^[A-Z0-9]{10}$ ]]; then
+    echo "Could not determine Team Identifier from Developer ID identity." >&2
+    exit 1
+  fi
+
+  app_group="$team.$BUNDLE_ID"
+  extension="$candidate/Contents/PlugIns/OmniDockFinderSync.appex"
+  temporary_directory="$(mktemp -d "${TMPDIR:-/tmp}/omnidock-local-signing.XXXXXX")"
+  app_entitlements="$temporary_directory/OmniDock.entitlements"
+  extension_entitlements="$temporary_directory/OmniDockFinderSync.entitlements"
+
+  /usr/bin/ditto "$ROOT_DIR/Resources/OmniDock-Development.entitlements" "$app_entitlements"
+  /usr/bin/ditto \
+    "$ROOT_DIR/Resources/OmniDockFinderSync.entitlements" \
+    "$extension_entitlements"
+  /usr/libexec/PlistBuddy \
+    -c "Set :com.apple.security.application-groups:0 $app_group" \
+    "$app_entitlements"
+  /usr/libexec/PlistBuddy \
+    -c "Set :com.apple.security.application-groups:0 $app_group" \
+    "$extension_entitlements"
+
+  /usr/bin/xattr -cr "$candidate" >/dev/null 2>&1 || true
+  /usr/bin/codesign \
+    --force \
+    --options runtime \
+    --timestamp \
+    --entitlements "$extension_entitlements" \
+    --sign "$identity" \
+    "$extension"
+  /usr/bin/codesign \
+    --force \
+    --options runtime \
+    --timestamp \
+    --entitlements "$app_entitlements" \
+    --sign "$identity" \
+    "$candidate"
+  rm -rf "$temporary_directory"
+
+  /usr/bin/codesign --verify --deep --strict --verbose=4 "$candidate" >/dev/null
+  if ! is_developer_id_signed "$candidate"; then
+    echo "Stable local signing did not produce a Developer ID app." >&2
+    exit 1
+  fi
 }
 
 verify_finder_extension_bundle() {
@@ -291,6 +411,7 @@ verify_finder_extension_bundle() {
 
 install_finder_extension_app() {
   local team
+  local install_configuration="${OMNIDOCK_XCODE_INSTALL_CONFIGURATION:-Release}"
   team="$(development_team)"
   if [[ -z "$team" ]]; then
     echo "Set OMNIDOCK_DEVELOPMENT_TEAM to build the Finder extension with your Apple Development team." >&2
@@ -306,7 +427,7 @@ install_finder_extension_app() {
       xcodebuild \
         -project "$ROOT_DIR/OmniDock.xcodeproj" \
         -scheme "$APP_NAME" \
-        -configuration Debug \
+        -configuration "$install_configuration" \
         -derivedDataPath "$derived_data" \
         DEVELOPMENT_TEAM="$team" \
         CODE_SIGN_STYLE=Automatic \
@@ -317,7 +438,7 @@ install_finder_extension_app() {
       xcodebuild \
         -project "$ROOT_DIR/OmniDock.xcodeproj" \
         -scheme "$APP_NAME" \
-        -configuration Debug \
+        -configuration "$install_configuration" \
         -derivedDataPath "$derived_data" \
         DEVELOPMENT_TEAM="$team" \
         CODE_SIGN_STYLE=Automatic \
@@ -328,25 +449,43 @@ install_finder_extension_app() {
     xcodebuild \
       -project "$ROOT_DIR/OmniDock.xcodeproj" \
       -scheme "$APP_NAME" \
-      -configuration Debug \
+      -configuration "$install_configuration" \
       -derivedDataPath "$derived_data" \
       DEVELOPMENT_TEAM="$team" \
       CODE_SIGN_STYLE=Automatic \
       build
   fi
 
-  local built_app="$derived_data/Build/Products/Debug/$APP_NAME.app"
-  local built_extension="$built_app/Contents/PlugIns/OmniDockFinderSync.appex"
-  verify_finder_extension_bundle "$built_app"
+  local built_app="$derived_data/Build/Products/$install_configuration/$APP_NAME.app"
+  local candidate_directory="$derived_data/LocalInstall"
+  local candidate_app="$candidate_directory/$APP_NAME.app"
+  local candidate_extension="$candidate_app/Contents/PlugIns/OmniDockFinderSync.appex"
+  local stable_identity
+
+  rm -rf "$candidate_directory"
+  mkdir -p "$candidate_directory"
+  /usr/bin/ditto "$built_app" "$candidate_app"
+
+  if [[ "${OMNIDOCK_STABLE_LOCAL_SIGNING:-1}" == "1" ]]; then
+    if stable_identity="$(developer_id_identity)"; then
+      sign_stable_local_candidate "$candidate_app" "$stable_identity"
+      echo "Prepared stable Developer ID local installation."
+    else
+      echo "No Developer ID identity found; keeping the Apple Development signature." >&2
+    fi
+  fi
+
+  verify_finder_extension_bundle "$candidate_app"
+  verify_install_signature_transition "$candidate_app"
   pkill -x "$APP_NAME" >/dev/null 2>&1 || true
   rm -rf "$INSTALLED_APP"
-  /usr/bin/ditto "$built_app" "$INSTALLED_APP"
+  /usr/bin/ditto "$candidate_app" "$INSTALLED_APP"
   /usr/bin/xattr -cr "$INSTALLED_APP" >/dev/null 2>&1 || true
   verify_finder_extension_bundle "$INSTALLED_APP"
 
   local installed_extension="$INSTALLED_APP/Contents/PlugIns/OmniDockFinderSync.appex"
   local launch_services_register="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
-  /usr/bin/pluginkit -r "$built_extension" >/dev/null 2>&1 || true
+  /usr/bin/pluginkit -r "$candidate_extension" >/dev/null 2>&1 || true
   "$launch_services_register" -f -R -trusted "$INSTALLED_APP"
   /usr/bin/pluginkit -a "$installed_extension"
   /usr/bin/killall Finder >/dev/null 2>&1 || true

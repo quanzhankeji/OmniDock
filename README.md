@@ -40,9 +40,9 @@ brew install --cask omnidock
 ./script/build_and_run.sh
 ```
 
-The script builds the complete `OmniDock.app`, including its Finder Sync extension, signs both targets with the local Apple Development identity, installs the app to `/Applications`, and launches it.
+The script builds the complete `OmniDock.app`, including its Finder Sync extension, installs it to `/Applications`, and launches it. When one Developer ID Application identity is available, the local Release build is re-signed with that stable identity so existing macOS privacy permissions remain attached across rebuilds.
 
-Building requires Xcode Command Line Tools or Xcode with a Swift 5.9-compatible toolchain. If no Apple Development identity is available, the script uses ad-hoc signing and warns that macOS permission grants may reset after rebuilding. If more than one development identity is available, set `OMNIDOCK_SIGN_IDENTITY` explicitly.
+Building the complete app requires Xcode, an Apple Development team, and a Swift 5.9-compatible toolchain. If no Developer ID identity is available, the installation keeps its Apple Development signature. Once a Developer ID build is installed, the script refuses to replace it with a development-signed build unless `OMNIDOCK_ALLOW_SIGNING_IDENTITY_CHANGE=1` is explicitly set, because changing identities detaches macOS privacy permissions. If more than one Developer ID identity is available, set `OMNIDOCK_LOCAL_DEVELOPER_IDENTITY` explicitly.
 
 Set `OMNIDOCK_APP_DIR` to change the staging directory. Set `OMNIDOCK_BUILD_CONFIGURATION=debug` to force a debug build.
 
