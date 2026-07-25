@@ -1,9 +1,5 @@
-# OmniDock 1.1.1
+# OmniDock 1.1.2
 
-- Fix Finder extension App Group configuration for direct installations.
-- Keep Finder actions independent from Accessibility permission.
-- Restore enabled features automatically after their permissions return.
-- Preserve settings when moving from sandboxed builds to direct downloads.
-- Install the complete app with its Finder extension in local builds.
-
-Finder actions remain available only in locations that Finder Sync can monitor. macOS does not expose third-party Finder Sync menus in File Provider-managed locations, including Desktop and Documents when those folders are managed by iCloud Drive.
+- Keep macOS privacy permissions attached across local rebuilds by using a stable Developer ID installation.
+- Prevent accidental replacement of a Developer ID build with a development-signed build.
+- Move permission status and authorization links to the Settings tab.

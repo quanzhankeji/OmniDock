@@ -607,19 +607,33 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 12
+        stack.spacing = 18
 
-        stack.addArrangedSubview(makeSettingRow(
+        let settings = NSStackView()
+        settings.orientation = .vertical
+        settings.alignment = .leading
+        settings.spacing = 12
+        stack.addArrangedSubview(settings)
+
+        settings.addArrangedSubview(makeSettingRow(
             title: AppStrings.text(.languageTitle),
             detail: AppStrings.text(.languageDetail),
             control: makeLanguageControl()
         ))
 
-        stack.addArrangedSubview(makeSettingRow(
+        settings.addArrangedSubview(makeSettingRow(
             title: AppStrings.text(.appearanceTitle),
             detail: AppStrings.text(.appearanceDetail),
             control: makeAppearanceControl()
         ))
+
+        let permissions = makeCorePermissionSection()
+        stack.addArrangedSubview(permissions)
+
+        NSLayoutConstraint.activate([
+            settings.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            permissions.widthAnchor.constraint(equalTo: stack.widthAnchor)
+        ])
 
         return stack
     }
@@ -705,6 +719,12 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
             control: minimizeDockClickSwitch
         ))
 
+        toggles.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+
+        return stack
+    }
+
+    private func makeCorePermissionSection() -> NSView {
         let permissions = NSStackView()
         permissions.orientation = .vertical
         permissions.alignment = .leading
@@ -754,14 +774,8 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSWi
             action: #selector(openSupport(_:))
         ))
         permissions.addArrangedSubview(documentLinks)
-        stack.addArrangedSubview(permissions)
 
-        NSLayoutConstraint.activate([
-            toggles.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            permissions.widthAnchor.constraint(equalTo: stack.widthAnchor)
-        ])
-
-        return stack
+        return permissions
     }
 
     private func makeHotkeysTab() -> NSView {
