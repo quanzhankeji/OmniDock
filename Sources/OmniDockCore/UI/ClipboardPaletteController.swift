@@ -40,6 +40,62 @@ enum ClipboardPaletteLayout {
     }
 }
 
+enum ClipboardHistoryDisplayText {
+    static let maximumSummaryLength = 96
+    static let maximumSourceNameLength = 64
+
+    static func summary(_ value: String) -> String {
+        shortened(singleLine(value), maximumLength: maximumSummaryLength)
+    }
+
+    static func sourceName(_ value: String) -> String {
+        shortened(singleLine(value), maximumLength: maximumSourceNameLength)
+    }
+
+    private static func singleLine(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func shortened(_ value: String, maximumLength: Int) -> String {
+        guard value.count > maximumLength else {
+            return value
+        }
+        return String(value.prefix(maximumLength - 1)) + "…"
+    }
+}
+
+enum ClipboardHoverPreviewAction: Equatable {
+    case schedule
+    case present
+    case cancelPending
+    case dismiss
+    case none
+}
+
+enum ClipboardHoverPreviewPolicy {
+    static func action(
+        recordID: UUID,
+        hovering: Bool,
+        pendingRecordID: UUID?,
+        previewedRecordID: UUID?,
+        previewVisible: Bool
+    ) -> ClipboardHoverPreviewAction {
+        if hovering {
+            return previewVisible ? .present : .schedule
+        }
+        if previewedRecordID == recordID {
+            return .dismiss
+        }
+        if pendingRecordID == recordID {
+            return .cancelPending
+        }
+        return .none
+    }
+}
+
 enum ClipboardPalettePlacement {
     static func origin(
         cursor: NSPoint,
@@ -404,7 +460,14 @@ final class ClipboardPaletteController: NSObject, NSSearchFieldDelegate, NSWindo
     }
 
     private func handleHover(recordID: UUID, hovering: Bool) {
-        if hovering {
+        switch ClipboardHoverPreviewPolicy.action(
+            recordID: recordID,
+            hovering: hovering,
+            pendingRecordID: pendingPreviewRecordID,
+            previewedRecordID: previewedRecordID,
+            previewVisible: detailPanel?.isVisible == true
+        ) {
+        case .schedule, .present:
             guard let index = visibleRecords.firstIndex(where: { $0.id == recordID }) else {
                 return
             }
@@ -418,8 +481,12 @@ final class ClipboardPaletteController: NSObject, NSSearchFieldDelegate, NSWindo
             } else {
                 schedulePreview(for: recordID)
             }
-        } else if pendingPreviewRecordID == recordID {
+        case .cancelPending:
             cancelPendingPreview()
+        case .dismiss:
+            dismissPreview()
+        case .none:
+            break
         }
     }
 
@@ -578,7 +645,9 @@ final class ClipboardPaletteRowView: NSView {
         iconView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(iconView)
 
-        let summaryLabel = NSTextField(labelWithString: record.summary)
+        let summaryLabel = NSTextField(
+            labelWithString: ClipboardHistoryDisplayText.summary(record.summary)
+        )
         summaryLabel.font = .systemFont(ofSize: 13, weight: .medium)
         summaryLabel.lineBreakMode = .byTruncatingTail
         summaryLabel.maximumNumberOfLines = 2
@@ -704,7 +773,8 @@ final class ClipboardPaletteRowView: NSView {
         formatter.unitsStyle = .short
         let relativeDate = formatter.localizedString(for: record.lastCopiedAt, relativeTo: Date())
         let count = record.copyCount > 1 ? " · ×\(record.copyCount)" : ""
-        return "\(record.sourceApplicationName) · \(relativeDate)\(count)"
+        return "\(ClipboardHistoryDisplayText.sourceName(record.sourceApplicationName))"
+            + " · \(relativeDate)\(count)"
     }
 }
 
@@ -712,8 +782,14 @@ final class ClipboardPaletteRowView: NSView {
 final class ClipboardArchiveSettingsRowView: NSView {
     var onCopy: (() -> Void)?
     var onDelete: (() -> Void)?
+    var onHoverChanged: ((Bool) -> Void)?
 
-    init(record: ClipboardHistoryRecord) {
+    private var hoverTrackingArea: NSTrackingArea?
+
+    init(
+        record: ClipboardHistoryRecord,
+        fallbackImageData: Data? = nil
+    ) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
 
@@ -725,17 +801,57 @@ final class ClipboardArchiveSettingsRowView: NSView {
         iconView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(iconView)
 
-        let summary = NSTextField(labelWithString: record.summary)
+        var leadingView: NSView = iconView
+        let previewImage = [record.thumbnailData, fallbackImageData]
+            .compactMap { data in
+                data.flatMap(NSImage.init(data:))
+            }
+            .first
+        if let previewImage {
+            let thumbnail = NSImageView(image: previewImage)
+            thumbnail.imageScaling = .scaleProportionallyUpOrDown
+            thumbnail.wantsLayer = true
+            thumbnail.layer?.cornerRadius = 4
+            thumbnail.layer?.masksToBounds = true
+            thumbnail.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(thumbnail)
+            NSLayoutConstraint.activate([
+                thumbnail.leadingAnchor.constraint(
+                    equalTo: iconView.trailingAnchor,
+                    constant: 8
+                ),
+                thumbnail.centerYAnchor.constraint(equalTo: centerYAnchor),
+                thumbnail.widthAnchor.constraint(equalToConstant: 44),
+                thumbnail.heightAnchor.constraint(equalToConstant: 36)
+            ])
+            leadingView = thumbnail
+        }
+
+        let summary = NSTextField(
+            labelWithString: ClipboardHistoryDisplayText.summary(record.summary)
+        )
         summary.font = .systemFont(ofSize: 13, weight: .medium)
         summary.lineBreakMode = .byTruncatingTail
-        let source = NSTextField(labelWithString: record.sourceApplicationName)
+        summary.maximumNumberOfLines = 1
+        summary.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        summary.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        let source = NSTextField(
+            labelWithString: ClipboardHistoryDisplayText.sourceName(
+                record.sourceApplicationName
+            )
+        )
         source.font = .systemFont(ofSize: 11)
         source.textColor = .secondaryLabelColor
         source.lineBreakMode = .byTruncatingTail
+        source.maximumNumberOfLines = 1
+        source.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        source.setContentHuggingPriority(.defaultLow, for: .horizontal)
         let labels = NSStackView(views: [summary, source])
         labels.orientation = .vertical
         labels.alignment = .leading
         labels.spacing = 2
+        labels.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        labels.setContentHuggingPriority(.defaultLow, for: .horizontal)
         labels.translatesAutoresizingMaskIntoConstraints = false
         addSubview(labels)
 
@@ -772,9 +888,9 @@ final class ClipboardArchiveSettingsRowView: NSView {
             iconView.widthAnchor.constraint(equalToConstant: 28),
             iconView.heightAnchor.constraint(equalToConstant: 28),
 
-            labels.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 10),
+            labels.leadingAnchor.constraint(equalTo: leadingView.trailingAnchor, constant: 10),
             labels.centerYAnchor.constraint(equalTo: centerYAnchor),
-            labels.trailingAnchor.constraint(lessThanOrEqualTo: copyButton.leadingAnchor, constant: -10),
+            labels.trailingAnchor.constraint(equalTo: copyButton.leadingAnchor, constant: -10),
 
             copyButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             copyButton.widthAnchor.constraint(equalToConstant: 28),
@@ -789,6 +905,29 @@ final class ClipboardArchiveSettingsRowView: NSView {
 
     required init?(coder: NSCoder) {
         nil
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.activeAlways, .mouseEnteredAndExited, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        hoverTrackingArea = trackingArea
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        onHoverChanged?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        onHoverChanged?(false)
     }
 
     @objc private func copyRecord(_ sender: NSButton) {
