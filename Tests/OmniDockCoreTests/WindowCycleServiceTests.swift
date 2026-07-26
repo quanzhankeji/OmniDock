@@ -245,8 +245,14 @@ final class WindowCycleTests: XCTestCase {
     }
 
     func testPreviewTabAndAltTabSettingAreLocalized() {
-        XCTAssertEqual(AppLocalization.text(.tabPreview, language: .en), "Preview")
-        XCTAssertEqual(AppLocalization.text(.tabPreview, language: .zhHans), "预览")
+        XCTAssertEqual(
+            AppLocalization.text(.tabPreview, language: .en),
+            "Window Preview"
+        )
+        XCTAssertEqual(
+            AppLocalization.text(.tabPreview, language: .zhHans),
+            "窗口预览"
+        )
         XCTAssertEqual(AppLocalization.text(.settingsWindowCycleTitle, language: .en), "Alt-Tab Preview")
         XCTAssertEqual(AppLocalization.text(.settingsWindowCycleTitle, language: .zhHans), "Alt Tab 预览")
     }

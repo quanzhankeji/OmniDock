@@ -17,6 +17,8 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(store.finderExtensionEnabled)
         XCTAssertFalse(store.clipboardHistoryEnabled)
         XCTAssertEqual(store.clipboardHistoryLimit, 200)
+        XCTAssertFalse(store.windowPlacementEnabled)
+        XCTAssertEqual(store.windowPlacementConfiguration.commands.count, BuiltInWindowPlacement.allCases.count)
         XCTAssertEqual(store.appLanguage, .system)
         XCTAssertEqual(store.appAppearance, .system)
         XCTAssertFalse(store.permissionOnboardingCompleted)
@@ -40,6 +42,10 @@ final class SettingsStoreTests: XCTestCase {
         store.finderExtensionEnabled = true
         store.clipboardHistoryEnabled = true
         store.clipboardHistoryLimit = 350
+        var placementConfiguration = store.windowPlacementConfiguration
+        placementConfiguration.isEnabled = true
+        placementConfiguration.commands[0].isEnabled = false
+        store.windowPlacementConfiguration = placementConfiguration
         store.appLanguage = .en
         store.appAppearance = .dark
         store.permissionOnboardingCompleted = true
@@ -68,6 +74,8 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(reloaded.finderExtensionEnabled)
         XCTAssertTrue(reloaded.clipboardHistoryEnabled)
         XCTAssertEqual(reloaded.clipboardHistoryLimit, 350)
+        XCTAssertTrue(reloaded.windowPlacementEnabled)
+        XCTAssertFalse(reloaded.windowPlacementConfiguration.commands[0].isEnabled)
         XCTAssertEqual(reloaded.appLanguage, .en)
         XCTAssertEqual(reloaded.appAppearance, .dark)
         XCTAssertTrue(reloaded.permissionOnboardingCompleted)
@@ -197,6 +205,10 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(SettingsChange.hotkeys.affectsAppHotkeys)
         XCTAssertTrue(SettingsChange.clipboardHistory.affectsAppHotkeys)
         XCTAssertTrue(SettingsChange.clipboardHistory.affectsClipboardHistory)
+        XCTAssertTrue(SettingsChange.windowPlacement.affectsWindowPlacement)
+        XCTAssertTrue(SettingsChange.windowPlacement.affectsAppHotkeys)
+        XCTAssertTrue(SettingsChange.windowPlacement.affectsClipboardHistory)
+        XCTAssertTrue(SettingsChange.hotkeyBindings.affectsWindowPlacement)
     }
 
     private func isolatedDefaults() -> UserDefaults {

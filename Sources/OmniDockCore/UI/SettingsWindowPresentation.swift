@@ -114,6 +114,8 @@ final class AppHotkeyRowView: NSView {
     private let binding: AppHotkeyBinding
     private let warning: String?
     private let recorderView = ShortcutRecorderView(frame: .zero)
+    static let standardHeight: CGFloat = 58
+    static let warningHeight: CGFloat = 74
 
     init(binding: AppHotkeyBinding, warning: String?) {
         self.binding = binding
@@ -186,7 +188,9 @@ final class AppHotkeyRowView: NSView {
         addSubview(removeButton)
 
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(greaterThanOrEqualToConstant: warning == nil ? 58 : 74),
+            heightAnchor.constraint(
+                equalToConstant: warning == nil ? Self.standardHeight : Self.warningHeight
+            ),
 
             iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
             iconView.centerYAnchor.constraint(equalTo: centerYAnchor),

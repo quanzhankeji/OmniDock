@@ -20,9 +20,10 @@ final class ClipboardHistoryTests: XCTestCase {
         XCTAssertEqual(reloaded.clipboardHistoryLimit, 350)
     }
 
-    func testSettingsExposeFiveTabsIncludingClipboardHistory() {
-        XCTAssertEqual(SettingsTab.allCases.count, 5)
-        XCTAssertEqual(SettingsTab.allCases.last, .clipboardHistory)
+    func testSettingsExposeClipboardAndWindowPlacementTabs() {
+        XCTAssertEqual(SettingsTab.allCases.count, 6)
+        XCTAssertEqual(SettingsTab.allCases[4], .clipboardHistory)
+        XCTAssertEqual(SettingsTab.allCases.last, .windowPlacement)
     }
 
     func testClipboardHistoryLabelsAreLocalized() {
@@ -34,6 +35,145 @@ final class ClipboardHistoryTests: XCTestCase {
         XCTAssertEqual(AppStrings.text(.tabClipboardHistory), "剪贴板历史")
         XCTAssertEqual(AppStrings.text(.clipboardEnableTitle), "启用剪贴板历史")
         AppLocalization.configure(language: .system)
+    }
+
+    func testLongClipboardContentUsesACompactSingleLineListSummary() {
+        let content = String(repeating: "Long clipboard line\n", count: 80)
+
+        let summary = ClipboardHistoryDisplayText.summary(content)
+
+        XCTAssertEqual(summary.count, ClipboardHistoryDisplayText.maximumSummaryLength)
+        XCTAssertFalse(summary.contains("\n"))
+        XCTAssertTrue(summary.hasSuffix("…"))
+    }
+
+    func testLongClipboardContentCannotExpandSettingsHistoryRow() {
+        let record = ClipboardHistoryRecord(
+            id: UUID(),
+            capturedAt: Date(),
+            lastCopiedAt: Date(),
+            sourceApplicationName: String(repeating: "Source application ", count: 40),
+            sourceBundleIdentifier: nil,
+            kind: .text,
+            summary: String(repeating: "Very long clipboard content ", count: 200),
+            searchableText: String(repeating: "Very long clipboard content ", count: 200),
+            copyCount: 1,
+            byteCount: 8_000,
+            thumbnailData: nil
+        )
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 620, height: 48))
+        let row = ClipboardArchiveSettingsRowView(record: record)
+        container.addSubview(row)
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            row.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            row.topAnchor.constraint(equalTo: container.topAnchor),
+            row.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+
+        container.layoutSubtreeIfNeeded()
+
+        XCTAssertEqual(row.frame.width, container.bounds.width, accuracy: 0.5)
+        for field in descendantTextFields(in: row) {
+            let fieldFrame = field.convert(field.bounds, to: row)
+            XCTAssertGreaterThanOrEqual(fieldFrame.minX, row.bounds.minX)
+            XCTAssertLessThanOrEqual(fieldFrame.maxX, row.bounds.maxX)
+        }
+    }
+
+    func testSettingsHistoryRowShowsStoredAndFallbackImageThumbnails() throws {
+        let imageData = try tinyPNGData()
+        for usesStoredThumbnail in [true, false] {
+            let record = ClipboardHistoryRecord(
+                id: UUID(),
+                capturedAt: Date(),
+                lastCopiedAt: Date(),
+                sourceApplicationName: "Preview Source",
+                sourceBundleIdentifier: nil,
+                kind: .image,
+                summary: "Image",
+                searchableText: "Image",
+                copyCount: 1,
+                byteCount: imageData.count,
+                thumbnailData: usesStoredThumbnail ? imageData : nil
+            )
+            let row = ClipboardArchiveSettingsRowView(
+                record: record,
+                fallbackImageData: usesStoredThumbnail ? nil : imageData
+            )
+
+            XCTAssertEqual(
+                row.subviews.compactMap { $0 as? NSImageView }.count,
+                2
+            )
+        }
+    }
+
+    func testSettingsHistoryRowPublishesHoverChanges() throws {
+        let record = ClipboardHistoryRecord(
+            id: UUID(),
+            capturedAt: Date(),
+            lastCopiedAt: Date(),
+            sourceApplicationName: "Preview Source",
+            sourceBundleIdentifier: nil,
+            kind: .text,
+            summary: "Text",
+            searchableText: "Text",
+            copyCount: 1,
+            byteCount: 4,
+            thumbnailData: nil
+        )
+        let row = ClipboardArchiveSettingsRowView(record: record)
+        var hoverChanges: [Bool] = []
+        row.onHoverChanged = {
+            hoverChanges.append($0)
+        }
+        let event = try XCTUnwrap(NSEvent.mouseEvent(
+            with: .mouseMoved,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 0,
+            pressure: 0
+        ))
+
+        row.mouseEntered(with: event)
+        row.mouseExited(with: event)
+
+        XCTAssertEqual(hoverChanges, [true, false])
+    }
+
+    func testClipboardHoverDismissesVisiblePreviewWhenPointerLeavesItsRow() {
+        let recordID = UUID()
+
+        XCTAssertEqual(
+            ClipboardHoverPreviewPolicy.action(
+                recordID: recordID,
+                hovering: false,
+                pendingRecordID: nil,
+                previewedRecordID: recordID,
+                previewVisible: true
+            ),
+            .dismiss
+        )
+    }
+
+    func testClipboardHoverCancelsPendingPreviewBeforeItAppears() {
+        let recordID = UUID()
+
+        XCTAssertEqual(
+            ClipboardHoverPreviewPolicy.action(
+                recordID: recordID,
+                hovering: false,
+                pendingRecordID: recordID,
+                previewedRecordID: nil,
+                previewVisible: false
+            ),
+            .cancelPending
+        )
     }
 
     func testClipboardHistoryLimitIsClampedToSupportedRange() {
@@ -602,6 +742,29 @@ final class ClipboardHistoryTests: XCTestCase {
         let defaults = UserDefaults(suiteName: name)!
         defaults.removePersistentDomain(forName: name)
         return defaults
+    }
+
+    private func tinyPNGData() throws -> Data {
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: 2,
+            pixelsHigh: 2,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ))
+        return try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+    }
+
+    private func descendantTextFields(in view: NSView) -> [NSTextField] {
+        view.subviews.flatMap { subview in
+            let current = (subview as? NSTextField).map { [$0] } ?? []
+            return current + descendantTextFields(in: subview)
+        }
     }
 }
 

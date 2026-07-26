@@ -4,6 +4,11 @@ import XCTest
 @testable import OmniDockCore
 
 final class AppHotkeyBindingTests: XCTestCase {
+    @MainActor
+    func testShortcutRecorderAcceptsFirstClick() {
+        XCTAssertTrue(ShortcutRecorderView().acceptsFirstMouse(for: nil))
+    }
+
     func testRecordedShortcutDecodesExistingStoredShape() throws {
         let data = Data(#"{"keyCode":45,"modifierFlags":1048576}"#.utf8)
         let shortcut = try JSONDecoder().decode(RecordedShortcut.self, from: data)

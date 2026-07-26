@@ -6,6 +6,7 @@ final class PermissionFeatureGateTests: XCTestCase {
         XCTAssertEqual(PermissionFeature.dockClick.requiredPermissions, [.accessibility, .inputMonitoring])
         XCTAssertEqual(PermissionFeature.dockPreview.requiredPermissions, [.accessibility, .screenRecording])
         XCTAssertEqual(PermissionFeature.hotkeys.requiredPermissions, [.accessibility])
+        XCTAssertEqual(PermissionFeature.windowPlacement.requiredPermissions, [.accessibility, .inputMonitoring])
         XCTAssertEqual(
             PermissionFeature.finderExtension.requiredPermissions,
             [.finderExtension, .folderAccess]

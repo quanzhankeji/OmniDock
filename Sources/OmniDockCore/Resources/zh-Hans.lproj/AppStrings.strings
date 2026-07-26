@@ -11,10 +11,11 @@
 "appearanceDark" = "深色";
 
 "tabSettings" = "设置";
-"tabPreview" = "预览";
+"tabPreview" = "窗口预览";
 "tabHotkeys" = "快捷键";
 "tabFinderExtension" = "右键扩展";
 "tabClipboardHistory" = "剪贴板历史";
+"tabWindowPlacement" = "窗口调整";
 "menuSettings" = "设置";
 "menuHotkeys" = "快捷键";
 "menuQuit" = "退出";
@@ -112,6 +113,7 @@
 "hotkeysEnableTitle" = "启用快捷键";
 "hotkeysEnableDetail" = "使用全局快捷键快速隐藏或唤起应用。";
 "hotkeysChooseApp" = "选择应用";
+"hotkeysBoundCount" = "已绑定应用：%d";
 "hotkeysEmpty" = "还没有选择应用。";
 "hotkeyRemove" = "移除";
 "hotkeyAppUnavailable" = "应用不存在";
@@ -155,6 +157,46 @@
 "clipboardPreviewLastCopied" = "最近复制：%@";
 "clipboardPreviewCopyCount" = "复制次数：%d";
 "clipboardPreviewFiles" = "文件";
+
+"windowPlacementEnableTitle" = "启用窗口调整";
+"windowPlacementEnableDetail" = "通过快捷键、Option 点击或拖拽区域调整桌面最前方窗口。";
+"windowPlacementGreenButtonTitle" = "绿色按钮布局菜单";
+"windowPlacementGreenButtonDetail" = "将鼠标停在窗口绿色按钮上即可选择布局，也支持按住 Option 点击。";
+"windowPlacementDragTitle" = "拖拽调整";
+"windowPlacementDragDetail" = "将正在移动的窗口拖入指定屏幕区域并松开，即可应用布局。";
+"windowPlacementCommands" = "窗口布局";
+"windowPlacementAdd" = "新增布局";
+"windowPlacementRemove" = "移除";
+"windowPlacementMoveUp" = "上移";
+"windowPlacementMoveDown" = "下移";
+"windowPlacementCustomDefaultName" = "自定义布局";
+"windowPlacementTargetRegion" = "窗口大小与位置";
+"windowPlacementShortcut" = "键盘快捷键";
+"windowPlacementActivationRegion" = "拖拽触发区域";
+"windowPlacementNoActivationRegion" = "未设置拖拽区域";
+"windowPlacementActivationConflict" = "这个拖拽区域与另一个已启用布局重叠。";
+"windowPlacementShortcutConflict" = "这个快捷键已被 OmniDock 的其它功能使用。";
+"windowPlacementRegistrationWarning" = "一个或多个窗口调整快捷键无法注册。";
+"windowPlacementOpenSettings" = "窗口调整设置…";
+"windowPlacementLeftHalf" = "左侧";
+"windowPlacementRightHalf" = "右侧";
+"windowPlacementTopHalf" = "上侧";
+"windowPlacementBottomHalf" = "下侧";
+"windowPlacementTopLeft" = "左上";
+"windowPlacementTopRight" = "右上";
+"windowPlacementBottomLeft" = "左下";
+"windowPlacementBottomRight" = "右下";
+"windowPlacementLeftThird" = "左侧三分之一";
+"windowPlacementCenterThird" = "中间三分之一";
+"windowPlacementRightThird" = "右侧三分之一";
+"windowPlacementLeftTwoThirds" = "左侧三分之二";
+"windowPlacementCenterTwoThirds" = "中间三分之二";
+"windowPlacementRightTwoThirds" = "右侧三分之二";
+"windowPlacementNextDisplay" = "下一显示器";
+"windowPlacementPreviousDisplay" = "上一显示器";
+"windowPlacementMaximize" = "最大化";
+"windowPlacementCenter" = "居中";
+"windowPlacementRestore" = "恢复";
 
 "pickerTitle" = "选择应用";
 "pickerSearchPlaceholder" = "搜索应用";

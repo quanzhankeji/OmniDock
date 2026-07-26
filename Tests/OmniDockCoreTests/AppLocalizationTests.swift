@@ -54,6 +54,25 @@ final class AppLocalizationTests: XCTestCase {
         )
     }
 
+    func testHotkeyBindingCountUsesLocalizedCompactLabel() {
+        XCTAssertEqual(
+            AppLocalization.format(
+                .hotkeysBoundCount,
+                arguments: [3],
+                language: .en
+            ),
+            "Bound apps: 3"
+        )
+        XCTAssertEqual(
+            AppLocalization.format(
+                .hotkeysBoundCount,
+                arguments: [3],
+                language: .zhHans
+            ),
+            "已绑定应用：3"
+        )
+    }
+
     func testLocalizationStateSupportsConcurrentReadsAndLanguageChanges() {
         let group = DispatchGroup()
         let queue = DispatchQueue(label: "AppLocalizationTests.concurrent", attributes: .concurrent)
@@ -125,7 +144,7 @@ final class AppLocalizationTests: XCTestCase {
     }
 
     func testFinderExtensionLabelsAreLocalized() {
-        XCTAssertEqual(AppLocalization.text(.tabSettings, language: .en), "Setting")
+        XCTAssertEqual(AppLocalization.text(.tabSettings, language: .en), "Settings")
         XCTAssertEqual(AppLocalization.text(.tabFinderExtension, language: .en), "Finder Extension")
         XCTAssertEqual(AppLocalization.text(.finderExtensionEnableTitle, language: .en), "Enable")
         XCTAssertEqual(AppLocalization.text(.finderExtensionOpenSettings, language: .en), "Open Finder Extensions")
@@ -133,6 +152,20 @@ final class AppLocalizationTests: XCTestCase {
         XCTAssertEqual(AppLocalization.text(.tabFinderExtension, language: .zhHans), "右键扩展")
         XCTAssertEqual(AppLocalization.text(.finderExtensionEnableTitle, language: .zhHans), "启用")
         XCTAssertEqual(AppLocalization.text(.finderExtensionOpenSettings, language: .zhHans), "打开 Finder 扩展设置")
+    }
+
+    func testEverySettingsTabHasAStatusMenuTitle() {
+        XCTAssertEqual(
+            SettingsTab.allCases.map(\.titleKey),
+            [
+                .tabSettings,
+                .tabPreview,
+                .tabHotkeys,
+                .tabFinderExtension,
+                .tabClipboardHistory,
+                .tabWindowPlacement
+            ]
+        )
     }
 
     func testScreenRecordingDisclosuresMentionLiveAndStaticThumbnails() {

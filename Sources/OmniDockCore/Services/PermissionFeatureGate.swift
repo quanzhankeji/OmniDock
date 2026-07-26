@@ -7,6 +7,7 @@ public enum PermissionFeature: String, CaseIterable, Hashable {
     case windowCycle = "independentWindowSwitcher"
     case hotkeys
     case finderExtension
+    case windowPlacement
 
     public var requiredPermissions: [PermissionKind] {
         switch self {
@@ -20,6 +21,8 @@ public enum PermissionFeature: String, CaseIterable, Hashable {
             return [.accessibility]
         case .finderExtension:
             return [.finderExtension, .folderAccess]
+        case .windowPlacement:
+            return [.accessibility, .inputMonitoring]
         }
     }
 }
@@ -94,6 +97,12 @@ public enum PermissionFeatureGate {
             disabled.append(.finderExtension)
         }
 
+        if settings.windowPlacementEnabled,
+           !isSatisfied(for: .windowPlacement, in: snapshot) {
+            settings.windowPlacementEnabled = false
+            disabled.append(.windowPlacement)
+        }
+
         return disabled
     }
 
@@ -125,6 +134,8 @@ public enum PermissionFeatureGate {
                 settings.hotkeysEnabled = true
             case .finderExtension:
                 settings.finderExtensionEnabled = true
+            case .windowPlacement:
+                settings.windowPlacementEnabled = true
             }
         }
 
