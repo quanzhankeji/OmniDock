@@ -638,14 +638,16 @@ final class ClipboardHistoryTests: XCTestCase {
         pasteboard.clearContents()
         XCTAssertTrue(pasteboard.setString("Single entry", forType: .string))
 
-        try await Task.sleep(nanoseconds: 700_000_000)
+        await waitUntil {
+            !service.snapshot().records.isEmpty
+        }
         let firstSnapshot = service.snapshot()
         let record = try XCTUnwrap(firstSnapshot.records.first)
         XCTAssertEqual(firstSnapshot.records.count, 1)
         XCTAssertEqual(record.copyCount, 1)
 
         service.copy(id: record.id)
-        try await Task.sleep(nanoseconds: 700_000_000)
+        try await Task.sleep(nanoseconds: 1_200_000_000)
 
         let finalSnapshot = service.snapshot()
         XCTAssertEqual(finalSnapshot.records.count, 1)
@@ -742,6 +744,20 @@ final class ClipboardHistoryTests: XCTestCase {
         let defaults = UserDefaults(suiteName: name)!
         defaults.removePersistentDomain(forName: name)
         return defaults
+    }
+
+    private func waitUntil(
+        _ condition: @MainActor () -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        for _ in 0..<60 {
+            if condition() {
+                return
+            }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTFail("Condition was not met", file: file, line: line)
     }
 
     private func tinyPNGData() throws -> Data {
