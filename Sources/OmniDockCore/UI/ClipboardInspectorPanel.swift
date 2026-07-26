@@ -78,19 +78,19 @@ final class ClipboardInspectorPanel: NSPanel {
 
     func present(
         _ content: ClipboardHistoryPreviewContent,
-        beside sourcePanel: NSPanel
+        beside sourceWindow: NSWindow
     ) {
-        if parent !== sourcePanel {
+        if parent !== sourceWindow {
             parent?.removeChildWindow(self)
-            sourcePanel.addChildWindow(self, ordered: .above)
+            sourceWindow.addChildWindow(self, ordered: .above)
         }
 
-        let visibleFrame = sourcePanel.screen?.visibleFrame
+        let visibleFrame = sourceWindow.screen?.visibleFrame
             ?? NSScreen.main?.visibleFrame
             ?? NSScreen.screens.first?.visibleFrame
         if let visibleFrame {
             let targetSize = ClipboardPaletteLayout.detailSize(
-                beside: sourcePanel.frame,
+                beside: sourceWindow.frame,
                 in: visibleFrame
             )
             contentMaxSize = targetSize
@@ -99,7 +99,7 @@ final class ClipboardInspectorPanel: NSPanel {
             detailView.layoutSubtreeIfNeeded()
             setContentSize(targetSize)
             setFrameOrigin(ClipboardInspectorPlacement.origin(
-                beside: sourcePanel.frame,
+                beside: sourceWindow.frame,
                 detailSize: targetSize,
                 visibleFrame: visibleFrame,
                 gap: ClipboardPaletteLayout.panelGap
@@ -220,8 +220,10 @@ private final class ClipboardInspectorView: NSVisualEffectView {
         iconView.image = ClipboardSourceArtwork.icon(
             bundleIdentifier: record.sourceBundleIdentifier
         )
-        applicationLabel.stringValue = record.sourceApplicationName
-        summaryLabel.stringValue = record.summary
+        applicationLabel.stringValue = ClipboardHistoryDisplayText.sourceName(
+            record.sourceApplicationName
+        )
+        summaryLabel.stringValue = ClipboardHistoryDisplayText.summary(record.summary)
 
         let dateFormatter = DateFormatter()
         dateFormatter.dateStyle = .medium
