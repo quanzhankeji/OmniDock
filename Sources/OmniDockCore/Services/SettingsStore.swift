@@ -12,6 +12,7 @@ public enum SettingsChange: String, Equatable {
     case hotkeys
     case hotkeyBindings
     case clipboardHistory
+    case windowPlacement
     case language
     case appearance
     case permissionState
@@ -24,7 +25,7 @@ public enum SettingsChange: String, Equatable {
         case .preview, .livePreview, .livePreviewLimit, .dockClick, .all:
             return true
         case .commandTabPreview, .windowCycle, .finderExtension, .minimizeDockClick,
-             .hotkeys, .hotkeyBindings, .clipboardHistory, .language, .appearance,
+             .hotkeys, .hotkeyBindings, .clipboardHistory, .windowPlacement, .language, .appearance,
              .permissionState:
             return false
         }
@@ -35,7 +36,7 @@ public enum SettingsChange: String, Equatable {
         case .preview, .commandTabPreview, .all:
             return true
         case .windowCycle, .finderExtension, .livePreview, .livePreviewLimit, .dockClick,
-             .minimizeDockClick, .hotkeys, .hotkeyBindings, .clipboardHistory, .language,
+             .minimizeDockClick, .hotkeys, .hotkeyBindings, .clipboardHistory, .windowPlacement, .language,
              .appearance, .permissionState:
             return false
         }
@@ -46,7 +47,7 @@ public enum SettingsChange: String, Equatable {
         case .preview, .windowCycle, .all:
             return true
         case .commandTabPreview, .finderExtension, .livePreview, .livePreviewLimit, .dockClick,
-             .minimizeDockClick, .hotkeys, .hotkeyBindings, .clipboardHistory, .language,
+             .minimizeDockClick, .hotkeys, .hotkeyBindings, .clipboardHistory, .windowPlacement, .language,
              .appearance, .permissionState:
             return false
         }
@@ -54,9 +55,9 @@ public enum SettingsChange: String, Equatable {
 
     public var affectsAppHotkeys: Bool {
         switch self {
-        case .hotkeys, .hotkeyBindings, .clipboardHistory, .all:
+        case .windowCycle, .hotkeys, .hotkeyBindings, .clipboardHistory, .windowPlacement, .all:
             return true
-        case .preview, .commandTabPreview, .windowCycle, .finderExtension, .livePreview,
+        case .preview, .commandTabPreview, .finderExtension, .livePreview,
              .livePreviewLimit, .dockClick, .minimizeDockClick, .language,
              .appearance, .permissionState:
             return false
@@ -65,13 +66,21 @@ public enum SettingsChange: String, Equatable {
 
     public var affectsClipboardHistory: Bool {
         switch self {
-        case .clipboardHistory, .all:
+        case .clipboardHistory, .windowPlacement, .all:
             return true
         case .preview, .commandTabPreview, .windowCycle, .finderExtension, .livePreview,
              .livePreviewLimit, .dockClick, .minimizeDockClick, .hotkeys, .hotkeyBindings,
              .language, .appearance, .permissionState:
             return false
         }
+    }
+
+    public var affectsWindowPlacement: Bool {
+        self == .windowPlacement
+            || self == .windowCycle
+            || self == .hotkeyBindings
+            || self == .clipboardHistory
+            || self == .all
     }
 }
 
@@ -95,6 +104,7 @@ public final class SettingsStore {
         case hotkeyAssignments = "hotkeyAssignments"
         case clipboardHistoryEnabled = "clipboardHistoryEnabled"
         case clipboardHistoryLimit = "clipboardHistoryLimit"
+        case windowPlacementConfiguration = "windowPlacementConfiguration"
         case minimizeOnRepeatedDockClick = "minimizeOnRepeatedDockClick"
         case appLanguage = "appLanguage"
         case appAppearance = "appAppearance"
@@ -292,6 +302,34 @@ public final class SettingsStore {
         }
         set {
             set(min(max(newValue, 1), 999), for: .clipboardHistoryLimit)
+        }
+    }
+
+    var windowPlacementConfiguration: WindowPlacementConfiguration {
+        get {
+            guard var configuration = decoded(
+                WindowPlacementConfiguration.self,
+                from: defaults.data(forKey: Key.windowPlacementConfiguration.rawValue)
+            ) else {
+                return .default
+            }
+            configuration.normalize()
+            return configuration
+        }
+        set {
+            var normalized = newValue
+            normalized.normalize()
+            defaults.set(encoded(normalized), forKey: Key.windowPlacementConfiguration.rawValue)
+            postChange(.windowPlacement)
+        }
+    }
+
+    var windowPlacementEnabled: Bool {
+        get { windowPlacementConfiguration.isEnabled }
+        set {
+            var configuration = windowPlacementConfiguration
+            configuration.isEnabled = newValue
+            windowPlacementConfiguration = configuration
         }
     }
 
@@ -502,6 +540,8 @@ public final class SettingsStore {
             return .hotkeyBindings
         case .clipboardHistoryEnabled, .clipboardHistoryLimit:
             return .clipboardHistory
+        case .windowPlacementConfiguration:
+            return .windowPlacement
         case .appLanguage:
             return .language
         case .appAppearance:

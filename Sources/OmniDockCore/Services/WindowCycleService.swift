@@ -4,6 +4,13 @@ import CoreGraphics
 
 private let windowCycleEventSignature: OSType = 0x4F444154 // "ODAT"
 
+enum WindowCycleShortcut {
+    static let recorded = RecordedShortcut(
+        keyCode: kVK_Tab,
+        modifierFlags: NSEvent.ModifierFlags.option.rawValue
+    )
+}
+
 enum WindowCycleDirection: Equatable {
     case forward
     case backward
@@ -275,7 +282,7 @@ private final class OptionTabActivationRegistry: WindowCycleHotkeyRegistering {
             let hotkeyID = EventHotKeyID(signature: windowCycleEventSignature, id: identifier)
             var reference: EventHotKeyRef?
             let status = RegisterEventHotKey(
-                UInt32(kVK_Tab),
+                UInt32(WindowCycleShortcut.recorded.keyCode),
                 modifiers,
                 hotkeyID,
                 GetApplicationEventTarget(),

@@ -1,11 +1,52 @@
 import AppKit
 
+enum SettingsWindowLayoutMetrics {
+    static let preferredContentSize = NSSize(width: 780, height: 700)
+    static let minimumContentSize = NSSize(width: 760, height: 560)
+    static let maximumContentSize = NSSize(width: 960, height: 900)
+
+    static func normalizedContentSize(_ current: NSSize) -> NSSize {
+        NSSize(
+            width: min(
+                max(current.width, minimumContentSize.width),
+                maximumContentSize.width
+            ),
+            height: min(
+                max(current.height, minimumContentSize.height),
+                maximumContentSize.height
+            )
+        )
+    }
+}
+
 public enum SettingsTab: Int, CaseIterable {
     case settings = 0
     case preview = 1
     case hotkeys = 2
     case finderExtension = 3
     case clipboardHistory = 4
+    case windowPlacement = 5
+
+    var titleKey: AppStringKey {
+        switch self {
+        case .settings:
+            return .tabSettings
+        case .preview:
+            return .tabPreview
+        case .hotkeys:
+            return .tabHotkeys
+        case .finderExtension:
+            return .tabFinderExtension
+        case .clipboardHistory:
+            return .tabClipboardHistory
+        case .windowPlacement:
+            return .tabWindowPlacement
+        }
+    }
+
+    var localizedTitle: String {
+        AppStrings.text(titleKey)
+    }
 }
 
 @MainActor
@@ -24,6 +65,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     private let windowCycleRegistrationStatus: WindowCycleRegistrationStatusStore
     private let clipboardHistoryService: ClipboardHistoryService?
     private let clipboardHistoryRegistrationStatus: ClipboardHistoryRegistrationStatus
+    private let windowPlacementRegistrationStatus: WindowPlacementRegistrationStatusStore
     private let presentationCoordinator: ApplicationPresentationCoordinator
     private let onPermissionGateRequired: (PermissionFeature) -> Void
     private let onOpenPermissionOnboarding: () -> Void
@@ -36,6 +78,8 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     private var hotkeysContentView: NSView?
     private var finderExtensionContentView: NSView?
     private var clipboardHistoryContentView: NSView?
+    private var windowPlacementContentView: NSView?
+    private var windowPlacementSettingsView: WindowPlacementSettingsView?
     private var languagePopupButton: NSPopUpButton?
     private var appearancePopupButton: NSPopUpButton?
     private var previewSwitch: NSSwitch?
@@ -60,8 +104,14 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     private var clipboardHistoryWarningField: NSTextField?
     private var clipboardHistorySearchField: NSSearchField?
     private var clipboardHistoryRowsStack: NSStackView?
+    private var clipboardHistoryDetailPanel: ClipboardInspectorPanel?
+    private var clipboardHistoryPreviewWorkItem: DispatchWorkItem?
+    private var clipboardHistoryPendingPreviewRecordID: UUID?
+    private var clipboardHistoryPreviewRecordID: UUID?
+    private var clipboardHistoryPreviewGeneration = 0
     private var hotkeyGuidanceField: NSTextField?
     private var hotkeyHeaderHeightConstraint: NSLayoutConstraint?
+    private var hotkeyBindingCountField: NSTextField?
     private var permissionViews: [PermissionKind: [PermissionStatusView]] = [:]
     private var hotkeyRowsStack: NSStackView?
     private var hotkeyWarnings: [UUID: String] = [:]
@@ -78,6 +128,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         windowCycleRegistrationStatus: WindowCycleRegistrationStatusStore? = nil,
         clipboardHistoryService: ClipboardHistoryService? = nil,
         clipboardHistoryRegistrationStatus: ClipboardHistoryRegistrationStatus? = nil,
+        windowPlacementRegistrationStatus: WindowPlacementRegistrationStatusStore? = nil,
         onPermissionGateRequired: @escaping (PermissionFeature) -> Void,
         onOpenPermissionOnboarding: @escaping () -> Void = {}
     ) {
@@ -91,6 +142,8 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             clipboardHistoryService: clipboardHistoryService,
             clipboardHistoryRegistrationStatus: clipboardHistoryRegistrationStatus
                 ?? ClipboardHistoryRegistrationStatus(),
+            windowPlacementRegistrationStatus: windowPlacementRegistrationStatus
+                ?? WindowPlacementRegistrationStatusStore(),
             presentationCoordinator: ApplicationPresentationCoordinator(),
             onPermissionGateRequired: onPermissionGateRequired,
             onOpenPermissionOnboarding: onOpenPermissionOnboarding
@@ -105,6 +158,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         windowCycleRegistrationStatus: WindowCycleRegistrationStatusStore,
         clipboardHistoryService: ClipboardHistoryService? = nil,
         clipboardHistoryRegistrationStatus: ClipboardHistoryRegistrationStatus? = nil,
+        windowPlacementRegistrationStatus: WindowPlacementRegistrationStatusStore? = nil,
         presentationCoordinator: ApplicationPresentationCoordinator,
         onPermissionGateRequired: @escaping (PermissionFeature) -> Void,
         onOpenPermissionOnboarding: @escaping () -> Void
@@ -117,6 +171,8 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         self.clipboardHistoryService = clipboardHistoryService
         self.clipboardHistoryRegistrationStatus = clipboardHistoryRegistrationStatus
             ?? ClipboardHistoryRegistrationStatus()
+        self.windowPlacementRegistrationStatus = windowPlacementRegistrationStatus
+            ?? WindowPlacementRegistrationStatusStore()
         self.presentationCoordinator = presentationCoordinator
         self.onPermissionGateRequired = onPermissionGateRequired
         self.onOpenPermissionOnboarding = onOpenPermissionOnboarding
@@ -157,17 +213,26 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             name: ClipboardHistoryRegistrationStatus.changedNotification,
             object: clipboardHistoryRegistrationStatus
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowPlacementStatusChanged),
+            name: WindowPlacementRegistrationStatusStore.changedNotification,
+            object: self.windowPlacementRegistrationStatus
+        )
     }
 
     public func show(tab: SettingsTab = .settings) {
         presentationCoordinator.present(.settings)
+        let isNewWindow = window == nil
         let window = window ?? makeWindow()
         self.window = window
         selectedTab = tab
         segmentedControl?.selectedSegment = tab.rawValue
         displaySelectedTab()
         refresh()
-        window.center()
+        if isNewWindow {
+            window.center()
+        }
         window.makeKeyAndOrderFront(nil)
     }
 
@@ -175,6 +240,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         guard notification.object as? NSWindow === window else {
             return
         }
+        dismissClipboardHistoryPreview()
         applicationPickerGeneration &+= 1
         applicationPicker?.dismiss()
         applicationPicker = nil
@@ -231,11 +297,15 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         if selectedTab == .clipboardHistory {
             reloadClipboardHistoryRows()
         }
+        windowPlacementSettingsView?.reload()
         applicationPicker?.refreshLocalization()
     }
 
     @objc private func changeTab(_ sender: NSSegmentedControl) {
         selectedTab = SettingsTab(rawValue: sender.selectedSegment) ?? .settings
+        if selectedTab != .clipboardHistory {
+            dismissClipboardHistoryPreview()
+        }
         displaySelectedTab()
         if selectedTab == .clipboardHistory {
             reloadClipboardHistoryRows()
@@ -617,10 +687,17 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         refresh()
     }
 
+    @objc private func windowPlacementStatusChanged() {
+        refresh()
+    }
+
     private func makeWindow() -> NSWindow {
         let window = NSWindow(
-            contentRect: CGRect(x: 0, y: 0, width: 760, height: 640),
-            styleMask: [.titled, .closable],
+            contentRect: CGRect(
+                origin: .zero,
+                size: SettingsWindowLayoutMetrics.preferredContentSize
+            ),
+            styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
@@ -629,6 +706,9 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         window.hidesOnDeactivate = false
         window.level = .normal
         window.isReleasedWhenClosed = false
+        window.isRestorable = false
+        window.contentMinSize = SettingsWindowLayoutMetrics.minimumContentSize
+        window.contentMaxSize = SettingsWindowLayoutMetrics.maximumContentSize
         window.contentView = makeContentView()
         applyTheme(to: window)
         return window
@@ -660,8 +740,12 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         clipboardHistoryWarningField = nil
         clipboardHistorySearchField = nil
         clipboardHistoryRowsStack = nil
+        dismissClipboardHistoryPreview()
+        windowPlacementContentView = nil
+        windowPlacementSettingsView = nil
         hotkeyGuidanceField = nil
         hotkeyHeaderHeightConstraint = nil
+        hotkeyBindingCountField = nil
         hotkeyRowsStack = nil
         window.contentView = makeContentView()
     }
@@ -673,19 +757,23 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         content.layer?.backgroundColor = OmniDockTheme.palette().canvas.cgColor
 
         let segmentedControl = NSSegmentedControl(
-            labels: [
-                AppStrings.text(.tabSettings),
-                AppStrings.text(.tabPreview),
-                AppStrings.text(.tabHotkeys),
-                AppStrings.text(.tabFinderExtension),
-                AppStrings.text(.tabClipboardHistory)
-            ],
+            labels: SettingsTab.allCases.map(\.localizedTitle),
             trackingMode: .selectOne,
             target: self,
             action: #selector(changeTab(_:))
         )
         segmentedControl.selectedSegment = selectedTab.rawValue
         segmentedControl.translatesAutoresizingMaskIntoConstraints = false
+        segmentedControl.setContentCompressionResistancePriority(
+            .defaultLow,
+            for: .horizontal
+        )
+        let segmentedControlWidth: CGFloat = 700
+        let segmentWidth = segmentedControlWidth
+            / CGFloat(segmentedControl.segmentCount)
+        for index in 0..<segmentedControl.segmentCount {
+            segmentedControl.setWidth(segmentWidth, forSegment: index)
+        }
         self.segmentedControl = segmentedControl
         content.addSubview(segmentedControl)
 
@@ -698,23 +786,48 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         let previewContentView = makeScrollableTab(makePreviewTab())
         let hotkeysContentView = makeHotkeysTab()
         let finderExtensionContentView = makeScrollableTab(makeFinderExtensionTab())
-        let clipboardHistoryContentView = makeScrollableTab(makeClipboardHistoryTab())
+        let clipboardHistoryContentView = makeClipboardHistoryTab()
+        let windowPlacementSettingsView = WindowPlacementSettingsView(
+            settings: settings,
+            registrationStatus: windowPlacementRegistrationStatus
+        )
+        windowPlacementSettingsView.onEnableRequest = { [weak self] sender in
+            self?.canEnable(.windowPlacement, sender: sender) ?? false
+        }
+        let windowPlacementContentView = makeScrollableTab(windowPlacementSettingsView)
+        [
+            generalContentView,
+            previewContentView,
+            hotkeysContentView,
+            finderExtensionContentView,
+            clipboardHistoryContentView,
+            windowPlacementContentView
+        ].forEach {
+            $0.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        }
         self.generalContentView = generalContentView
         self.previewContentView = previewContentView
         self.hotkeysContentView = hotkeysContentView
         self.finderExtensionContentView = finderExtensionContentView
         self.clipboardHistoryContentView = clipboardHistoryContentView
-        embed(generalContentView, in: contentContainer)
-        embed(previewContentView, in: contentContainer)
-        embed(hotkeysContentView, in: contentContainer)
-        embed(finderExtensionContentView, in: contentContainer)
-        embed(clipboardHistoryContentView, in: contentContainer)
+        self.windowPlacementSettingsView = windowPlacementSettingsView
+        self.windowPlacementContentView = windowPlacementContentView
         displaySelectedTab()
 
         NSLayoutConstraint.activate([
             segmentedControl.topAnchor.constraint(equalTo: content.topAnchor, constant: 18),
             segmentedControl.centerXAnchor.constraint(equalTo: content.centerXAnchor),
-            segmentedControl.widthAnchor.constraint(equalToConstant: 680),
+            segmentedControl.leadingAnchor.constraint(
+                greaterThanOrEqualTo: content.leadingAnchor,
+                constant: 24
+            ),
+            segmentedControl.trailingAnchor.constraint(
+                lessThanOrEqualTo: content.trailingAnchor,
+                constant: -24
+            ),
+            segmentedControl.widthAnchor.constraint(
+                equalToConstant: segmentedControlWidth
+            ),
 
             contentContainer.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 24),
             contentContainer.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
@@ -925,11 +1038,17 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         )
         enabledRow.translatesAutoresizingMaskIntoConstraints = false
 
-        let guidanceField = NSTextField(labelWithString: HotkeyGuidancePresentation.message)
+        let guidanceField = NSTextField(
+            wrappingLabelWithString: HotkeyGuidancePresentation.message
+        )
         guidanceField.font = .systemFont(ofSize: 12)
         guidanceField.textColor = .secondaryLabelColor
         guidanceField.lineBreakMode = .byWordWrapping
         guidanceField.maximumNumberOfLines = 2
+        guidanceField.setContentCompressionResistancePriority(
+            .defaultLow,
+            for: .horizontal
+        )
         guidanceField.translatesAutoresizingMaskIntoConstraints = false
         self.hotkeyGuidanceField = guidanceField
 
@@ -943,14 +1062,36 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
 
         let scrollView = NSScrollView()
         scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
         scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.setContentHuggingPriority(.defaultLow, for: .vertical)
+        scrollView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+
+        let listHeader = NSStackView()
+        listHeader.orientation = .horizontal
+        listHeader.alignment = .centerY
+        listHeader.translatesAutoresizingMaskIntoConstraints = false
+
+        let listSpacer = NSView()
+        let bindingCountField = NSTextField(labelWithString: "")
+        bindingCountField.font = .systemFont(ofSize: 12)
+        bindingCountField.textColor = .secondaryLabelColor
+        bindingCountField.alignment = .right
+        bindingCountField.translatesAutoresizingMaskIntoConstraints = false
+        hotkeyBindingCountField = bindingCountField
+        listHeader.addArrangedSubview(listSpacer)
+        listHeader.addArrangedSubview(bindingCountField)
+        stack.addArrangedSubview(listHeader)
 
         let rowsStack = NSStackView()
         rowsStack.orientation = .vertical
         rowsStack.alignment = .width
         rowsStack.spacing = 10
         rowsStack.translatesAutoresizingMaskIntoConstraints = false
+        rowsStack.setContentHuggingPriority(.required, for: .vertical)
+        rowsStack.setContentCompressionResistancePriority(.required, for: .vertical)
         self.hotkeyRowsStack = rowsStack
 
         let documentView = TopAnchoredDocumentView()
@@ -981,8 +1122,9 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             addButton.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor),
             addButton.centerYAnchor.constraint(equalTo: enabledRow.centerYAnchor),
 
+            listHeader.widthAnchor.constraint(equalTo: stack.widthAnchor),
             scrollView.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            scrollView.heightAnchor.constraint(equalToConstant: 250),
+            scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 220),
             documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
             documentView.heightAnchor.constraint(greaterThanOrEqualTo: scrollView.contentView.heightAnchor),
             rowsStack.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
@@ -1076,16 +1218,20 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     }
 
     private func makeClipboardHistoryTab() -> NSView {
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 16
+        let root = NSView()
+
+        let settingsStack = NSStackView()
+        settingsStack.orientation = .vertical
+        settingsStack.alignment = .leading
+        settingsStack.spacing = 12
+        settingsStack.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(settingsStack)
 
         let enabledSwitch = NSSwitch()
         enabledSwitch.target = self
         enabledSwitch.action = #selector(toggleClipboardHistory(_:))
         clipboardHistorySwitch = enabledSwitch
-        stack.addArrangedSubview(makeSettingRow(
+        settingsStack.addArrangedSubview(makeSettingRow(
             title: AppStrings.text(.clipboardEnableTitle),
             detail: AppStrings.text(.clipboardEnableDetail),
             control: enabledSwitch
@@ -1096,7 +1242,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         shortcutLabel.alignment = .center
         shortcutLabel.translatesAutoresizingMaskIntoConstraints = false
         shortcutLabel.widthAnchor.constraint(equalToConstant: 72).isActive = true
-        stack.addArrangedSubview(makeSettingRow(
+        settingsStack.addArrangedSubview(makeSettingRow(
             title: AppStrings.text(.clipboardShortcutTitle),
             detail: AppStrings.text(.clipboardShortcutDetail),
             control: shortcutLabel
@@ -1108,9 +1254,9 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         warning.maximumNumberOfLines = 3
         warning.isHidden = true
         clipboardHistoryWarningField = warning
-        stack.addArrangedSubview(makeIndentedAuxiliaryTextRow(warning))
+        settingsStack.addArrangedSubview(makeIndentedAuxiliaryTextRow(warning))
 
-        stack.addArrangedSubview(makeSettingRow(
+        settingsStack.addArrangedSubview(makeSettingRow(
             title: AppStrings.text(.clipboardLimitTitle),
             detail: AppStrings.text(.clipboardLimitDetail),
             control: makeClipboardHistoryLimitControl()
@@ -1120,12 +1266,14 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         privacyNote.font = .systemFont(ofSize: 12)
         privacyNote.textColor = .secondaryLabelColor
         privacyNote.maximumNumberOfLines = 3
-        stack.addArrangedSubview(privacyNote)
+        settingsStack.addArrangedSubview(privacyNote)
 
         let listHeader = NSStackView()
         listHeader.orientation = .horizontal
         listHeader.alignment = .centerY
         listHeader.spacing = 10
+        listHeader.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(listHeader)
 
         let searchField = NSSearchField()
         searchField.placeholderString = AppStrings.text(.clipboardSearchPlaceholder)
@@ -1143,20 +1291,57 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         listHeader.addArrangedSubview(clearButton)
         searchField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         clearButton.setContentCompressionResistancePriority(.required, for: .horizontal)
-        stack.addArrangedSubview(listHeader)
+
+        let scrollView = NSScrollView()
+        scrollView.borderType = .noBorder
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.setContentHuggingPriority(.defaultLow, for: .vertical)
+        scrollView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        root.addSubview(scrollView)
 
         let rows = NSStackView()
         rows.orientation = .vertical
-        rows.alignment = .leading
+        rows.alignment = .width
         rows.spacing = 6
+        rows.translatesAutoresizingMaskIntoConstraints = false
+        rows.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         clipboardHistoryRowsStack = rows
-        stack.addArrangedSubview(rows)
 
-        for view in stack.arrangedSubviews {
-            view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        let documentView = TopAnchoredDocumentView()
+        documentView.translatesAutoresizingMaskIntoConstraints = false
+        documentView.addSubview(rows)
+        scrollView.documentView = documentView
+
+        for view in settingsStack.arrangedSubviews {
+            view.widthAnchor.constraint(equalTo: settingsStack.widthAnchor).isActive = true
         }
+        NSLayoutConstraint.activate([
+            settingsStack.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            settingsStack.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            settingsStack.topAnchor.constraint(equalTo: root.topAnchor),
+
+            listHeader.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            listHeader.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            listHeader.topAnchor.constraint(equalTo: settingsStack.bottomAnchor, constant: 16),
+
+            scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: listHeader.bottomAnchor, constant: 10),
+            scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 140),
+
+            documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
+            documentView.heightAnchor.constraint(greaterThanOrEqualTo: scrollView.contentView.heightAnchor),
+            rows.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
+            rows.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
+            rows.topAnchor.constraint(equalTo: documentView.topAnchor),
+            rows.bottomAnchor.constraint(lessThanOrEqualTo: documentView.bottomAnchor)
+        ])
         reloadClipboardHistoryRows()
-        return stack
+        return root
     }
 
     private func makeFinderPermissionSection() -> NSView {
@@ -1348,10 +1533,23 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         titleField.font = .systemFont(ofSize: 14, weight: .medium)
         titleField.textColor = .labelColor
 
-        let detailField = NSTextField(labelWithString: detail)
+        let detailField = NSTextField(wrappingLabelWithString: detail)
         detailField.font = .systemFont(ofSize: 12)
         detailField.textColor = .secondaryLabelColor
         detailField.lineBreakMode = .byWordWrapping
+        detailField.maximumNumberOfLines = 2
+        titleField.setContentCompressionResistancePriority(
+            .defaultLow,
+            for: .horizontal
+        )
+        detailField.setContentCompressionResistancePriority(
+            .defaultLow,
+            for: .horizontal
+        )
+        labels.setContentCompressionResistancePriority(
+            .defaultLow,
+            for: .horizontal
+        )
 
         labels.addArrangedSubview(titleField)
         labels.addArrangedSubview(detailField)
@@ -1455,11 +1653,28 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     }
 
     private func displaySelectedTab() {
-        generalContentView?.isHidden = selectedTab != .settings
-        previewContentView?.isHidden = selectedTab != .preview
-        hotkeysContentView?.isHidden = selectedTab != .hotkeys
-        finderExtensionContentView?.isHidden = selectedTab != .finderExtension
-        clipboardHistoryContentView?.isHidden = selectedTab != .clipboardHistory
+        let viewsByTab: [(SettingsTab, NSView?)] = [
+            (.settings, generalContentView),
+            (.preview, previewContentView),
+            (.hotkeys, hotkeysContentView),
+            (.finderExtension, finderExtensionContentView),
+            (.clipboardHistory, clipboardHistoryContentView),
+            (.windowPlacement, windowPlacementContentView)
+        ]
+        guard let contentContainer,
+              let selectedView = viewsByTab.first(where: {
+                  $0.0 == selectedTab
+              })?.1
+        else {
+            return
+        }
+
+        for (_, view) in viewsByTab where view !== selectedView {
+            view?.removeFromSuperview()
+        }
+        if selectedView.superview !== contentContainer {
+            embed(selectedView, in: contentContainer)
+        }
     }
 
     private func reloadClipboardHistoryRows() {
@@ -1469,6 +1684,14 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         rows.removeAllArrangedSubviews()
         let query = clipboardHistorySearchField?.stringValue ?? ""
         let records = clipboardHistoryService?.filteredRecords(query: query) ?? []
+        if let clipboardHistoryPendingPreviewRecordID,
+           !records.contains(where: { $0.id == clipboardHistoryPendingPreviewRecordID }) {
+            cancelPendingClipboardHistoryPreview()
+        }
+        if let clipboardHistoryPreviewRecordID,
+           !records.contains(where: { $0.id == clipboardHistoryPreviewRecordID }) {
+            dismissClipboardHistoryPreview()
+        }
         guard !records.isEmpty else {
             let empty = NSTextField(labelWithString: AppStrings.text(.clipboardEmpty))
             empty.font = .systemFont(ofSize: 13)
@@ -1478,16 +1701,101 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         }
 
         for record in records {
-            let row = ClipboardArchiveSettingsRowView(record: record)
+            let fallbackImageData = record.thumbnailData == nil && record.kind == .image
+                ? clipboardHistoryService?.previewContent(id: record.id)?.imageData
+                : nil
+            let row = ClipboardArchiveSettingsRowView(
+                record: record,
+                fallbackImageData: fallbackImageData
+            )
             row.onCopy = { [weak self] in
                 self?.clipboardHistoryService?.copy(id: record.id)
             }
             row.onDelete = { [weak self] in
                 self?.clipboardHistoryService?.delete(id: record.id)
             }
+            row.onHoverChanged = { [weak self] hovering in
+                self?.handleClipboardHistoryHover(
+                    recordID: record.id,
+                    hovering: hovering
+                )
+            }
             rows.addArrangedSubview(row)
             row.widthAnchor.constraint(equalTo: rows.widthAnchor).isActive = true
         }
+    }
+
+    private func handleClipboardHistoryHover(recordID: UUID, hovering: Bool) {
+        switch ClipboardHoverPreviewPolicy.action(
+            recordID: recordID,
+            hovering: hovering,
+            pendingRecordID: clipboardHistoryPendingPreviewRecordID,
+            previewedRecordID: clipboardHistoryPreviewRecordID,
+            previewVisible: clipboardHistoryDetailPanel?.isVisible == true
+        ) {
+        case .schedule:
+            scheduleClipboardHistoryPreview(for: recordID)
+        case .present:
+            presentClipboardHistoryPreview(for: recordID)
+        case .cancelPending:
+            cancelPendingClipboardHistoryPreview()
+        case .dismiss:
+            dismissClipboardHistoryPreview()
+        case .none:
+            break
+        }
+    }
+
+    private func scheduleClipboardHistoryPreview(for recordID: UUID) {
+        cancelPendingClipboardHistoryPreview()
+        clipboardHistoryPendingPreviewRecordID = recordID
+        clipboardHistoryPreviewGeneration += 1
+        let generation = clipboardHistoryPreviewGeneration
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self,
+                  self.clipboardHistoryPreviewGeneration == generation,
+                  self.clipboardHistoryPendingPreviewRecordID == recordID
+            else {
+                return
+            }
+            self.clipboardHistoryPreviewWorkItem = nil
+            self.clipboardHistoryPendingPreviewRecordID = nil
+            self.presentClipboardHistoryPreview(for: recordID)
+        }
+        clipboardHistoryPreviewWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + 0.4,
+            execute: workItem
+        )
+    }
+
+    private func presentClipboardHistoryPreview(for recordID: UUID) {
+        cancelPendingClipboardHistoryPreview()
+        guard selectedTab == .clipboardHistory,
+              let window,
+              window.isVisible,
+              let content = clipboardHistoryService?.previewContent(id: recordID)
+        else {
+            dismissClipboardHistoryPreview()
+            return
+        }
+        let detailPanel = clipboardHistoryDetailPanel ?? ClipboardInspectorPanel()
+        clipboardHistoryDetailPanel = detailPanel
+        clipboardHistoryPreviewRecordID = recordID
+        detailPanel.present(content, beside: window)
+    }
+
+    private func cancelPendingClipboardHistoryPreview() {
+        clipboardHistoryPreviewGeneration += 1
+        clipboardHistoryPreviewWorkItem?.cancel()
+        clipboardHistoryPreviewWorkItem = nil
+        clipboardHistoryPendingPreviewRecordID = nil
+    }
+
+    private func dismissClipboardHistoryPreview() {
+        cancelPendingClipboardHistoryPreview()
+        clipboardHistoryDetailPanel?.dismiss()
+        clipboardHistoryPreviewRecordID = nil
     }
 
     private func reloadHotkeyRows() {
@@ -1497,6 +1805,10 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         hotkeyRowsStack.removeAllArrangedSubviews()
 
         let bindings = settings.appHotkeyBindings
+        hotkeyBindingCountField?.stringValue = AppStrings.format(
+            .hotkeysBoundCount,
+            bindings.count
+        )
         guard !bindings.isEmpty else {
             let label = NSTextField(labelWithString: AppStrings.text(.hotkeysEmpty))
             label.font = .systemFont(ofSize: 13)
@@ -1532,7 +1844,13 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             return
         }
 
-        if let reason = ShortcutRecorderValidation.rejectionReason(
+        let featureConflict = settings.windowPlacementConfiguration.commands.contains {
+            $0.isEnabled && $0.shortcut == shortcut
+        } || (settings.windowCycleEnabled && shortcut == WindowCycleShortcut.recorded)
+        if featureConflict {
+            updated.updateRecordedShortcut(nil)
+            hotkeyWarnings[binding.id] = AppStrings.text(.windowPlacementShortcutConflict)
+        } else if let reason = ShortcutRecorderValidation.rejectionReason(
             for: shortcut,
             existingBindings: settings.appHotkeyBindings,
             excluding: binding.id,
@@ -1553,9 +1871,14 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     private func warning(for binding: AppHotkeyBinding) -> String? {
         hotkeyWarnings[binding.id]
             ?? hotkeyRegistrationStatus.warning(for: binding.id)
-            ?? binding.recordedShortcut.flatMap {
-                ShortcutRecorderValidation.rejectionReason(
-                    for: $0,
+            ?? binding.recordedShortcut.flatMap { shortcut in
+                if settings.windowPlacementConfiguration.commands.contains(where: { command in
+                    command.isEnabled && command.shortcut == shortcut
+                }) || (settings.windowCycleEnabled && shortcut == WindowCycleShortcut.recorded) {
+                    return AppStrings.text(.windowPlacementShortcutConflict)
+                }
+                return ShortcutRecorderValidation.rejectionReason(
+                    for: shortcut,
                     reservedShortcuts: settings.clipboardHistoryEnabled
                         ? [ClipboardHistoryShortcut.recorded]
                         : []

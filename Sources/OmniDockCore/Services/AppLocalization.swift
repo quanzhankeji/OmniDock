@@ -17,6 +17,7 @@ enum AppStringKey: String, CaseIterable {
     case tabHotkeys
     case tabFinderExtension
     case tabClipboardHistory
+    case tabWindowPlacement
     case menuSettings
     case menuHotkeys
     case menuQuit
@@ -114,6 +115,7 @@ enum AppStringKey: String, CaseIterable {
     case hotkeysEnableTitle
     case hotkeysEnableDetail
     case hotkeysChooseApp
+    case hotkeysBoundCount
     case hotkeysEmpty
     case hotkeyRemove
     case hotkeyAppUnavailable
@@ -157,6 +159,46 @@ enum AppStringKey: String, CaseIterable {
     case clipboardPreviewLastCopied
     case clipboardPreviewCopyCount
     case clipboardPreviewFiles
+
+    case windowPlacementEnableTitle
+    case windowPlacementEnableDetail
+    case windowPlacementGreenButtonTitle
+    case windowPlacementGreenButtonDetail
+    case windowPlacementDragTitle
+    case windowPlacementDragDetail
+    case windowPlacementCommands
+    case windowPlacementAdd
+    case windowPlacementRemove
+    case windowPlacementMoveUp
+    case windowPlacementMoveDown
+    case windowPlacementCustomDefaultName
+    case windowPlacementTargetRegion
+    case windowPlacementShortcut
+    case windowPlacementActivationRegion
+    case windowPlacementNoActivationRegion
+    case windowPlacementActivationConflict
+    case windowPlacementShortcutConflict
+    case windowPlacementRegistrationWarning
+    case windowPlacementOpenSettings
+    case windowPlacementLeftHalf
+    case windowPlacementRightHalf
+    case windowPlacementTopHalf
+    case windowPlacementBottomHalf
+    case windowPlacementTopLeft
+    case windowPlacementTopRight
+    case windowPlacementBottomLeft
+    case windowPlacementBottomRight
+    case windowPlacementLeftThird
+    case windowPlacementCenterThird
+    case windowPlacementRightThird
+    case windowPlacementLeftTwoThirds
+    case windowPlacementCenterTwoThirds
+    case windowPlacementRightTwoThirds
+    case windowPlacementNextDisplay
+    case windowPlacementPreviousDisplay
+    case windowPlacementMaximize
+    case windowPlacementCenter
+    case windowPlacementRestore
 
     case pickerTitle
     case pickerSearchPlaceholder

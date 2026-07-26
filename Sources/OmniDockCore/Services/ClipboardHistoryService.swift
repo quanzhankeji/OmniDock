@@ -126,6 +126,15 @@ final class ClipboardHistoryService {
         ClipboardArchiveSearch.filter(records, query: query)
     }
 
+    func previewContent(id: UUID) -> ClipboardHistoryPreviewContent? {
+        guard let record = records.first(where: { $0.id == id }),
+              let payload = store.payload(for: id)
+        else {
+            return nil
+        }
+        return ClipboardHistoryCodec.previewContent(record: record, payload: payload)
+    }
+
     func copy(id: UUID) {
         choose(id: id, autoPaste: false, sourceApplication: nil)
     }
@@ -166,6 +175,9 @@ final class ClipboardHistoryService {
 
         guard !settings.appHotkeyBindings.contains(where: {
             $0.isEnabled && $0.recordedShortcut == ClipboardHistoryShortcut.recorded
+        }),
+        !settings.windowPlacementConfiguration.commands.contains(where: {
+            $0.isEnabled && $0.shortcut == ClipboardHistoryShortcut.recorded
         }) else {
             settings.clipboardHistoryEnabled = false
             registrationStatus.setWarning(AppStrings.text(.clipboardShortcutConflict))
@@ -295,15 +307,6 @@ final class ClipboardHistoryService {
         records = store.records()
         panelController.update(records: records, warning: store.warning)
         NotificationCenter.default.post(name: Self.changedNotification, object: self)
-    }
-
-    private func previewContent(id: UUID) -> ClipboardHistoryPreviewContent? {
-        guard let record = records.first(where: { $0.id == id }),
-              let payload = store.payload(for: id)
-        else {
-            return nil
-        }
-        return ClipboardHistoryCodec.previewContent(record: record, payload: payload)
     }
 
     private static func postPasteShortcut() {

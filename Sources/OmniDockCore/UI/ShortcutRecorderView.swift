@@ -16,6 +16,10 @@ final class ShortcutRecorderView: NSControl {
         true
     }
 
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
     override var isEnabled: Bool {
         didSet {
             updateDisplay()

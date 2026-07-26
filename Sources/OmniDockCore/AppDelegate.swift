@@ -7,6 +7,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotkeyRegistrationStatus = AppHotkeyRegistrationStatusStore()
     private let windowCycleRegistrationStatus = WindowCycleRegistrationStatusStore()
     private let clipboardHistoryRegistrationStatus = ClipboardHistoryRegistrationStatus()
+    private let windowPlacementRegistrationStatus = WindowPlacementRegistrationStatusStore()
     private let presentationCoordinator = ApplicationPresentationCoordinator()
     private var permissionFeatureActivationQueue = PermissionFeatureActivationQueue()
     private var isRefreshingPermissionState = false
@@ -63,6 +64,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         panelController: clipboardHistoryPanelController,
         registrationStatus: clipboardHistoryRegistrationStatus
     )
+    private lazy var windowPlacementService = WindowPlacementService(
+        settings: settings,
+        permissionService: permissionService,
+        registrationStatus: windowPlacementRegistrationStatus,
+        onOpenSettings: { [weak self] in
+            self?.statusMenuController.show(tab: .windowPlacement)
+        }
+    )
     private lazy var statusMenuController = StatusMenuController(
         settings: settings,
         permissionService: permissionService,
@@ -71,6 +80,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         windowCycleRegistrationStatus: windowCycleRegistrationStatus,
         clipboardHistoryService: clipboardHistoryService,
         clipboardHistoryRegistrationStatus: clipboardHistoryRegistrationStatus,
+        windowPlacementRegistrationStatus: windowPlacementRegistrationStatus,
         presentationCoordinator: presentationCoordinator,
         onPermissionGateRequired: { [weak self] feature in
             self?.showPermissionOnboarding(for: feature)
@@ -124,6 +134,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         windowCycleService.start()
         hotkeyService.start()
         clipboardHistoryService.start()
+        windowPlacementService.start()
         showPermissionOnboardingIfNeeded()
         schedulePermissionRecheckAfterLaunch()
     }
@@ -135,6 +146,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     public func applicationWillTerminate(_ notification: Notification) {
         NotificationCenter.default.removeObserver(self)
         finderFileCommandCoordinator.stop()
+        windowPlacementService.stop()
         clipboardHistoryService.stop()
         hotkeyService.stop()
         windowCycleService.stop()
@@ -249,6 +261,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         windowInventory.refreshAccessibilityTracking()
         coordinator.refreshPermissionsAndMonitors()
         windowCycleService.refreshRegistration()
+        windowPlacementService.refresh()
     }
 
     private func maybeRelaunchIfPermissionRefreshDidNotAttach() {

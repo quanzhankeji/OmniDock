@@ -17,6 +17,7 @@
 		207EACC32A03FEF0ECA73ECB /* ClipboardHistoryRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72B6406929E3E5433D14D246 /* ClipboardHistoryRecord.swift */; };
 		A75D0D534051023B5E7A00B0 /* DockAppTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C32CE50C290DAC1E3808587 /* DockAppTarget.swift */; };
 		889A7784724953BBB9918F3A /* PreviewWindowInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 376F2272960824D6BAC50C6B /* PreviewWindowInfo.swift */; };
+		7E7DCB0663A643F5C1AA2C49 /* WindowPlacementConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 611ABD4166063837BFE97BB4 /* WindowPlacementConfiguration.swift */; };
 		18EE1F35D72CF68A1A53A338 /* AppHotkeyRegistrationStatusStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19338243A57ECECAE299BE22 /* AppHotkeyRegistrationStatusStore.swift */; };
 		70D244A63BD462F048EF0080 /* AppHotkeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 241193355ECE5B8B4B706807 /* AppHotkeyService.swift */; };
 		215983A2C66D3BE46DB11D4E /* AppLocalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = AACED853BFBA6434A2140D8F /* AppLocalization.swift */; };
@@ -63,6 +64,12 @@
 		FAAEEC974BABA0B6A433F675 /* WindowFiltering.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1997E504C411BA05460BBEBB /* WindowFiltering.swift */; };
 		347430DBF8ACA48593ADE9BB /* WindowInventoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 236B7CCCF870D1DD05A010A4 /* WindowInventoryService.swift */; };
 		F9268A0DC93009A53816864A /* WindowOperationGeneration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D6DBAA062C905D55EECF74C /* WindowOperationGeneration.swift */; };
+		6319D52012A096725B303571 /* WindowPlacementAccessibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = 353B207639E843870BA24A37 /* WindowPlacementAccessibility.swift */; };
+		51C6B98C5757D528AC186DB7 /* WindowPlacementGeometry.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7E942331437A5001834B457 /* WindowPlacementGeometry.swift */; };
+		444E1B26237D93A89DE240E4 /* WindowPlacementHotkeyRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDCC3548D53335AF27D71D99 /* WindowPlacementHotkeyRegistry.swift */; };
+		04C05BAA9E38AE7C11E28907 /* WindowPlacementPointerMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 400948BB443862C46847ACEB /* WindowPlacementPointerMonitor.swift */; };
+		8312388291AB95EB8A5DC676 /* WindowPlacementScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1AE04B76F7169CD982B778F7 /* WindowPlacementScreens.swift */; };
+		1829C71E4CC7E0A80792AFF9 /* WindowPlacementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BE438651C8DCBEA3A89591D /* WindowPlacementService.swift */; };
 		15B1392080010FA380E8A05A /* ApplicationMainMenuController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD796E055589DC2A24C438B3 /* ApplicationMainMenuController.swift */; };
 		ACC329CCA36B682B1C13F6F2 /* ApplicationPickerIconLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B4C0C527186341931A5D33A /* ApplicationPickerIconLoader.swift */; };
 		50BDFA5890FCEE29216A091D /* ApplicationPickerWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F7B3B90E6D3D55F71A15F07 /* ApplicationPickerWindowController.swift */; };
@@ -80,6 +87,8 @@
 		68FCE8F5ECE1ABDCE066921C /* ShortcutRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CDC17F8C727F532A24A7669 /* ShortcutRecorderView.swift */; };
 		80EEF4B5C0408A3445755B4C /* StatusMenuController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A69449C024EBE9EDD6E598C7 /* StatusMenuController.swift */; };
 		B7FB3A8168B6982212624170 /* TopAnchoredDocumentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7094715CAB8FD75FFC767057 /* TopAnchoredDocumentView.swift */; };
+		94E7ED2A11D974BB6586BD9E /* WindowPlacementPaletteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84D366587D7366DF51E091AD /* WindowPlacementPaletteController.swift */; };
+		532523EC4B5D2D3B25E76E33 /* WindowPlacementSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F50771B3DC0D16851E07DE4D /* WindowPlacementSettingsView.swift */; };
 		F39A46ABDFFB4D66C30CCB96 /* FinderMenuExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = A18BD2DED7E1CE111A4BEDCA /* FinderMenuExtension.swift */; };
 		1CD0553BB69B87377A2529AA /* FinderCommandTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52CD10A1601C5E9DDC60C8EF /* FinderCommandTransport.swift */; };
 		E200345E124E1120FB011361 /* FinderMenuModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58239091F32F00B5095B417E /* FinderMenuModel.swift */; };
@@ -115,6 +124,7 @@
 		72B6406929E3E5433D14D246 /* ClipboardHistoryRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Models/ClipboardHistoryRecord.swift"; sourceTree = SOURCE_ROOT; };
 		9C32CE50C290DAC1E3808587 /* DockAppTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Models/DockAppTarget.swift"; sourceTree = SOURCE_ROOT; };
 		376F2272960824D6BAC50C6B /* PreviewWindowInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Models/PreviewWindowInfo.swift"; sourceTree = SOURCE_ROOT; };
+		611ABD4166063837BFE97BB4 /* WindowPlacementConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Models/WindowPlacementConfiguration.swift"; sourceTree = SOURCE_ROOT; };
 		19338243A57ECECAE299BE22 /* AppHotkeyRegistrationStatusStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/AppHotkeyRegistrationStatusStore.swift"; sourceTree = SOURCE_ROOT; };
 		241193355ECE5B8B4B706807 /* AppHotkeyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/AppHotkeyService.swift"; sourceTree = SOURCE_ROOT; };
 		AACED853BFBA6434A2140D8F /* AppLocalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/AppLocalization.swift"; sourceTree = SOURCE_ROOT; };
@@ -161,6 +171,12 @@
 		1997E504C411BA05460BBEBB /* WindowFiltering.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowFiltering.swift"; sourceTree = SOURCE_ROOT; };
 		236B7CCCF870D1DD05A010A4 /* WindowInventoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowInventoryService.swift"; sourceTree = SOURCE_ROOT; };
 		8D6DBAA062C905D55EECF74C /* WindowOperationGeneration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowOperationGeneration.swift"; sourceTree = SOURCE_ROOT; };
+		353B207639E843870BA24A37 /* WindowPlacementAccessibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowPlacementAccessibility.swift"; sourceTree = SOURCE_ROOT; };
+		D7E942331437A5001834B457 /* WindowPlacementGeometry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowPlacementGeometry.swift"; sourceTree = SOURCE_ROOT; };
+		FDCC3548D53335AF27D71D99 /* WindowPlacementHotkeyRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowPlacementHotkeyRegistry.swift"; sourceTree = SOURCE_ROOT; };
+		400948BB443862C46847ACEB /* WindowPlacementPointerMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowPlacementPointerMonitor.swift"; sourceTree = SOURCE_ROOT; };
+		1AE04B76F7169CD982B778F7 /* WindowPlacementScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowPlacementScreens.swift"; sourceTree = SOURCE_ROOT; };
+		9BE438651C8DCBEA3A89591D /* WindowPlacementService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowPlacementService.swift"; sourceTree = SOURCE_ROOT; };
 		BD796E055589DC2A24C438B3 /* ApplicationMainMenuController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/ApplicationMainMenuController.swift"; sourceTree = SOURCE_ROOT; };
 		5B4C0C527186341931A5D33A /* ApplicationPickerIconLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/ApplicationPickerIconLoader.swift"; sourceTree = SOURCE_ROOT; };
 		6F7B3B90E6D3D55F71A15F07 /* ApplicationPickerWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/ApplicationPickerWindowController.swift"; sourceTree = SOURCE_ROOT; };
@@ -178,6 +194,8 @@
 		0CDC17F8C727F532A24A7669 /* ShortcutRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/ShortcutRecorderView.swift"; sourceTree = SOURCE_ROOT; };
 		A69449C024EBE9EDD6E598C7 /* StatusMenuController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/StatusMenuController.swift"; sourceTree = SOURCE_ROOT; };
 		7094715CAB8FD75FFC767057 /* TopAnchoredDocumentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/TopAnchoredDocumentView.swift"; sourceTree = SOURCE_ROOT; };
+		84D366587D7366DF51E091AD /* WindowPlacementPaletteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/WindowPlacementPaletteController.swift"; sourceTree = SOURCE_ROOT; };
+		F50771B3DC0D16851E07DE4D /* WindowPlacementSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/WindowPlacementSettingsView.swift"; sourceTree = SOURCE_ROOT; };
 		A18BD2DED7E1CE111A4BEDCA /* FinderMenuExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockFinderSync/FinderMenuExtension.swift"; sourceTree = SOURCE_ROOT; };
 		E0E27618A2D2A8FEBDD49F35 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Resources/Assets.xcassets"; sourceTree = SOURCE_ROOT; };
 		31BEFD43862C3893FFE18E56 /* OmniDock-Development.entitlements */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Resources/OmniDock-Development.entitlements"; sourceTree = SOURCE_ROOT; };
@@ -272,6 +290,7 @@
 				72B6406929E3E5433D14D246 /* ClipboardHistoryRecord.swift */,
 				9C32CE50C290DAC1E3808587 /* DockAppTarget.swift */,
 				376F2272960824D6BAC50C6B /* PreviewWindowInfo.swift */,
+				611ABD4166063837BFE97BB4 /* WindowPlacementConfiguration.swift */,
 				19338243A57ECECAE299BE22 /* AppHotkeyRegistrationStatusStore.swift */,
 				241193355ECE5B8B4B706807 /* AppHotkeyService.swift */,
 				AACED853BFBA6434A2140D8F /* AppLocalization.swift */,
@@ -318,6 +337,12 @@
 				1997E504C411BA05460BBEBB /* WindowFiltering.swift */,
 				236B7CCCF870D1DD05A010A4 /* WindowInventoryService.swift */,
 				8D6DBAA062C905D55EECF74C /* WindowOperationGeneration.swift */,
+				353B207639E843870BA24A37 /* WindowPlacementAccessibility.swift */,
+				D7E942331437A5001834B457 /* WindowPlacementGeometry.swift */,
+				FDCC3548D53335AF27D71D99 /* WindowPlacementHotkeyRegistry.swift */,
+				400948BB443862C46847ACEB /* WindowPlacementPointerMonitor.swift */,
+				1AE04B76F7169CD982B778F7 /* WindowPlacementScreens.swift */,
+				9BE438651C8DCBEA3A89591D /* WindowPlacementService.swift */,
 				BD796E055589DC2A24C438B3 /* ApplicationMainMenuController.swift */,
 				5B4C0C527186341931A5D33A /* ApplicationPickerIconLoader.swift */,
 				6F7B3B90E6D3D55F71A15F07 /* ApplicationPickerWindowController.swift */,
@@ -335,6 +360,8 @@
 				0CDC17F8C727F532A24A7669 /* ShortcutRecorderView.swift */,
 				A69449C024EBE9EDD6E598C7 /* StatusMenuController.swift */,
 				7094715CAB8FD75FFC767057 /* TopAnchoredDocumentView.swift */,
+				84D366587D7366DF51E091AD /* WindowPlacementPaletteController.swift */,
+				F50771B3DC0D16851E07DE4D /* WindowPlacementSettingsView.swift */,
 				A18BD2DED7E1CE111A4BEDCA /* FinderMenuExtension.swift */,
 			);
 			name = Sources;
@@ -536,6 +563,7 @@
 				207EACC32A03FEF0ECA73ECB /* ClipboardHistoryRecord.swift in Sources */,
 				A75D0D534051023B5E7A00B0 /* DockAppTarget.swift in Sources */,
 				889A7784724953BBB9918F3A /* PreviewWindowInfo.swift in Sources */,
+				7E7DCB0663A643F5C1AA2C49 /* WindowPlacementConfiguration.swift in Sources */,
 				18EE1F35D72CF68A1A53A338 /* AppHotkeyRegistrationStatusStore.swift in Sources */,
 				70D244A63BD462F048EF0080 /* AppHotkeyService.swift in Sources */,
 				215983A2C66D3BE46DB11D4E /* AppLocalization.swift in Sources */,
@@ -582,6 +610,12 @@
 				FAAEEC974BABA0B6A433F675 /* WindowFiltering.swift in Sources */,
 				347430DBF8ACA48593ADE9BB /* WindowInventoryService.swift in Sources */,
 				F9268A0DC93009A53816864A /* WindowOperationGeneration.swift in Sources */,
+				6319D52012A096725B303571 /* WindowPlacementAccessibility.swift in Sources */,
+				51C6B98C5757D528AC186DB7 /* WindowPlacementGeometry.swift in Sources */,
+				444E1B26237D93A89DE240E4 /* WindowPlacementHotkeyRegistry.swift in Sources */,
+				04C05BAA9E38AE7C11E28907 /* WindowPlacementPointerMonitor.swift in Sources */,
+				8312388291AB95EB8A5DC676 /* WindowPlacementScreens.swift in Sources */,
+				1829C71E4CC7E0A80792AFF9 /* WindowPlacementService.swift in Sources */,
 				15B1392080010FA380E8A05A /* ApplicationMainMenuController.swift in Sources */,
 				ACC329CCA36B682B1C13F6F2 /* ApplicationPickerIconLoader.swift in Sources */,
 				50BDFA5890FCEE29216A091D /* ApplicationPickerWindowController.swift in Sources */,
@@ -599,6 +633,8 @@
 				68FCE8F5ECE1ABDCE066921C /* ShortcutRecorderView.swift in Sources */,
 				80EEF4B5C0408A3445755B4C /* StatusMenuController.swift in Sources */,
 				B7FB3A8168B6982212624170 /* TopAnchoredDocumentView.swift in Sources */,
+				94E7ED2A11D974BB6586BD9E /* WindowPlacementPaletteController.swift in Sources */,
+				532523EC4B5D2D3B25E76E33 /* WindowPlacementSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

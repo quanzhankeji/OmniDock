@@ -72,6 +72,14 @@ public final class AppHotkeyService {
         let reservedShortcuts: Set<RecordedShortcut> = settings.clipboardHistoryEnabled
             ? [ClipboardHistoryShortcut.recorded]
             : []
+        let placementShortcuts = Set(
+            settings.windowPlacementConfiguration.commands.compactMap {
+                $0.isEnabled ? $0.shortcut : nil
+            }
+        )
+        let featureShortcuts = placementShortcuts.union(
+            settings.windowCycleEnabled ? [WindowCycleShortcut.recorded] : []
+        )
         var registrations: [(AppHotkeyBinding, RecordedShortcut)] = []
         for binding in settings.appHotkeyBindings where binding.isEnabled {
             guard let shortcut = binding.recordedShortcut,
@@ -80,6 +88,7 @@ public final class AppHotkeyService {
                       systemShortcuts: systemShortcuts,
                       reservedShortcuts: reservedShortcuts
                   ) == nil,
+                  !featureShortcuts.contains(shortcut),
                   claimedShortcuts.insert(shortcut).inserted
             else {
                 continue
