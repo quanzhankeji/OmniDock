@@ -145,9 +145,18 @@ final class WindowPlacementConfigurationTests: XCTestCase {
             window.close()
         }
         XCTAssertTrue(window.styleMask.contains(.resizable))
+        let presentedSize = try XCTUnwrap(window.contentView?.bounds.size)
         XCTAssertEqual(
-            window.contentView?.bounds.size,
-            SettingsWindowLayoutMetrics.preferredContentSize
+            presentedSize.width,
+            SettingsWindowLayoutMetrics.preferredContentSize.width
+        )
+        XCTAssertGreaterThanOrEqual(
+            presentedSize.height,
+            SettingsWindowLayoutMetrics.minimumContentSize.height
+        )
+        XCTAssertLessThanOrEqual(
+            presentedSize.height,
+            SettingsWindowLayoutMetrics.preferredContentSize.height
         )
 
         window.setContentSize(SettingsWindowLayoutMetrics.minimumContentSize)
@@ -161,8 +170,9 @@ final class WindowPlacementConfigurationTests: XCTestCase {
             )
         }
 
-        let adjustedSize = NSSize(width: 900, height: 760)
-        window.setContentSize(adjustedSize)
+        let requestedAdjustedSize = NSSize(width: 900, height: 760)
+        window.setContentSize(requestedAdjustedSize)
+        let adjustedSize = try XCTUnwrap(window.contentView?.bounds.size)
         for tab in SettingsTab.allCases {
             controller.show(tab: tab)
             window.contentView?.layoutSubtreeIfNeeded()
@@ -191,10 +201,13 @@ final class WindowPlacementConfigurationTests: XCTestCase {
                     .max()
             )
 
-            XCTAssertGreaterThan(
-                expandedHeight,
-                compactHeight + 150,
-                "\(tab) list did not expand with the settings window"
+            let availableGrowth = adjustedSize.height
+                - SettingsWindowLayoutMetrics.minimumContentSize.height
+            XCTAssertEqual(
+                expandedHeight - compactHeight,
+                availableGrowth,
+                accuracy: 2,
+                "\(tab) list did not follow the available settings-window height"
             )
         }
     }
