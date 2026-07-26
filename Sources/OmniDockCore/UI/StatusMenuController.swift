@@ -125,12 +125,11 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
         coordinator.resumeDockClickMonitoring()
     }
 
-    @objc private func openSettings(_ sender: NSMenuItem) {
-        show(tab: .settings)
-    }
-
-    @objc private func openHotkeys(_ sender: NSMenuItem) {
-        show(tab: .hotkeys)
+    @objc private func openSettingsTab(_ sender: NSMenuItem) {
+        guard let tab = SettingsTab(rawValue: sender.tag) else {
+            return
+        }
+        show(tab: tab)
     }
 
     func show(tab: SettingsTab) {
@@ -165,22 +164,18 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
             menu.removeItem(at: 0)
         }
 
-        let settingsItem = NSMenuItem(
-            title: AppStrings.text(.menuSettings),
-            action: #selector(openSettings(_:)),
-            keyEquivalent: ","
-        )
-        settingsItem.target = self
-        menu.addItem(settingsItem)
+        for tab in SettingsTab.allCases {
+            let item = NSMenuItem(
+                title: tab.localizedTitle,
+                action: #selector(openSettingsTab(_:)),
+                keyEquivalent: tab == .settings ? "," : ""
+            )
+            item.target = self
+            item.tag = tab.rawValue
+            menu.addItem(item)
+        }
 
-        let hotkeysItem = NSMenuItem(
-            title: AppStrings.text(.menuHotkeys),
-            action: #selector(openHotkeys(_:)),
-            keyEquivalent: ""
-        )
-        hotkeysItem.target = self
-        menu.addItem(hotkeysItem)
-
+        menu.addItem(.separator())
         let quitItem = NSMenuItem(title: AppStrings.text(.menuQuit), action: #selector(quit(_:)), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
