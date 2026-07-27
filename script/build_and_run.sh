@@ -485,7 +485,15 @@ install_finder_extension_app() {
 
   local installed_extension="$INSTALLED_APP/Contents/PlugIns/OmniDockFinderSync.appex"
   local launch_services_register="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
-  /usr/bin/pluginkit -r "$candidate_extension" >/dev/null 2>&1 || true
+  pkill -x "OmniDockFinderSync" >/dev/null 2>&1 || true
+  while IFS= read -r registered_extension; do
+    [[ -n "$registered_extension" ]] || continue
+    [[ "$registered_extension" == "$installed_extension" ]] && continue
+    /usr/bin/pluginkit -r "$registered_extension" >/dev/null 2>&1 || true
+  done < <(
+    /usr/bin/pluginkit -m -A -D -v -i "$BUNDLE_ID.FinderSync" 2>/dev/null \
+      | /usr/bin/awk -F '\t' 'NF > 1 && $NF ~ /\.appex$/ { print $NF }'
+  )
   "$launch_services_register" -f -R -trusted "$INSTALLED_APP"
   /usr/bin/pluginkit -a "$installed_extension"
   /usr/bin/killall Finder >/dev/null 2>&1 || true

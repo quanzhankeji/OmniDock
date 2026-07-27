@@ -84,19 +84,22 @@ struct FinderMenuPreferences: Codable, Equatable {
     var groupsLaunchShortcuts: Bool
     var launchShortcuts: [FinderLaunchShortcut]
     var documentPresets: [FinderDocumentPreset]
+    var observationRootPaths: [String]
 
     init(
         isEnabled: Bool = false,
         languageIdentifier: String = "system",
         groupsLaunchShortcuts: Bool = true,
         launchShortcuts: [FinderLaunchShortcut] = [],
-        documentPresets: [FinderDocumentPreset] = FinderDocumentPreset.defaultPresets
+        documentPresets: [FinderDocumentPreset] = FinderDocumentPreset.defaultPresets,
+        observationRootPaths: [String] = []
     ) {
         self.isEnabled = isEnabled
         self.languageIdentifier = languageIdentifier
         self.groupsLaunchShortcuts = groupsLaunchShortcuts
         self.launchShortcuts = launchShortcuts
         self.documentPresets = documentPresets
+        self.observationRootPaths = observationRootPaths
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -105,6 +108,7 @@ struct FinderMenuPreferences: Codable, Equatable {
         case groupsLaunchShortcuts
         case launchShortcuts
         case documentPresets
+        case observationRootPaths
     }
 
     init(from decoder: Decoder) throws {
@@ -126,17 +130,28 @@ struct FinderMenuPreferences: Codable, Equatable {
             [FinderDocumentPreset].self,
             forKey: .documentPresets
         ) ?? FinderDocumentPreset.defaultPresets
+        observationRootPaths = try container.decodeIfPresent(
+            [String].self,
+            forKey: .observationRootPaths
+        ) ?? []
     }
 }
 
 enum FinderObservationRoots {
     static func registeredURLs(
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        authorizedDirectoryPaths: [String] = []
     ) -> Set<URL> {
-        [
-            URL(fileURLWithPath: "/", isDirectory: true),
-            desktopURL(homeDirectory: homeDirectory)
+        let standardDirectories = [
+            desktopURL(homeDirectory: homeDirectory),
+            homeDirectory.appendingPathComponent("Documents", isDirectory: true),
+            homeDirectory.appendingPathComponent("Downloads", isDirectory: true)
         ]
+        let authorizedDirectories = authorizedDirectoryPaths.map {
+            URL(fileURLWithPath: $0, isDirectory: true)
+        }
+
+        return Set((standardDirectories + authorizedDirectories).flatMap(canonicalURLs(for:)))
     }
 
     static func folderURL(
@@ -151,9 +166,19 @@ enum FinderObservationRoots {
     ) -> URL {
         homeDirectory.appendingPathComponent("Desktop", isDirectory: true)
     }
+
+    private static func canonicalURLs(for url: URL) -> [URL] {
+        let standardized = url.standardizedFileURL
+        let resolved = standardized.resolvingSymlinksInPath()
+        return standardized == resolved ? [standardized] : [standardized, resolved]
+    }
 }
 
 final class FinderMenuPreferencesStore {
+    static let didChangeNotification = Notification.Name(
+        "com.quanzhankeji.OmniDock.finder-menu-preferences-changed"
+    )
+
     static var appGroupIdentifier: String? {
         Bundle.main.object(forInfoDictionaryKey: "OmniDockAppGroupIdentifier") as? String
     }
@@ -164,6 +189,7 @@ final class FinderMenuPreferencesStore {
         static let groupsLaunchShortcuts = "finderExtensionGroupsLaunchShortcuts"
         static let launchShortcuts = "finderExtensionLaunchShortcuts"
         static let documentPresets = "finderExtensionDocumentPresets"
+        static let observationRootPaths = "finderExtensionObservationRootPaths"
         static let fileName = "FinderExtensionSettings.json"
     }
 
@@ -214,7 +240,11 @@ final class FinderMenuPreferencesStore {
                 documentPresets: decoded(
                     [FinderDocumentPreset].self,
                     from: defaults.data(forKey: Key.documentPresets)
-                ) ?? FinderDocumentPreset.defaultPresets
+                ) ?? FinderDocumentPreset.defaultPresets,
+                observationRootPaths: decoded(
+                    [String].self,
+                    from: defaults.data(forKey: Key.observationRootPaths)
+                ) ?? []
             )
         }
 
@@ -234,15 +264,26 @@ final class FinderMenuPreferencesStore {
             defaults.set(preferences.groupsLaunchShortcuts, forKey: Key.groupsLaunchShortcuts)
             defaults.set(encoded(preferences.launchShortcuts), forKey: Key.launchShortcuts)
             defaults.set(encoded(preferences.documentPresets), forKey: Key.documentPresets)
-            return
+            defaults.set(
+                encoded(preferences.observationRootPaths),
+                forKey: Key.observationRootPaths
+            )
+        } else if let url = preferencesFileURL(),
+                  let data = try? JSONEncoder().encode(preferences) {
+            try? data.write(to: url, options: .atomic)
         }
+        DistributedNotificationCenter.default().postNotificationName(
+            Self.didChangeNotification,
+            object: nil,
+            userInfo: nil,
+            deliverImmediately: true
+        )
+    }
 
-        guard let url = preferencesFileURL(),
-              let data = try? JSONEncoder().encode(preferences)
-        else {
-            return
-        }
-        try? data.write(to: url, options: .atomic)
+    func updateObservationRootPaths(_ paths: [String]) {
+        var preferences = snapshot()
+        preferences.observationRootPaths = Array(Set(paths)).sorted()
+        update(preferences)
     }
 
     private func preferencesFileURL() -> URL? {

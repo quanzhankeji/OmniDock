@@ -11,9 +11,24 @@ final class FinderDirectoryGrantStore {
     }
 
     private let defaults: UserDefaults
+    private let observationRootUpdater: ([String]) -> Void
 
-    init(defaults: UserDefaults = .standard) {
+    convenience init() {
+        let preferencesStore = FinderMenuPreferencesStore()
+        self.init(
+            defaults: .standard,
+            observationRootUpdater: { paths in
+                preferencesStore.updateObservationRootPaths(paths)
+            }
+        )
+    }
+
+    init(
+        defaults: UserDefaults,
+        observationRootUpdater: @escaping ([String]) -> Void = { _ in }
+    ) {
         self.defaults = defaults
+        self.observationRootUpdater = observationRootUpdater
     }
 
     func performWithSavedAccess<T>(
@@ -126,6 +141,8 @@ final class FinderDirectoryGrantStore {
 
         if changed {
             save(records)
+        } else {
+            publishObservationRoots(from: records)
         }
         return foundUsableGrant
     }
@@ -162,5 +179,10 @@ final class FinderDirectoryGrantStore {
             return
         }
         defaults.set(data, forKey: Key.bookmarks)
+        publishObservationRoots(from: records)
+    }
+
+    private func publishObservationRoots(from records: [BookmarkRecord]) {
+        observationRootUpdater(records.map(\.path))
     }
 }

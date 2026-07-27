@@ -8,8 +8,17 @@ final class FinderMenuExtension: FIFinderSync {
 
     override init() {
         super.init()
-        let directories = FinderObservationRoots.registeredURLs()
-        FIFinderSyncController.default().directoryURLs = directories
+        configureObservationRoots()
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(preferencesDidChange),
+            name: FinderMenuPreferencesStore.didChangeNotification,
+            object: nil
+        )
+    }
+
+    deinit {
+        DistributedNotificationCenter.default().removeObserver(self)
     }
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu? {
@@ -153,6 +162,19 @@ final class FinderMenuExtension: FIFinderSync {
         default:
             return nil
         }
+    }
+
+    @objc private func preferencesDidChange() {
+        DispatchQueue.main.async { [weak self] in
+            self?.configureObservationRoots()
+        }
+    }
+
+    private func configureObservationRoots() {
+        let preferences = preferencesStore.snapshot()
+        FIFinderSyncController.default().directoryURLs = FinderObservationRoots.registeredURLs(
+            authorizedDirectoryPaths: preferences.observationRootPaths
+        )
     }
 
     private func copy(_ string: String) {
