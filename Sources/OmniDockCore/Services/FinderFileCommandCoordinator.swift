@@ -1,4 +1,6 @@
 import AppKit
+import ApplicationServices
+import CoreGraphics
 
 @MainActor
 final class FinderFileCommandCoordinator: NSObject {
@@ -6,18 +8,21 @@ final class FinderFileCommandCoordinator: NSObject {
     private let preferencesStore: FinderMenuPreferencesStore
     private let directoryGrantStore: FinderDirectoryGrantStore
     private let fileManager: FileManager
+    private let hiddenFilesController: FinderHiddenFilesController
     private var isListening = false
 
     init(
         requestMailbox: FinderCommandMailbox = FinderCommandMailbox(),
         preferencesStore: FinderMenuPreferencesStore = FinderMenuPreferencesStore(),
         directoryGrantStore: FinderDirectoryGrantStore = FinderDirectoryGrantStore(),
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        hiddenFilesController: FinderHiddenFilesController? = nil
     ) {
         self.requestMailbox = requestMailbox
         self.preferencesStore = preferencesStore
         self.directoryGrantStore = directoryGrantStore
         self.fileManager = fileManager
+        self.hiddenFilesController = hiddenFilesController ?? FinderHiddenFilesController()
         super.init()
     }
 
@@ -78,6 +83,8 @@ final class FinderFileCommandCoordinator: NSObject {
                 fileExtension: fileExtension,
                 directoryDisplayPath: directoryDisplayPath
             )
+        case let .setHiddenFilesVisible(isVisible):
+            hiddenFilesController.setHiddenFilesVisible(isVisible)
         case let .openSelection(shortcut, selectedDisplayPaths):
             openSelection(
                 selectedDisplayPaths,
@@ -284,6 +291,87 @@ final class FinderFileCommandCoordinator: NSObject {
         )
         alert.addButton(withTitle: AppStrings.text(.finderExtensionFailureDismiss))
         alert.runModal()
+    }
+}
+
+@MainActor
+final class FinderHiddenFilesController {
+    private static let finderBundleIdentifier = "com.apple.finder"
+    private static let preferenceKey = "AppleShowAllFiles"
+    private static let periodKeyCode: CGKeyCode = 47
+
+    private let isShowingHiddenFiles: () -> Bool
+    private let sendVisibilityToggle: () -> Bool
+
+    convenience init() {
+        self.init(
+            isShowingHiddenFiles: {
+                FinderHiddenFilesController.readFinderVisibilityPreference()
+            },
+            sendVisibilityToggle: {
+                FinderHiddenFilesController.postFinderVisibilityShortcut()
+            }
+        )
+    }
+
+    init(
+        isShowingHiddenFiles: @escaping () -> Bool,
+        sendVisibilityToggle: @escaping () -> Bool
+    ) {
+        self.isShowingHiddenFiles = isShowingHiddenFiles
+        self.sendVisibilityToggle = sendVisibilityToggle
+    }
+
+    @discardableResult
+    func setHiddenFilesVisible(_ isVisible: Bool) -> Bool {
+        guard isShowingHiddenFiles() != isVisible else {
+            return true
+        }
+        return sendVisibilityToggle()
+    }
+
+    private static func readFinderVisibilityPreference() -> Bool {
+        guard let value = CFPreferencesCopyAppValue(
+            preferenceKey as CFString,
+            finderBundleIdentifier as CFString
+        ) else {
+            return false
+        }
+        if let number = value as? NSNumber {
+            return number.boolValue
+        }
+        if let string = value as? String {
+            return ["1", "true", "yes"].contains(string.lowercased())
+        }
+        return false
+    }
+
+    private static func postFinderVisibilityShortcut() -> Bool {
+        guard AXIsProcessTrusted(),
+              let finder = NSRunningApplication.runningApplications(
+                  withBundleIdentifier: finderBundleIdentifier
+              ).first,
+              let source = CGEventSource(stateID: .hidSystemState),
+              let keyDown = CGEvent(
+                  keyboardEventSource: source,
+                  virtualKey: periodKeyCode,
+                  keyDown: true
+              ),
+              let keyUp = CGEvent(
+                  keyboardEventSource: source,
+                  virtualKey: periodKeyCode,
+                  keyDown: false
+              )
+        else {
+            return false
+        }
+
+        let flags: CGEventFlags = [.maskCommand, .maskShift]
+        keyDown.flags = flags
+        keyUp.flags = flags
+        keyDown.postToPid(finder.processIdentifier)
+        keyUp.postToPid(finder.processIdentifier)
+        return true
     }
 }
 

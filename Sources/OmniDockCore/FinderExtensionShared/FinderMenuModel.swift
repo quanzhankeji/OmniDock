@@ -4,14 +4,18 @@ enum FinderMenuAction: Equatable {
     case createDocument(FinderDocumentPreset)
     case copyCurrentDirectoryPath
     case copySelectedPaths
+    case showHiddenFiles
+    case hideHiddenFiles
     case openSelection(FinderLaunchShortcut)
 
-    var location: FinderMenuLocation {
+    func isAvailable(in location: FinderMenuLocation) -> Bool {
         switch self {
         case .createDocument, .copyCurrentDirectoryPath:
-            return .folderBackground
+            return location == .folderBackground
         case .copySelectedPaths, .openSelection:
-            return .selection
+            return location == .selection
+        case .showHiddenFiles, .hideHiddenFiles:
+            return true
         }
     }
 }
@@ -98,11 +102,13 @@ enum FinderMenuCatalog {
                 return []
             }
             var entries: [FinderMenuEntry] = [.action(.copyCurrentDirectoryPath)]
-            if !preferences.documentPresets.isEmpty {
+            let enabledPresets = preferences.documentPresets.filter(\.isEnabled)
+            if !enabledPresets.isEmpty {
                 entries.append(.documentSubmenu(
-                    preferences.documentPresets.map(FinderMenuAction.createDocument)
+                    enabledPresets.map(FinderMenuAction.createDocument)
                 ))
             }
+            entries.append(contentsOf: hiddenFileEntries)
             return entries
         case .selection:
             guard !context.selectedURLs.isEmpty else {
@@ -111,6 +117,9 @@ enum FinderMenuCatalog {
 
             let applicationActions = preferences.launchShortcuts
                 .filter { shortcut in
+                    guard shortcut.isEnabled else {
+                        return false
+                    }
                     guard let url = shortcut.bundleURL else {
                         return false
                     }
@@ -124,9 +133,15 @@ enum FinderMenuCatalog {
             } else {
                 entries.append(contentsOf: applicationActions.map(FinderMenuEntry.action))
             }
+            entries.append(contentsOf: hiddenFileEntries)
             return entries
         }
     }
+
+    private static let hiddenFileEntries: [FinderMenuEntry] = [
+        .action(.showHiddenFiles),
+        .action(.hideHiddenFiles)
+    ]
 }
 
 enum FinderMenuLabels {
@@ -136,6 +151,14 @@ enum FinderMenuLabels {
             return "复制路径"
         case (.copyCurrentDirectoryPath, false), (.copySelectedPaths, false):
             return "Copy Path"
+        case (.showHiddenFiles, true):
+            return "显示所有文件"
+        case (.showHiddenFiles, false):
+            return "Show All Files"
+        case (.hideHiddenFiles, true):
+            return "隐藏所有文件"
+        case (.hideHiddenFiles, false):
+            return "Hide Hidden Files"
         case let (.createDocument(preset), true):
             switch preset.fileExtension {
             case "txt":

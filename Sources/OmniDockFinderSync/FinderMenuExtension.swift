@@ -1,14 +1,22 @@
 import AppKit
 import FinderSync
+import OSLog
 
 final class FinderMenuExtension: FIFinderSync {
+    private static let logger = Logger(
+        subsystem: "com.quanzhankeji.OmniDock.FinderSync",
+        category: "FinderMenu"
+    )
+
     private let preferencesStore = FinderMenuPreferencesStore()
     private let commandMailbox = FinderCommandMailbox()
     private let actionRegistry = FinderMenuActionRegistry()
+    private var configuredObservationRoots: Set<URL> = []
 
     override init() {
         super.init()
         configureObservationRoots()
+        Self.logger.info("Finder extension started")
         DistributedNotificationCenter.default().addObserver(
             self,
             selector: #selector(preferencesDidChange),
@@ -21,8 +29,23 @@ final class FinderMenuExtension: FIFinderSync {
         DistributedNotificationCenter.default().removeObserver(self)
     }
 
+    override func beginObservingDirectory(at url: URL) {
+        Self.logger.debug(
+            "Finder began observing \(Self.directoryKind(for: url), privacy: .public)"
+        )
+    }
+
+    override func endObservingDirectory(at url: URL) {
+        Self.logger.debug(
+            "Finder stopped observing \(Self.directoryKind(for: url), privacy: .public)"
+        )
+    }
+
     override func menu(for menuKind: FIMenuKind) -> NSMenu? {
         let preferences = preferencesStore.snapshot()
+        Self.logger.debug(
+            "Finder requested \(Self.menuKindName(menuKind), privacy: .public); enabled: \(preferences.isEnabled)"
+        )
         guard preferences.isEnabled,
               let context = context(for: menuKind)
         else {
@@ -98,6 +121,10 @@ final class FinderMenuExtension: FIFinderSync {
             ))
         case .copySelectedPaths:
             copy(FinderPathList.text(for: binding.context.selectedURLs))
+        case .showHiddenFiles:
+            forward(.setHiddenFilesVisible(true))
+        case .hideHiddenFiles:
+            forward(.setHiddenFilesVisible(false))
         case let .createDocument(preset):
             guard let directory = binding.context.currentDirectory else {
                 return
@@ -172,9 +199,16 @@ final class FinderMenuExtension: FIFinderSync {
 
     private func configureObservationRoots() {
         let preferences = preferencesStore.snapshot()
-        FIFinderSyncController.default().directoryURLs = FinderObservationRoots.registeredURLs(
+        let roots = FinderObservationRoots.registeredURLs(
             authorizedDirectoryPaths: preferences.observationRootPaths
         )
+        guard roots != configuredObservationRoots else {
+            return
+        }
+
+        configuredObservationRoots = roots
+        FIFinderSyncController.default().directoryURLs = roots
+        Self.logger.info("Configured \(roots.count) Finder observation roots")
     }
 
     private func copy(_ string: String) {
@@ -197,6 +231,39 @@ final class FinderMenuExtension: FIFinderSync {
                 "OmniDock Finder extension could not forward a command: %@",
                 error.localizedDescription
             )
+        }
+    }
+
+    private static func directoryKind(for url: URL) -> String {
+        let standardized = url.standardizedFileURL
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        if standardized.path == "/" {
+            return "filesystem-root"
+        }
+        if standardized == FinderObservationRoots.desktopURL(homeDirectory: home).standardizedFileURL {
+            return "desktop"
+        }
+        if standardized == home.appendingPathComponent("Documents").standardizedFileURL {
+            return "documents"
+        }
+        if standardized == home.appendingPathComponent("Downloads").standardizedFileURL {
+            return "downloads"
+        }
+        return "authorized-directory"
+    }
+
+    private static func menuKindName(_ menuKind: FIMenuKind) -> String {
+        switch menuKind {
+        case .contextualMenuForContainer:
+            return "container-menu"
+        case .contextualMenuForItems:
+            return "item-menu"
+        case .contextualMenuForSidebar:
+            return "sidebar-menu"
+        case .toolbarItemMenu:
+            return "toolbar-menu"
+        @unknown default:
+            return "unknown-menu"
         }
     }
 }

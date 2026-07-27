@@ -39,6 +39,7 @@ enum FinderCommand: Codable, Equatable {
         fileExtension: String,
         directoryDisplayPath: String
     )
+    case setHiddenFilesVisible(Bool)
     case openSelection(
         shortcut: FinderLaunchShortcut,
         selectedDisplayPaths: [String]

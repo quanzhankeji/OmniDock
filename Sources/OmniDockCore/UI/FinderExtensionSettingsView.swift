@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 enum FinderExtensionSettingsSection: CaseIterable {
     case documentTypes
@@ -236,6 +237,8 @@ final class FinderExtensionSettingsView: NSView {
 
         let scrollView = makeItemList()
         detailStack.addArrangedSubview(scrollView)
+        scrollView.setContentHuggingPriority(.defaultLow, for: .vertical)
+        scrollView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 180).isActive = true
         return detailStack
     }
@@ -286,12 +289,17 @@ final class FinderExtensionSettingsView: NSView {
         documentView.addSubview(itemRows)
         scrollView.documentView = documentView
 
+        let contentBottom = itemRows.bottomAnchor.constraint(equalTo: documentView.bottomAnchor)
+        contentBottom.priority = .defaultHigh
+
         NSLayoutConstraint.activate([
             documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
             documentView.heightAnchor.constraint(greaterThanOrEqualTo: scrollView.contentView.heightAnchor),
             itemRows.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
             itemRows.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
-            itemRows.topAnchor.constraint(equalTo: documentView.topAnchor)
+            itemRows.topAnchor.constraint(equalTo: documentView.topAnchor),
+            itemRows.bottomAnchor.constraint(lessThanOrEqualTo: documentView.bottomAnchor),
+            contentBottom
         ])
         return scrollView
     }
@@ -307,17 +315,133 @@ final class FinderExtensionSettingsView: NSView {
         itemRows.removeAllArrangedSubviews()
         switch selectedSection {
         case .documentTypes:
+            itemRows.addArrangedSubview(makeDocumentTypeHeader())
             for preset in settings.finderDocumentPresets {
-                itemRows.addArrangedSubview(makeListRow(
-                    title: preset.displayName,
-                    detail: ".\(preset.fileExtension)",
-                    id: preset.id,
-                    icon: nil
-                ))
+                itemRows.addArrangedSubview(makeDocumentTypeRow(preset))
             }
         case .quickActions:
             rebuildQuickActions()
         }
+    }
+
+    private func makeDocumentTypeHeader() -> NSView {
+        let header = NSView()
+        header.translatesAutoresizingMaskIntoConstraints = false
+        header.heightAnchor.constraint(equalToConstant: 24).isActive = true
+
+        let enabled = makeColumnHeader(AppStrings.text(.finderDocumentTypeEnabled))
+        let name = makeColumnHeader(AppStrings.text(.finderDocumentTypeName))
+        let suffix = makeColumnHeader(AppStrings.text(.finderDocumentTypeExtension))
+        for view in [enabled, name, suffix] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            header.addSubview(view)
+        }
+
+        NSLayoutConstraint.activate([
+            enabled.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 12),
+            enabled.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            enabled.widthAnchor.constraint(equalToConstant: 48),
+
+            name.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 78),
+            name.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+
+            suffix.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -84),
+            suffix.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            suffix.widthAnchor.constraint(equalToConstant: 82)
+        ])
+        return header
+    }
+
+    private func makeColumnHeader(_ title: String) -> NSTextField {
+        let label = NSTextField(labelWithString: title)
+        label.font = .systemFont(ofSize: 10, weight: .medium)
+        label.textColor = .tertiaryLabelColor
+        return label
+    }
+
+    private func makeDocumentTypeRow(_ preset: FinderDocumentPreset) -> NSView {
+        let row = FinderSettingsSurfaceView(style: .item)
+        row.translatesAutoresizingMaskIntoConstraints = false
+        row.heightAnchor.constraint(equalToConstant: 50).isActive = true
+
+        let enabled = NSButton(
+            checkboxWithTitle: "",
+            target: self,
+            action: #selector(toggleDocumentType(_:))
+        )
+        enabled.state = preset.isEnabled ? .on : .off
+        enabled.identifier = NSUserInterfaceItemIdentifier(preset.id.uuidString)
+        enabled.setAccessibilityLabel(
+            "\(AppStrings.text(.finderDocumentTypeEnabled)): \(preset.displayName)"
+        )
+        enabled.translatesAutoresizingMaskIntoConstraints = false
+
+        let iconView = NSImageView()
+        if let contentType = UTType(filenameExtension: preset.fileExtension) {
+            iconView.image = NSWorkspace.shared.icon(for: contentType)
+        } else {
+            iconView.image = NSImage(
+                systemSymbolName: "doc",
+                accessibilityDescription: preset.displayName
+            )
+        }
+        iconView.imageScaling = .scaleProportionallyUpOrDown
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+
+        let name = NSTextField(labelWithString: preset.displayName)
+        name.font = .systemFont(ofSize: 13, weight: .medium)
+        name.lineBreakMode = .byTruncatingTail
+        name.translatesAutoresizingMaskIntoConstraints = false
+
+        let suffix = NSTextField(labelWithString: preset.fileExtension)
+        suffix.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        suffix.textColor = .secondaryLabelColor
+        suffix.alignment = .left
+        suffix.translatesAutoresizingMaskIntoConstraints = false
+
+        row.addSubview(enabled)
+        row.addSubview(iconView)
+        row.addSubview(name)
+        row.addSubview(suffix)
+
+        var trailingAnchor = row.trailingAnchor
+        var trailingConstant: CGFloat = -84
+        if !preset.isBuiltIn {
+            let removeButton = FinderSettingsButton()
+            removeButton.title = AppStrings.text(.finderRemove)
+            removeButton.bezelStyle = .rounded
+            removeButton.identifier = NSUserInterfaceItemIdentifier(preset.id.uuidString)
+            removeButton.target = self
+            removeButton.action = #selector(removeItem(_:))
+            removeButton.translatesAutoresizingMaskIntoConstraints = false
+            row.addSubview(removeButton)
+            NSLayoutConstraint.activate([
+                removeButton.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -12),
+                removeButton.centerYAnchor.constraint(equalTo: row.centerYAnchor)
+            ])
+            trailingAnchor = removeButton.leadingAnchor
+            trailingConstant = -12
+        }
+
+        NSLayoutConstraint.activate([
+            enabled.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 12),
+            enabled.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            enabled.widthAnchor.constraint(equalToConstant: 18),
+
+            iconView.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 42),
+            iconView.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 26),
+            iconView.heightAnchor.constraint(equalToConstant: 26),
+
+            name.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 78),
+            name.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+
+            suffix.leadingAnchor.constraint(greaterThanOrEqualTo: name.trailingAnchor, constant: 12),
+            suffix.trailingAnchor.constraint(equalTo: trailingAnchor, constant: trailingConstant),
+            suffix.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            suffix.widthAnchor.constraint(equalToConstant: 82)
+        ])
+        return row
     }
 
     private func rebuildQuickActions() {
@@ -330,78 +454,137 @@ final class FinderExtensionSettingsView: NSView {
             return
         }
 
+        itemRows.addArrangedSubview(makeQuickActionHeader())
         for action in actions {
-            itemRows.addArrangedSubview(makeListRow(
-                title: action.displayName,
-                detail: action.bundleIdentifier ?? action.bundleURL?.path ?? "",
-                id: action.id,
-                icon: action.bundleURL.map { NSWorkspace.shared.icon(forFile: $0.path) }
-            ))
+            itemRows.addArrangedSubview(makeQuickActionRow(action))
         }
     }
 
-    private func makeListRow(
-        title: String,
-        detail: String,
-        id: UUID,
-        icon: NSImage?
-    ) -> NSView {
-        let row = FinderSettingsSurfaceView(style: .item)
-        row.translatesAutoresizingMaskIntoConstraints = false
-        row.heightAnchor.constraint(equalToConstant: 56).isActive = true
+    private func makeQuickActionHeader() -> NSView {
+        let header = NSView()
+        header.translatesAutoresizingMaskIntoConstraints = false
+        header.heightAnchor.constraint(equalToConstant: 24).isActive = true
 
-        let labels = NSStackView()
-        labels.orientation = .vertical
-        labels.alignment = .leading
-        labels.spacing = 2
-        labels.translatesAutoresizingMaskIntoConstraints = false
-
-        let titleField = NSTextField(labelWithString: title)
-        titleField.font = .systemFont(ofSize: 13, weight: .medium)
-        let detailField = NSTextField(labelWithString: detail)
-        detailField.font = .systemFont(ofSize: 11)
-        detailField.textColor = .secondaryLabelColor
-        detailField.lineBreakMode = .byTruncatingMiddle
-        labels.addArrangedSubview(titleField)
-        labels.addArrangedSubview(detailField)
-
-        let removeButton = FinderSettingsButton()
-        removeButton.title = AppStrings.text(.finderRemove)
-        removeButton.bezelStyle = .rounded
-        removeButton.identifier = NSUserInterfaceItemIdentifier(id.uuidString)
-        removeButton.target = self
-        removeButton.action = #selector(removeItem(_:))
-        removeButton.translatesAutoresizingMaskIntoConstraints = false
-
-        row.addSubview(labels)
-        row.addSubview(removeButton)
-
-        var labelsLeadingAnchor = row.leadingAnchor
-        if let icon {
-            let iconView = NSImageView(image: icon)
-            iconView.imageScaling = .scaleProportionallyUpOrDown
-            iconView.translatesAutoresizingMaskIntoConstraints = false
-            row.addSubview(iconView)
-            NSLayoutConstraint.activate([
-                iconView.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 12),
-                iconView.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-                iconView.widthAnchor.constraint(equalToConstant: 26),
-                iconView.heightAnchor.constraint(equalToConstant: 26)
-            ])
-            labelsLeadingAnchor = iconView.trailingAnchor
+        let enabled = makeColumnHeader(AppStrings.text(.finderQuickOpenEnabled))
+        let application = makeColumnHeader(AppStrings.text(.finderQuickOpenApplication))
+        let status = makeColumnHeader(AppStrings.text(.finderQuickOpenStatus))
+        for view in [enabled, application, status] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            header.addSubview(view)
         }
 
         NSLayoutConstraint.activate([
-            labels.leadingAnchor.constraint(
-                equalTo: labelsLeadingAnchor,
-                constant: icon == nil ? 12 : 9
-            ),
-            labels.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            labels.trailingAnchor.constraint(lessThanOrEqualTo: removeButton.leadingAnchor, constant: -12),
-            removeButton.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -12),
-            removeButton.centerYAnchor.constraint(equalTo: row.centerYAnchor)
+            enabled.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 12),
+            enabled.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            enabled.widthAnchor.constraint(equalToConstant: 48),
+
+            application.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 78),
+            application.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+
+            status.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -84),
+            status.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            status.widthAnchor.constraint(equalToConstant: 104)
+        ])
+        return header
+    }
+
+    private func makeQuickActionRow(_ shortcut: FinderLaunchShortcut) -> NSView {
+        let row = FinderSettingsSurfaceView(style: .item)
+        row.translatesAutoresizingMaskIntoConstraints = false
+        row.heightAnchor.constraint(equalToConstant: 50).isActive = true
+
+        let applicationURL = resolvedApplicationURL(for: shortcut)
+        let isAvailable = applicationURL != nil
+        let enabled = NSButton(
+            checkboxWithTitle: "",
+            target: self,
+            action: #selector(toggleQuickAction(_:))
+        )
+        enabled.state = shortcut.isEnabled ? .on : .off
+        enabled.isEnabled = isAvailable || shortcut.isEnabled
+        enabled.identifier = NSUserInterfaceItemIdentifier(shortcut.id.uuidString)
+        enabled.setAccessibilityLabel(
+            "\(AppStrings.text(.finderQuickOpenEnabled)): \(shortcut.displayName)"
+        )
+        enabled.translatesAutoresizingMaskIntoConstraints = false
+
+        let iconView = NSImageView()
+        iconView.image = applicationURL.map {
+            NSWorkspace.shared.icon(forFile: $0.path)
+        } ?? NSImage(named: NSImage.applicationIconName)
+        iconView.imageScaling = .scaleProportionallyUpOrDown
+        iconView.alphaValue = isAvailable ? 1 : 0.45
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+
+        let name = NSTextField(labelWithString: shortcut.displayName)
+        name.font = .systemFont(ofSize: 13, weight: .medium)
+        name.textColor = isAvailable ? .labelColor : .secondaryLabelColor
+        name.lineBreakMode = .byTruncatingTail
+        name.translatesAutoresizingMaskIntoConstraints = false
+
+        let status = NSTextField(labelWithString: AppStrings.text(
+            isAvailable ? .finderQuickOpenInstalled : .finderQuickOpenNotInstalled
+        ))
+        status.font = .systemFont(ofSize: 11)
+        status.textColor = .secondaryLabelColor
+        status.alignment = .left
+        status.translatesAutoresizingMaskIntoConstraints = false
+
+        row.addSubview(enabled)
+        row.addSubview(iconView)
+        row.addSubview(name)
+        row.addSubview(status)
+
+        var trailingAnchor = row.trailingAnchor
+        var trailingConstant: CGFloat = -84
+        if !shortcut.isBuiltIn {
+            let removeButton = FinderSettingsButton()
+            removeButton.title = AppStrings.text(.finderRemove)
+            removeButton.bezelStyle = .rounded
+            removeButton.identifier = NSUserInterfaceItemIdentifier(shortcut.id.uuidString)
+            removeButton.target = self
+            removeButton.action = #selector(removeItem(_:))
+            removeButton.translatesAutoresizingMaskIntoConstraints = false
+            row.addSubview(removeButton)
+            NSLayoutConstraint.activate([
+                removeButton.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -12),
+                removeButton.centerYAnchor.constraint(equalTo: row.centerYAnchor)
+            ])
+            trailingAnchor = removeButton.leadingAnchor
+            trailingConstant = -12
+        }
+
+        NSLayoutConstraint.activate([
+            enabled.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 12),
+            enabled.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            enabled.widthAnchor.constraint(equalToConstant: 18),
+
+            iconView.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 42),
+            iconView.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            iconView.widthAnchor.constraint(equalToConstant: 26),
+            iconView.heightAnchor.constraint(equalToConstant: 26),
+
+            name.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 78),
+            name.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            name.trailingAnchor.constraint(lessThanOrEqualTo: status.leadingAnchor, constant: -12),
+
+            status.trailingAnchor.constraint(equalTo: trailingAnchor, constant: trailingConstant),
+            status.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            status.widthAnchor.constraint(equalToConstant: 104)
         ])
         return row
+    }
+
+    private func resolvedApplicationURL(for shortcut: FinderLaunchShortcut) -> URL? {
+        FinderApplicationTargetResolver.resolve(
+            shortcut: shortcut,
+            fileExists: FileManager.default.fileExists(atPath:),
+            installedApplicationURL: { bundleIdentifier in
+                NSWorkspace.shared.urlForApplication(
+                    withBundleIdentifier: bundleIdentifier
+                )
+            }
+        )
     }
 
     private func makeSettingRow(title: String, detail: String, control: NSView) -> NSView {
@@ -467,6 +650,41 @@ final class FinderExtensionSettingsView: NSView {
 
     @objc private func toggleGrouping(_ sender: NSSwitch) {
         settings.finderLaunchShortcutsGrouped = sender.state == .on
+    }
+
+    @objc private func toggleDocumentType(_ sender: NSButton) {
+        guard let rawValue = sender.identifier?.rawValue,
+              let id = UUID(uuidString: rawValue)
+        else {
+            return
+        }
+        settings.setFinderDocumentPresetEnabled(id: id, isEnabled: sender.state == .on)
+        rebuildDetail()
+    }
+
+    @objc private func toggleQuickAction(_ sender: NSButton) {
+        guard let rawValue = sender.identifier?.rawValue,
+              let id = UUID(uuidString: rawValue),
+              let shortcut = settings.finderLaunchShortcuts.first(where: { $0.id == id })
+        else {
+            return
+        }
+
+        if sender.state == .on {
+            guard let applicationURL = resolvedApplicationURL(for: shortcut) else {
+                sender.state = .off
+                NSSound.beep()
+                return
+            }
+            settings.setFinderLaunchShortcutEnabled(
+                id: id,
+                isEnabled: true,
+                resolvedApplicationURL: applicationURL
+            )
+        } else {
+            settings.setFinderLaunchShortcutEnabled(id: id, isEnabled: false)
+        }
+        rebuildDetail()
     }
 
     @objc private func addItem(_ sender: NSButton) {

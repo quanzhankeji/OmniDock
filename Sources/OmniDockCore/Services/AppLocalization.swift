@@ -69,6 +69,11 @@ enum AppStringKey: String, CaseIterable {
     case finderQuickOpenGroupedDetail
     case finderQuickOpenAdd
     case finderQuickOpenEmpty
+    case finderQuickOpenEnabled
+    case finderQuickOpenApplication
+    case finderQuickOpenStatus
+    case finderQuickOpenInstalled
+    case finderQuickOpenNotInstalled
     case finderQuickOpenFailedTitle
     case finderQuickOpenFailedDetail
     case finderQuickOpenApplicationMissing
@@ -77,6 +82,7 @@ enum AppStringKey: String, CaseIterable {
     case finderDocumentTypeAdd
     case finderDocumentTypeName
     case finderDocumentTypeExtension
+    case finderDocumentTypeEnabled
     case finderDocumentTypeInvalid
     case finderDocumentTypeDuplicate
     case finderRemove
