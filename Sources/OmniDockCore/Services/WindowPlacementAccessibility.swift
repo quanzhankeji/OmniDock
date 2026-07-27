@@ -57,20 +57,53 @@ enum WindowPlacementExecutionResult: Equatable {
     case accessibilityFailure
 }
 
+enum WindowPlacementGreenButtonAvailabilityPolicy {
+    static func isAvailable(
+        windowFrame: CGRect,
+        buttonFrame: CGRect,
+        isWindowMinimized: Bool,
+        isWindowFullScreen: Bool,
+        canResizeWindow: Bool,
+        isButtonHidden: Bool?,
+        isButtonEnabled: Bool?
+    ) -> Bool {
+        guard !isWindowMinimized,
+              !isWindowFullScreen,
+              canResizeWindow,
+              isButtonHidden != true,
+              isButtonEnabled != false,
+              (6...48).contains(buttonFrame.width),
+              (6...48).contains(buttonFrame.height)
+        else {
+            return false
+        }
+
+        let windowBounds = windowFrame.insetBy(dx: -4, dy: -4)
+        guard windowBounds.contains(
+            CGPoint(x: buttonFrame.midX, y: buttonFrame.midY)
+        ) else {
+            return false
+        }
+
+        let titleBarDepth = min(72, max(44, windowFrame.height * 0.12))
+        return buttonFrame.midY <= windowFrame.minY + titleBarDepth
+    }
+}
+
 enum WindowPlacementAccessibility {
     static func focusedGreenButtonTarget()
         -> (target: WindowPlacementTarget, buttonFrame: CGRect)? {
         guard let target = focusedWindow(),
-              let buttonFrame = greenButtonFrame(for: target)
+              let button = availableGreenButton(for: target)
         else {
             return nil
         }
-        return (target, buttonFrame)
+        return (target, button.frame)
     }
 
-    private static func greenButtonFrame(
+    private static func availableGreenButton(
         for target: WindowPlacementTarget
-    ) -> CGRect? {
+    ) -> (element: AXUIElement, frame: CGRect)? {
         let buttonAttributes = [
             kAXFullScreenButtonAttribute as String,
             kAXZoomButtonAttribute as String
@@ -84,7 +117,24 @@ enum WindowPlacementAccessibility {
             else {
                 continue
             }
-            return buttonFrame
+            guard WindowPlacementGreenButtonAvailabilityPolicy.isAvailable(
+                windowFrame: target.frame,
+                buttonFrame: buttonFrame,
+                isWindowMinimized: target.isMinimized,
+                isWindowFullScreen: target.isFullScreen,
+                canResizeWindow: target.canResize,
+                isButtonHidden: boolAttribute(
+                    kAXHiddenAttribute,
+                    from: button
+                ),
+                isButtonEnabled: boolAttribute(
+                    kAXEnabledAttribute,
+                    from: button
+                )
+            ) else {
+                continue
+            }
+            return (button, buttonFrame)
         }
         return nil
     }
@@ -114,23 +164,13 @@ enum WindowPlacementAccessibility {
     }
 
     static func pressGreenButton(for target: WindowPlacementTarget) -> Bool {
-        let buttonAttributes = [
-            kAXFullScreenButtonAttribute as String,
-            kAXZoomButtonAttribute as String
-        ]
-        for attribute in buttonAttributes {
-            guard let button = elementAttribute(
-                attribute,
-                from: target.element
-            ) else {
-                continue
-            }
-            return AXUIElementPerformAction(
-                button,
-                kAXPressAction as CFString
-            ) == .success
+        guard let button = availableGreenButton(for: target)?.element else {
+            return false
         }
-        return false
+        return AXUIElementPerformAction(
+            button,
+            kAXPressAction as CFString
+        ) == .success
     }
 
     static func window(at eventTapPoint: CGPoint) -> WindowPlacementTarget? {

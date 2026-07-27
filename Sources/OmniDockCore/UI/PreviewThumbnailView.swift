@@ -48,6 +48,7 @@ final class PreviewThumbnailView: NSView {
     private var isDraggingPreviewList = false
     private var isSelected = false
     private let showsApplicationIdentity: Bool
+    private var identityProcessIdentifier: pid_t?
 
     var preferredTileSize: CGSize {
         let baseSize = PreviewLayoutCalculator.tileSize(forContentAspectRatio: contentAspectRatio)
@@ -334,6 +335,13 @@ final class PreviewThumbnailView: NSView {
         guard showsApplicationIdentity else {
             return
         }
+        // NSRunningApplication lookups and icon loading are not free, and
+        // update(info:) runs on every switcher refresh tick. The identity only
+        // depends on the owning process, so skip when the pid is unchanged.
+        guard identityProcessIdentifier != info.processIdentifier else {
+            return
+        }
+        identityProcessIdentifier = info.processIdentifier
         let application = NSRunningApplication(processIdentifier: info.processIdentifier)
         applicationField.stringValue = application?.localizedName ?? info.appName
         applicationIconView.image = application?.icon

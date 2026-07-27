@@ -239,7 +239,30 @@ enum AppLocalization {
     private final class State: @unchecked Sendable {
         let lock = NSLock()
         var selectedLanguage: AppLanguage = .system
+        // Resolving `.system` reads Locale.preferredLanguages, which is a
+        // CFPreferences round trip. Strings are fetched constantly (including
+        // from background queues), so the resolved language is cached and
+        // invalidated when the selection or the system locale changes. The
+        // cache stores the selection it was resolved for so a concurrent
+        // configure() can never be clobbered by a stale write-back.
+        var cachedResolution: (selected: AppLanguage, resolved: AppLanguage.Resolved)?
         var cache: [AppLanguage.Resolved: [String: String]] = [:]
+        private var localeObserver: NSObjectProtocol?
+
+        init() {
+            localeObserver = NotificationCenter.default.addObserver(
+                forName: NSLocale.currentLocaleDidChangeNotification,
+                object: nil,
+                queue: nil
+            ) { [weak self] _ in
+                guard let self else {
+                    return
+                }
+                self.lock.lock()
+                self.cachedResolution = nil
+                self.lock.unlock()
+            }
+        }
     }
 
     private static let state = State()
@@ -247,6 +270,7 @@ enum AppLocalization {
     static func configure(language: AppLanguage) {
         state.lock.lock()
         state.selectedLanguage = language
+        state.cachedResolution = nil
         state.lock.unlock()
     }
 
@@ -257,11 +281,28 @@ enum AppLocalization {
     }
 
     static var currentResolvedLanguage: AppLanguage.Resolved {
-        currentLanguage.resolved()
+        state.lock.lock()
+        let selected = state.selectedLanguage
+        if let cached = state.cachedResolution, cached.selected == selected {
+            state.lock.unlock()
+            return cached.resolved
+        }
+        state.lock.unlock()
+
+        let resolved = selected.resolved()
+        state.lock.lock()
+        // Only publish the result if the selection has not changed while the
+        // lock was released; otherwise return the fresh value without caching
+        // so a concurrent configure() is never overwritten with stale data.
+        if state.selectedLanguage == selected {
+            state.cachedResolution = (selected, resolved)
+        }
+        state.lock.unlock()
+        return resolved
     }
 
     static func text(_ key: AppStringKey, language: AppLanguage? = nil) -> String {
-        let resolvedLanguage = (language ?? currentLanguage).resolved()
+        let resolvedLanguage = language?.resolved() ?? currentResolvedLanguage
         return localizedValue(for: key, language: resolvedLanguage)
     }
 
@@ -270,7 +311,7 @@ enum AppLocalization {
     }
 
     static func format(_ key: AppStringKey, arguments: [CVarArg], language: AppLanguage? = nil) -> String {
-        let resolvedLanguage = (language ?? currentLanguage).resolved()
+        let resolvedLanguage = language?.resolved() ?? currentResolvedLanguage
         let format = localizedValue(for: key, language: resolvedLanguage)
         return String(
             format: format,

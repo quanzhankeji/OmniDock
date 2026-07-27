@@ -118,6 +118,42 @@ public final class SettingsStore {
     private let livePreviewLimitProvider: () -> Int
     private let finderMenuPreferencesStore: FinderMenuPreferencesStore?
 
+    // In-memory caches for JSON-backed values. Decoding these on every getter
+    // call is measurable because several services read them on hot paths
+    // (hotkey registration, window placement, clipboard conflict checks).
+    // All writes go through the setters below, which keep the caches in sync.
+    private let cacheLock = NSLock()
+    private var cachedAppHotkeyBindings: [AppHotkeyBinding]?
+    private var cachedWindowPlacementConfiguration: WindowPlacementConfiguration?
+    private var cachedFinderLaunchShortcuts: [FinderLaunchShortcut]?
+    private var cachedFinderDocumentPresets: [FinderDocumentPreset]?
+
+    private func cachedValue<T>(_ keyPath: ReferenceWritableKeyPath<SettingsStore, T?>, compute: () -> T) -> T {
+        cacheLock.lock()
+        if let cached = self[keyPath: keyPath] {
+            cacheLock.unlock()
+            return cached
+        }
+        cacheLock.unlock()
+        let value = compute()
+        cacheLock.lock()
+        // A setter may have populated the cache while the lock was released;
+        // its value is newer than what compute() read, so never overwrite it.
+        if let existing = self[keyPath: keyPath] {
+            cacheLock.unlock()
+            return existing
+        }
+        self[keyPath: keyPath] = value
+        cacheLock.unlock()
+        return value
+    }
+
+    private func updateCache<T>(_ keyPath: ReferenceWritableKeyPath<SettingsStore, T?>, to value: T?) {
+        cacheLock.lock()
+        self[keyPath: keyPath] = value
+        cacheLock.unlock()
+    }
+
     public convenience init(defaults: UserDefaults = .standard) {
         let sandboxPreferences = defaults === UserDefaults.standard
             ? Self.loadSandboxPreferences()
@@ -204,13 +240,17 @@ public final class SettingsStore {
 
     var finderLaunchShortcuts: [FinderLaunchShortcut] {
         get {
-            decoded(
-                [FinderLaunchShortcut].self,
-                from: defaults.data(forKey: Key.finderLaunchShortcuts.rawValue)
-            ) ?? []
+            cachedValue(\.cachedFinderLaunchShortcuts) {
+                decoded(
+                    [FinderLaunchShortcut].self,
+                    from: defaults.data(forKey: Key.finderLaunchShortcuts.rawValue)
+                ) ?? []
+            }
         }
         set {
-            defaults.set(encoded(newValue), forKey: Key.finderLaunchShortcuts.rawValue)
+            let data = encoded(newValue)
+            defaults.set(data, forKey: Key.finderLaunchShortcuts.rawValue)
+            updateCache(\.cachedFinderLaunchShortcuts, to: data == nil ? [] : newValue)
             syncFinderExtensionSettings()
             postChange(.finderExtension)
         }
@@ -218,10 +258,12 @@ public final class SettingsStore {
 
     var finderDocumentPresets: [FinderDocumentPreset] {
         get {
-            decoded(
-                [FinderDocumentPreset].self,
-                from: defaults.data(forKey: Key.finderDocumentPresets.rawValue)
-            ) ?? FinderDocumentPreset.defaultPresets
+            cachedValue(\.cachedFinderDocumentPresets) {
+                decoded(
+                    [FinderDocumentPreset].self,
+                    from: defaults.data(forKey: Key.finderDocumentPresets.rawValue)
+                ) ?? FinderDocumentPreset.defaultPresets
+            }
         }
         set {
             let normalized = newValue.compactMap {
@@ -231,7 +273,12 @@ public final class SettingsStore {
                     fileExtension: $0.fileExtension
                 )
             }
-            defaults.set(encoded(normalized), forKey: Key.finderDocumentPresets.rawValue)
+            let data = encoded(normalized)
+            defaults.set(data, forKey: Key.finderDocumentPresets.rawValue)
+            updateCache(
+                \.cachedFinderDocumentPresets,
+                to: data == nil ? FinderDocumentPreset.defaultPresets : normalized
+            )
             syncFinderExtensionSettings()
             postChange(.finderExtension)
         }
@@ -307,19 +354,26 @@ public final class SettingsStore {
 
     var windowPlacementConfiguration: WindowPlacementConfiguration {
         get {
-            guard var configuration = decoded(
-                WindowPlacementConfiguration.self,
-                from: defaults.data(forKey: Key.windowPlacementConfiguration.rawValue)
-            ) else {
-                return .default
+            cachedValue(\.cachedWindowPlacementConfiguration) {
+                guard var configuration = decoded(
+                    WindowPlacementConfiguration.self,
+                    from: defaults.data(forKey: Key.windowPlacementConfiguration.rawValue)
+                ) else {
+                    return .default
+                }
+                configuration.normalize()
+                return configuration
             }
-            configuration.normalize()
-            return configuration
         }
         set {
             var normalized = newValue
             normalized.normalize()
-            defaults.set(encoded(normalized), forKey: Key.windowPlacementConfiguration.rawValue)
+            let data = encoded(normalized)
+            defaults.set(data, forKey: Key.windowPlacementConfiguration.rawValue)
+            updateCache(
+                \.cachedWindowPlacementConfiguration,
+                to: data == nil ? WindowPlacementConfiguration.default : normalized
+            )
             postChange(.windowPlacement)
         }
     }
@@ -368,18 +422,20 @@ public final class SettingsStore {
 
     public var appHotkeyBindings: [AppHotkeyBinding] {
         get {
-            guard let data = defaults.data(forKey: Key.hotkeyAssignments.rawValue),
-                  let bindings = try? JSONDecoder().decode([AppHotkeyBinding].self, from: data)
-            else {
-                return []
+            cachedValue(\.cachedAppHotkeyBindings) {
+                decoded(
+                    [AppHotkeyBinding].self,
+                    from: defaults.data(forKey: Key.hotkeyAssignments.rawValue)
+                ) ?? []
             }
-            return bindings
         }
         set {
-            if let data = try? JSONEncoder().encode(newValue) {
+            if let data = encoded(newValue) {
                 defaults.set(data, forKey: Key.hotkeyAssignments.rawValue)
+                updateCache(\.cachedAppHotkeyBindings, to: newValue)
             } else {
                 defaults.removeObject(forKey: Key.hotkeyAssignments.rawValue)
+                updateCache(\.cachedAppHotkeyBindings, to: [])
             }
             postChange(.hotkeyBindings)
         }

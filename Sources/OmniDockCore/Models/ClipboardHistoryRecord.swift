@@ -52,6 +52,7 @@ struct ClipboardHistoryRecord: Equatable, Identifiable, Sendable {
 struct ClipboardHistorySnapshot: Equatable, Sendable {
     let records: [ClipboardHistoryRecord]
     let warning: String?
+    let revision: UInt64
 }
 
 struct ClipboardHistoryPreviewContent: Equatable, Sendable {

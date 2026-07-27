@@ -27,6 +27,7 @@ FRAMEWORKS = [
     "CoreMedia",
     "CryptoKit",
     "FinderSync",
+    "ImageIO",
     "IOKit",
     "ScreenCaptureKit",
 ]

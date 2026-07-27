@@ -784,76 +784,124 @@ final class ClipboardArchiveSettingsRowView: NSView {
     var onDelete: (() -> Void)?
     var onHoverChanged: ((Bool) -> Void)?
 
+    private let iconView = NSImageView()
+    private let thumbnailView = NSImageView()
+    private let summaryField = NSTextField(labelWithString: "")
+    private let sourceField = NSTextField(labelWithString: "")
     private var hoverTrackingArea: NSTrackingArea?
+    private(set) var recordID: UUID?
 
     init(
         record: ClipboardHistoryRecord,
-        fallbackImageData: Data? = nil
+        fallbackImage: NSImage? = nil
     ) {
         super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
+        setup()
+        configure(
+            record: record,
+            thumbnail: record.thumbnailData.flatMap(NSImage.init(data:))
+                ?? fallbackImage
+        )
+    }
 
-        let iconView = NSImageView()
+    init() {
+        super.init(frame: .zero)
+        setup()
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    func configure(
+        record: ClipboardHistoryRecord,
+        thumbnail: NSImage? = nil
+    ) {
+        recordID = record.id
         iconView.image = ClipboardSourceArtwork.icon(
             bundleIdentifier: record.sourceBundleIdentifier
         )
+        thumbnailView.image = thumbnail
+        thumbnailView.isHidden = thumbnail == nil
+        summaryField.stringValue = ClipboardHistoryDisplayText.summary(record.summary)
+        sourceField.stringValue = ClipboardHistoryDisplayText.sourceName(
+            record.sourceApplicationName
+        )
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        recordID = nil
+        iconView.image = nil
+        thumbnailView.image = nil
+        thumbnailView.isHidden = true
+        summaryField.stringValue = ""
+        sourceField.stringValue = ""
+        onCopy = nil
+        onDelete = nil
+        onHoverChanged = nil
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.activeAlways, .mouseEnteredAndExited, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        hoverTrackingArea = trackingArea
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        onHoverChanged?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        onHoverChanged?(false)
+    }
+
+    private func setup() {
+        translatesAutoresizingMaskIntoConstraints = false
+
         iconView.imageScaling = .scaleProportionallyUpOrDown
         iconView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(iconView)
+        thumbnailView.imageScaling = .scaleProportionallyUpOrDown
+        thumbnailView.wantsLayer = true
+        thumbnailView.layer?.cornerRadius = 4
+        thumbnailView.layer?.masksToBounds = true
+        thumbnailView.translatesAutoresizingMaskIntoConstraints = false
+        thumbnailView.isHidden = true
 
-        var leadingView: NSView = iconView
-        let previewImage = [record.thumbnailData, fallbackImageData]
-            .compactMap { data in
-                data.flatMap(NSImage.init(data:))
-            }
-            .first
-        if let previewImage {
-            let thumbnail = NSImageView(image: previewImage)
-            thumbnail.imageScaling = .scaleProportionallyUpOrDown
-            thumbnail.wantsLayer = true
-            thumbnail.layer?.cornerRadius = 4
-            thumbnail.layer?.masksToBounds = true
-            thumbnail.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(thumbnail)
-            NSLayoutConstraint.activate([
-                thumbnail.leadingAnchor.constraint(
-                    equalTo: iconView.trailingAnchor,
-                    constant: 8
-                ),
-                thumbnail.centerYAnchor.constraint(equalTo: centerYAnchor),
-                thumbnail.widthAnchor.constraint(equalToConstant: 44),
-                thumbnail.heightAnchor.constraint(equalToConstant: 36)
-            ])
-            leadingView = thumbnail
-        }
-
-        let summary = NSTextField(
-            labelWithString: ClipboardHistoryDisplayText.summary(record.summary)
-        )
-        summary.font = .systemFont(ofSize: 13, weight: .medium)
-        summary.lineBreakMode = .byTruncatingTail
-        summary.maximumNumberOfLines = 1
-        summary.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        summary.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let source = NSTextField(
-            labelWithString: ClipboardHistoryDisplayText.sourceName(
-                record.sourceApplicationName
-            )
-        )
-        source.font = .systemFont(ofSize: 11)
-        source.textColor = .secondaryLabelColor
-        source.lineBreakMode = .byTruncatingTail
-        source.maximumNumberOfLines = 1
-        source.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        source.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let labels = NSStackView(views: [summary, source])
+        summaryField.font = .systemFont(ofSize: 13, weight: .medium)
+        summaryField.lineBreakMode = .byTruncatingTail
+        summaryField.maximumNumberOfLines = 1
+        summaryField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        summaryField.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        sourceField.font = .systemFont(ofSize: 11)
+        sourceField.textColor = .secondaryLabelColor
+        sourceField.lineBreakMode = .byTruncatingTail
+        sourceField.maximumNumberOfLines = 1
+        sourceField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        sourceField.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        let labels = NSStackView(views: [summaryField, sourceField])
         labels.orientation = .vertical
         labels.alignment = .leading
         labels.spacing = 2
         labels.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         labels.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        labels.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(labels)
+
+        let content = NSStackView(views: [iconView, thumbnailView, labels])
+        content.orientation = .horizontal
+        content.alignment = .centerY
+        content.spacing = 8
+        content.translatesAutoresizingMaskIntoConstraints = false
+        content.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        addSubview(content)
 
         let copyButton = NSButton(
             image: NSImage(
@@ -883,14 +931,17 @@ final class ClipboardArchiveSettingsRowView: NSView {
 
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: 48),
-            iconView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            content.leadingAnchor.constraint(equalTo: leadingAnchor),
             iconView.centerYAnchor.constraint(equalTo: centerYAnchor),
             iconView.widthAnchor.constraint(equalToConstant: 28),
             iconView.heightAnchor.constraint(equalToConstant: 28),
-
-            labels.leadingAnchor.constraint(equalTo: leadingView.trailingAnchor, constant: 10),
-            labels.centerYAnchor.constraint(equalTo: centerYAnchor),
-            labels.trailingAnchor.constraint(equalTo: copyButton.leadingAnchor, constant: -10),
+            thumbnailView.widthAnchor.constraint(equalToConstant: 44),
+            thumbnailView.heightAnchor.constraint(equalToConstant: 36),
+            content.centerYAnchor.constraint(equalTo: centerYAnchor),
+            content.trailingAnchor.constraint(
+                lessThanOrEqualTo: copyButton.leadingAnchor,
+                constant: -10
+            ),
 
             copyButton.centerYAnchor.constraint(equalTo: centerYAnchor),
             copyButton.widthAnchor.constraint(equalToConstant: 28),
@@ -903,33 +954,6 @@ final class ClipboardArchiveSettingsRowView: NSView {
         ])
     }
 
-    required init?(coder: NSCoder) {
-        nil
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let hoverTrackingArea {
-            removeTrackingArea(hoverTrackingArea)
-        }
-        let trackingArea = NSTrackingArea(
-            rect: bounds,
-            options: [.activeAlways, .mouseEnteredAndExited, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(trackingArea)
-        hoverTrackingArea = trackingArea
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        onHoverChanged?(true)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        onHoverChanged?(false)
-    }
-
     @objc private func copyRecord(_ sender: NSButton) {
         onCopy?()
     }
@@ -937,20 +961,34 @@ final class ClipboardArchiveSettingsRowView: NSView {
     @objc private func deleteRecord(_ sender: NSButton) {
         onDelete?()
     }
-
 }
 
 @MainActor
 enum ClipboardSourceArtwork {
+    // Application icon lookups hit LaunchServices and decode icon resources;
+    // rows are rebuilt often, so resolved icons are cached per bundle
+    // identifier for the lifetime of the process.
+    private static var iconCache: [String: NSImage] = [:]
+
     static func icon(bundleIdentifier: String?) -> NSImage? {
-        guard let bundleIdentifier,
-              let URL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier)
-        else {
-            return NSImage(
-                systemSymbolName: "doc.on.clipboard",
-                accessibilityDescription: nil
-            )
+        guard let bundleIdentifier else {
+            return fallbackIcon
         }
-        return NSWorkspace.shared.icon(forFile: URL.path)
+        if let cached = iconCache[bundleIdentifier] {
+            return cached
+        }
+        guard let URL = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: bundleIdentifier
+        ) else {
+            return fallbackIcon
+        }
+        let icon = NSWorkspace.shared.icon(forFile: URL.path)
+        iconCache[bundleIdentifier] = icon
+        return icon
     }
+
+    private static let fallbackIcon = NSImage(
+        systemSymbolName: "doc.on.clipboard",
+        accessibilityDescription: nil
+    )
 }

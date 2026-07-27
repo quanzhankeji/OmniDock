@@ -89,7 +89,36 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
     }
 
     func records() -> [ClipboardHistoryRecord] {
-        fetchObjects().compactMap(record(from:))
+        // Dictionary fetches read only the listed attributes straight from the
+        // store. This deliberately excludes payloadData, which can be tens of
+        // megabytes per row and would otherwise be faulted in for every record
+        // on every refresh even though the list UI never needs it.
+        //
+        // Invariant: dictionary fetches do not see unsaved pending changes, so
+        // every mutation in this class must save() before returning (they all
+        // do). Keep that in mind when adding new mutation paths.
+        let request = NSFetchRequest<NSDictionary>(entityName: Self.entityName)
+        request.resultType = .dictionaryResultType
+        request.propertiesToFetch = [
+            Field.id,
+            Field.capturedAt,
+            Field.lastCopiedAt,
+            Field.sourceApplicationName,
+            Field.sourceBundleIdentifier,
+            Field.kind,
+            Field.summary,
+            Field.searchableText,
+            Field.copyCount,
+            Field.byteCount,
+            Field.thumbnailData
+        ]
+        request.sortDescriptors = [
+            NSSortDescriptor(key: Field.lastCopiedAt, ascending: false)
+        ]
+        let rows = (try? context.fetch(request)) ?? []
+        return rows.compactMap { row in
+            record { row.value(forKey: $0) }
+        }
     }
 
     func payload(for id: UUID) -> ClipboardPayload? {
@@ -150,7 +179,10 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
     }
 
     func removeAll() {
-        fetchObjects().forEach(context.delete)
+        let request = NSFetchRequest<NSManagedObject>(entityName: Self.entityName)
+        // Deleting does not need attribute values; skip faulting payload blobs.
+        request.includesPropertyValues = false
+        ((try? context.fetch(request)) ?? []).forEach(context.delete)
         save()
     }
 
@@ -165,25 +197,39 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
     }
 
     func prune(limit: Int, maximumTotalBytes: Int) {
+        // Read only id and byteCount to decide what expires, so pruning never
+        // faults full rows (and their payload blobs) into memory.
+        let request = NSFetchRequest<NSDictionary>(entityName: Self.entityName)
+        request.resultType = .dictionaryResultType
+        request.propertiesToFetch = [Field.id, Field.byteCount]
+        request.sortDescriptors = [
+            NSSortDescriptor(key: Field.lastCopiedAt, ascending: false)
+        ]
+        let rows = (try? context.fetch(request)) ?? []
+
         let boundedLimit = max(1, limit)
         var retainedBytes = 0
-        for (index, object) in fetchObjects().enumerated() {
-            let bytes = Int(object.value(forKey: Field.byteCount) as? Int64 ?? 0)
+        var expiredIDs: [UUID] = []
+        for (index, row) in rows.enumerated() {
+            guard let id = row.value(forKey: Field.id) as? UUID else {
+                continue
+            }
+            let bytes = Int(row.value(forKey: Field.byteCount) as? Int64 ?? 0)
             if index >= boundedLimit || retainedBytes + bytes > maximumTotalBytes {
-                context.delete(object)
+                expiredIDs.append(id)
             } else {
                 retainedBytes += bytes
             }
         }
-        save()
-    }
+        guard !expiredIDs.isEmpty else {
+            return
+        }
 
-    private func fetchObjects() -> [NSManagedObject] {
-        let request = NSFetchRequest<NSManagedObject>(entityName: Self.entityName)
-        request.sortDescriptors = [
-            NSSortDescriptor(key: Field.lastCopiedAt, ascending: false)
-        ]
-        return (try? context.fetch(request)) ?? []
+        let deleteRequest = NSFetchRequest<NSManagedObject>(entityName: Self.entityName)
+        deleteRequest.predicate = NSPredicate(format: "%K IN %@", Field.id, expiredIDs)
+        deleteRequest.includesPropertyValues = false
+        ((try? context.fetch(deleteRequest)) ?? []).forEach(context.delete)
+        save()
     }
 
     private func fetchObject(id: UUID) -> NSManagedObject? {
@@ -213,14 +259,18 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
     }
 
     private func record(from object: NSManagedObject) -> ClipboardHistoryRecord? {
-        guard let id = object.value(forKey: Field.id) as? UUID,
-              let capturedAt = object.value(forKey: Field.capturedAt) as? Date,
-              let lastCopiedAt = object.value(forKey: Field.lastCopiedAt) as? Date,
-              let sourceApplicationName = object.value(forKey: Field.sourceApplicationName) as? String,
-              let kindValue = object.value(forKey: Field.kind) as? String,
+        record { object.value(forKey: $0) }
+    }
+
+    private func record(fieldValue: (String) -> Any?) -> ClipboardHistoryRecord? {
+        guard let id = fieldValue(Field.id) as? UUID,
+              let capturedAt = fieldValue(Field.capturedAt) as? Date,
+              let lastCopiedAt = fieldValue(Field.lastCopiedAt) as? Date,
+              let sourceApplicationName = fieldValue(Field.sourceApplicationName) as? String,
+              let kindValue = fieldValue(Field.kind) as? String,
               let kind = ClipboardContentKind(rawValue: kindValue),
-              let summary = object.value(forKey: Field.summary) as? String,
-              let searchableText = object.value(forKey: Field.searchableText) as? String
+              let summary = fieldValue(Field.summary) as? String,
+              let searchableText = fieldValue(Field.searchableText) as? String
         else {
             return nil
         }
@@ -230,13 +280,13 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
             capturedAt: capturedAt,
             lastCopiedAt: lastCopiedAt,
             sourceApplicationName: sourceApplicationName,
-            sourceBundleIdentifier: object.value(forKey: Field.sourceBundleIdentifier) as? String,
+            sourceBundleIdentifier: fieldValue(Field.sourceBundleIdentifier) as? String,
             kind: kind,
             summary: summary,
             searchableText: searchableText,
-            copyCount: Int(object.value(forKey: Field.copyCount) as? Int64 ?? 1),
-            byteCount: Int(object.value(forKey: Field.byteCount) as? Int64 ?? 0),
-            thumbnailData: object.value(forKey: Field.thumbnailData) as? Data
+            copyCount: Int(fieldValue(Field.copyCount) as? Int64 ?? 1),
+            byteCount: Int(fieldValue(Field.byteCount) as? Int64 ?? 0),
+            thumbnailData: fieldValue(Field.thumbnailData) as? Data
         )
     }
 

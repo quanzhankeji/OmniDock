@@ -437,14 +437,17 @@ public final class DockInteractionCoordinator {
         ) else {
             return
         }
-        let point = NSEvent.mouseLocation
-        let dockGeometry = DockGeometry()
-        let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) ?? NSScreen.main
-
+        // Check the cheap setting first: when previews are disabled this tick
+        // fires 12.5 times per second and should not touch NSScreen.screens
+        // or mouse location at all.
         guard settings.showDockPreviews else {
             hidePreview()
             return
         }
+
+        let point = NSEvent.mouseLocation
+        let dockGeometry = DockGeometry()
+        let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) ?? NSScreen.main
 
         if dockGeometry.isPointInLikelyDockArea(point, screen: screen),
            let target = dockHitTester.target(at: point) {

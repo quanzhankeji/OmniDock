@@ -42,18 +42,60 @@ public final class PermissionService {
 
     private let directoryGrantStore: FinderDirectoryGrantStore
 
+    // The Finder extension check is a synchronous pluginkit/XPC round trip and
+    // the folder grant check resolves security-scoped bookmarks from disk.
+    // snapshot() is polled frequently (hover ticks, permission timer, UI
+    // refreshes), so these two answers are cached briefly. The cheap checks
+    // (accessibility, screen recording, input monitoring) stay live.
+    private struct SlowPermissionState {
+        let finderExtension: Bool
+        let folderAccess: Bool
+        let capturedAt: Date
+    }
+
+    private static let slowPermissionLifetime: TimeInterval = 1.5
+    private let slowPermissionLock = NSLock()
+    private var slowPermissionState: SlowPermissionState?
+
     public init() {
         directoryGrantStore = FinderDirectoryGrantStore()
     }
 
     public func snapshot() -> PermissionSnapshot {
-        PermissionSnapshot(
+        let slowState = currentSlowPermissionState()
+        return PermissionSnapshot(
             accessibility: isAccessibilityTrusted(prompt: false),
             screenRecording: CGPreflightScreenCaptureAccess(),
             inputMonitoring: CGPreflightListenEventAccess(),
-            finderExtension: FinderExtensionActivation.isEnabledInFinder,
-            folderAccess: directoryGrantStore.hasUsableGrant()
+            finderExtension: slowState.finderExtension,
+            folderAccess: slowState.folderAccess
         )
+    }
+
+    private func currentSlowPermissionState() -> SlowPermissionState {
+        slowPermissionLock.lock()
+        if let cached = slowPermissionState,
+           Date().timeIntervalSince(cached.capturedAt) < Self.slowPermissionLifetime {
+            slowPermissionLock.unlock()
+            return cached
+        }
+        slowPermissionLock.unlock()
+
+        let state = SlowPermissionState(
+            finderExtension: FinderExtensionActivation.isEnabledInFinder,
+            folderAccess: directoryGrantStore.hasUsableGrant(),
+            capturedAt: Date()
+        )
+        slowPermissionLock.lock()
+        slowPermissionState = state
+        slowPermissionLock.unlock()
+        return state
+    }
+
+    private func invalidateSlowPermissionState() {
+        slowPermissionLock.lock()
+        slowPermissionState = nil
+        slowPermissionLock.unlock()
     }
 
     public func openPrivacySettings(for kind: PermissionKind) {
@@ -66,6 +108,7 @@ public final class PermissionService {
         case .inputMonitoring:
             anchor = "Privacy_ListenEvent"
         case .finderExtension:
+            invalidateSlowPermissionState()
             FinderExtensionActivation.showManagementInterface()
             return
         case .folderAccess:
@@ -156,6 +199,7 @@ public final class PermissionService {
                 return
             }
             try? self?.directoryGrantStore.remember(directory: directory)
+            self?.invalidateSlowPermissionState()
             NotificationCenter.default.post(name: Self.changedNotification, object: self)
         }
     }

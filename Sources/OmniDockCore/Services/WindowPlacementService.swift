@@ -44,6 +44,18 @@ enum WindowPlacementShortcutPolicy {
     }
 }
 
+enum WindowPlacementRestoreFramePolicy {
+    // Restore entries are keyed by pid + CGWindowID, so entries from an
+    // exited process must be dropped: a later process could otherwise
+    // inherit a dead window's remembered frame.
+    static func prunedAfterTermination<Value>(
+        _ frames: [WindowPlacementRuntimeIdentifier: Value],
+        processIdentifier: pid_t
+    ) -> [WindowPlacementRuntimeIdentifier: Value] {
+        frames.filter { $0.key.processIdentifier != processIdentifier }
+    }
+}
+
 @MainActor
 final class WindowPlacementService {
     private struct RestoreEntry {
@@ -58,6 +70,7 @@ final class WindowPlacementService {
     private let paletteController: WindowPlacementPaletteController
     private let pointerMonitor: WindowPlacementPointerMonitor
     private var restoreFrames: [WindowPlacementRuntimeIdentifier: RestoreEntry] = [:]
+    private var terminationObserver: NSObjectProtocol?
     private var isStarted = false
 
     init(
@@ -75,9 +88,6 @@ final class WindowPlacementService {
 
         hotkeyRegistry.onTrigger = { [weak self] commandID in
             self?.perform(commandID: commandID)
-        }
-        pointerMonitor.onGreenButtonClick = { [weak self] target, anchor in
-            self?.showPalette(for: target, anchor: anchor)
         }
         pointerMonitor.onGreenButtonHover = { [weak self] target, anchor in
             self?.showPalette(for: target, anchor: anchor)
@@ -127,6 +137,21 @@ final class WindowPlacementService {
             name: SettingsStore.changedNotification,
             object: settings
         )
+        terminationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didTerminateApplicationNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey]
+                as? NSRunningApplication
+            else {
+                return
+            }
+            let processIdentifier = application.processIdentifier
+            Task { @MainActor [weak self] in
+                self?.pruneRestoreFrames(terminatedProcessIdentifier: processIdentifier)
+            }
+        }
         refresh()
     }
 
@@ -136,6 +161,10 @@ final class WindowPlacementService {
         }
         isStarted = false
         NotificationCenter.default.removeObserver(self)
+        if let terminationObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(terminationObserver)
+            self.terminationObserver = nil
+        }
         hotkeyRegistry.stop()
         pointerMonitor.stop()
         paletteController.hide()
@@ -288,6 +317,13 @@ final class WindowPlacementService {
             restoreFrames[identifier] = entry
         }
         return .applied(appliedFrame)
+    }
+
+    private func pruneRestoreFrames(terminatedProcessIdentifier: pid_t) {
+        restoreFrames = WindowPlacementRestoreFramePolicy.prunedAfterTermination(
+            restoreFrames,
+            processIdentifier: terminatedProcessIdentifier
+        )
     }
 
     private func framesAreEquivalent(_ lhs: CGRect, _ rhs: CGRect) -> Bool {

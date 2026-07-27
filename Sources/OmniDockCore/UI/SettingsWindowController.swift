@@ -80,6 +80,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     private var clipboardHistoryContentView: NSView?
     private var windowPlacementContentView: NSView?
     private var windowPlacementSettingsView: WindowPlacementSettingsView?
+    private var finderExtensionSettingsView: FinderExtensionSettingsView?
     private var languagePopupButton: NSPopUpButton?
     private var appearancePopupButton: NSPopUpButton?
     private var previewSwitch: NSSwitch?
@@ -93,18 +94,18 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     private var dockClickSwitch: NSSwitch?
     private var minimizeDockClickSwitch: NSSwitch?
     private var hotkeysEnabledSwitch: NSSwitch?
-    private var finderExtensionSwitch: NSSwitch?
-    private var finderExtensionSetupView: NSView?
-    private var finderLaunchShortcutsGroupedSwitch: NSSwitch?
-    private var finderLaunchShortcutsStack: NSStackView?
-    private var finderDocumentPresetsStack: NSStackView?
     private var clipboardHistorySwitch: NSSwitch?
     private var clipboardHistoryLimitField: NSTextField?
     private var clipboardHistoryLimitStepper: NSStepper?
     private var clipboardHistoryWarningField: NSTextField?
     private var clipboardHistorySearchField: NSSearchField?
-    private var clipboardHistoryRowsStack: NSStackView?
+    private var clipboardHistoryListController: ClipboardHistoryListController?
     private var clipboardHistoryDetailPanel: ClipboardInspectorPanel?
+    private var clipboardHistorySearchWorkItem: DispatchWorkItem?
+    private var clipboardHistorySearchGeneration: UInt64 = 0
+    private var clipboardHistoryAppliedRevision: UInt64?
+    private var clipboardHistoryAppliedQuery = ""
+    private var clipboardHistoryNeedsReload = true
     private var clipboardHistoryPreviewWorkItem: DispatchWorkItem?
     private var clipboardHistoryPendingPreviewRecordID: UUID?
     private var clipboardHistoryPreviewRecordID: UUID?
@@ -179,7 +180,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         super.init()
         NotificationCenter.default.addObserver(
             self,
-            selector: #selector(settingsChanged),
+            selector: #selector(settingsChanged(_:)),
             name: SettingsStore.changedNotification,
             object: nil
         )
@@ -223,10 +224,10 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
 
     public func show(tab: SettingsTab = .settings) {
         presentationCoordinator.present(.settings)
+        selectedTab = tab
         let isNewWindow = window == nil
         let window = window ?? makeWindow()
         self.window = window
-        selectedTab = tab
         segmentedControl?.selectedSegment = tab.rawValue
         displaySelectedTab()
         refresh()
@@ -234,12 +235,16 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             window.center()
         }
         window.makeKeyAndOrderFront(nil)
+        if tab == .clipboardHistory {
+            scheduleClipboardHistoryReload()
+        }
     }
 
     public func windowWillClose(_ notification: Notification) {
         guard notification.object as? NSWindow === window else {
             return
         }
+        cancelClipboardHistoryReload()
         dismissClipboardHistoryPreview()
         applicationPickerGeneration &+= 1
         applicationPicker?.dismiss()
@@ -273,15 +278,9 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         minimizeDockClickSwitch?.state = settings.minimizeWindowsOnDockClickInsteadOfHide ? .on : .off
         minimizeDockClickSwitch?.isEnabled = settings.toggleAppVisibilityOnDockClick
         hotkeysEnabledSwitch?.state = settings.hotkeysEnabled ? .on : .off
-        finderExtensionSwitch?.state = settings.finderExtensionEnabled ? .on : .off
-        finderLaunchShortcutsGroupedSwitch?.state = settings.finderLaunchShortcutsGrouped ? .on : .off
         clipboardHistorySwitch?.state = settings.clipboardHistoryEnabled ? .on : .off
         refreshClipboardHistoryLimitControls()
-        clipboardHistoryWarningField?.stringValue = clipboardHistoryRegistrationStatus.warning
-            ?? clipboardHistoryService?.snapshot().warning
-            ?? ""
-        clipboardHistoryWarningField?.isHidden = clipboardHistoryWarningField?.stringValue.isEmpty ?? true
-        refreshFinderExtensionSetupVisibility()
+        refreshClipboardHistoryStatus()
         refreshHotkeyGuidanceVisibility()
 
         let snapshot = permissionService.snapshot()
@@ -292,10 +291,9 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         }
 
         reloadHotkeyRows()
-        reloadFinderLaunchShortcuts()
-        reloadFinderDocumentPresets()
+        finderExtensionSettingsView?.reload()
         if selectedTab == .clipboardHistory {
-            reloadClipboardHistoryRows()
+            scheduleClipboardHistoryReload()
         }
         windowPlacementSettingsView?.reload()
         applicationPicker?.refreshLocalization()
@@ -304,12 +302,11 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     @objc private func changeTab(_ sender: NSSegmentedControl) {
         selectedTab = SettingsTab(rawValue: sender.selectedSegment) ?? .settings
         if selectedTab != .clipboardHistory {
+            cancelClipboardHistoryReload()
             dismissClipboardHistoryPreview()
         }
         displaySelectedTab()
-        if selectedTab == .clipboardHistory {
-            reloadClipboardHistoryRows()
-        }
+        refresh()
     }
 
     @objc private func windowCycleRegistrationStatusChanged() {
@@ -378,26 +375,6 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         refreshLivePreviewLimitControls()
     }
 
-    @objc private func toggleFinderExtension(_ sender: NSSwitch) {
-        if sender.state == .on {
-            guard canEnable(.finderExtension, sender: sender) else {
-                return
-            }
-            settings.finderExtensionEnabled = true
-        } else {
-            settings.finderExtensionEnabled = false
-        }
-        refreshFinderExtensionSetupVisibility()
-    }
-
-    @objc private func toggleFinderLaunchShortcutGrouping(_ sender: NSSwitch) {
-        settings.finderLaunchShortcutsGrouped = sender.state == .on
-    }
-
-    @objc private func openFinderExtensionManagement(_ sender: NSButton) {
-        FinderExtensionActivation.showManagementInterface()
-    }
-
     @objc private func commitLivePreviewLimit(_ sender: NSTextField) {
         settings.livePreviewWindowLimit = sender.integerValue
         refreshLivePreviewLimitControls()
@@ -463,7 +440,8 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         guard obj.object as? NSSearchField === clipboardHistorySearchField else {
             return
         }
-        reloadClipboardHistoryRows()
+        clipboardHistoryNeedsReload = true
+        scheduleClipboardHistoryReload(delay: 0.12)
     }
 
     private func refreshLivePreviewLimitControls() {
@@ -587,7 +565,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         picker.present(over: window)
     }
 
-    @objc private func addFinderLaunchShortcut(_ sender: NSButton) {
+    private func presentFinderQuickActionPicker() {
         guard let window, applicationPicker == nil else {
             return
         }
@@ -610,16 +588,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         picker.present(over: window)
     }
 
-    @objc private func removeFinderLaunchShortcut(_ sender: NSButton) {
-        guard let rawValue = sender.identifier?.rawValue,
-              let id = UUID(uuidString: rawValue)
-        else {
-            return
-        }
-        settings.deleteFinderLaunchShortcut(id: id)
-    }
-
-    @objc private func addFinderDocumentPreset(_ sender: NSButton) {
+    private func presentFinderDocumentTypeForm() {
         guard let window else {
             return
         }
@@ -648,20 +617,17 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         }
     }
 
-    @objc private func removeFinderDocumentPreset(_ sender: NSButton) {
-        guard let rawValue = sender.identifier?.rawValue,
-              let id = UUID(uuidString: rawValue)
-        else {
-            return
-        }
-        settings.deleteFinderDocumentPreset(id: id)
-    }
-
     @objc private func openPermissionOnboarding(_ sender: NSButton) {
         onOpenPermissionOnboarding()
     }
 
-    @objc private func settingsChanged() {
+    @objc private func settingsChanged(_ notification: Notification) {
+        if SettingsStore.change(in: notification) == .clipboardHistory {
+            clipboardHistorySwitch?.state = settings.clipboardHistoryEnabled ? .on : .off
+            refreshClipboardHistoryLimitControls()
+            refreshClipboardHistoryStatus()
+            return
+        }
         refresh()
     }
 
@@ -684,7 +650,9 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     }
 
     @objc private func clipboardHistoryChanged() {
-        refresh()
+        refreshClipboardHistoryStatus()
+        clipboardHistoryNeedsReload = true
+        scheduleClipboardHistoryReload()
     }
 
     @objc private func windowPlacementStatusChanged() {
@@ -716,6 +684,12 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
 
     private func rebuildContentView(in window: NSWindow) {
         permissionViews.removeAll()
+        generalContentView = nil
+        previewContentView = nil
+        hotkeysContentView = nil
+        finderExtensionContentView = nil
+        clipboardHistoryContentView = nil
+        windowPlacementContentView = nil
         languagePopupButton = nil
         appearancePopupButton = nil
         previewSwitch = nil
@@ -729,19 +703,18 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         dockClickSwitch = nil
         minimizeDockClickSwitch = nil
         hotkeysEnabledSwitch = nil
-        finderExtensionSwitch = nil
-        finderExtensionSetupView = nil
-        finderLaunchShortcutsGroupedSwitch = nil
-        finderLaunchShortcutsStack = nil
-        finderDocumentPresetsStack = nil
+        finderExtensionSettingsView = nil
         clipboardHistorySwitch = nil
         clipboardHistoryLimitField = nil
         clipboardHistoryLimitStepper = nil
         clipboardHistoryWarningField = nil
         clipboardHistorySearchField = nil
-        clipboardHistoryRowsStack = nil
+        clipboardHistoryListController = nil
+        clipboardHistoryAppliedRevision = nil
+        clipboardHistoryAppliedQuery = ""
+        clipboardHistoryNeedsReload = true
+        cancelClipboardHistoryReload()
         dismissClipboardHistoryPreview()
-        windowPlacementContentView = nil
         windowPlacementSettingsView = nil
         hotkeyGuidanceField = nil
         hotkeyHeaderHeightConstraint = nil
@@ -782,36 +755,6 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         self.contentContainer = contentContainer
         content.addSubview(contentContainer)
 
-        let generalContentView = makeScrollableTab(makeGeneralTab())
-        let previewContentView = makeScrollableTab(makePreviewTab())
-        let hotkeysContentView = makeHotkeysTab()
-        let finderExtensionContentView = makeScrollableTab(makeFinderExtensionTab())
-        let clipboardHistoryContentView = makeClipboardHistoryTab()
-        let windowPlacementSettingsView = WindowPlacementSettingsView(
-            settings: settings,
-            registrationStatus: windowPlacementRegistrationStatus
-        )
-        windowPlacementSettingsView.onEnableRequest = { [weak self] sender in
-            self?.canEnable(.windowPlacement, sender: sender) ?? false
-        }
-        let windowPlacementContentView = makeScrollableTab(windowPlacementSettingsView)
-        [
-            generalContentView,
-            previewContentView,
-            hotkeysContentView,
-            finderExtensionContentView,
-            clipboardHistoryContentView,
-            windowPlacementContentView
-        ].forEach {
-            $0.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        }
-        self.generalContentView = generalContentView
-        self.previewContentView = previewContentView
-        self.hotkeysContentView = hotkeysContentView
-        self.finderExtensionContentView = finderExtensionContentView
-        self.clipboardHistoryContentView = clipboardHistoryContentView
-        self.windowPlacementSettingsView = windowPlacementSettingsView
-        self.windowPlacementContentView = windowPlacementContentView
         displaySelectedTab()
 
         NSLayoutConstraint.activate([
@@ -987,7 +930,13 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         permissions.addArrangedSubview(permissionHeader)
         permissionHeader.widthAnchor.constraint(equalTo: permissions.widthAnchor).isActive = true
 
-        for kind in [PermissionKind.accessibility, .screenRecording, .inputMonitoring] {
+        for kind in [
+            PermissionKind.accessibility,
+            .screenRecording,
+            .inputMonitoring,
+            .finderExtension,
+            .folderAccess
+        ] {
             let view = PermissionStatusView(kind: kind)
             view.onRequestPermission = { [weak self] kind in
                 self?.openPermissionSettings(kind)
@@ -1137,86 +1086,6 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         return root
     }
 
-    private func makeFinderExtensionTab() -> NSView {
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 18
-
-        let enabledSwitch = NSSwitch()
-        enabledSwitch.target = self
-        enabledSwitch.action = #selector(toggleFinderExtension(_:))
-        finderExtensionSwitch = enabledSwitch
-        stack.addArrangedSubview(makeSettingRow(
-            title: AppStrings.text(.finderExtensionEnableTitle),
-            detail: AppStrings.text(.finderExtensionEnableDetail),
-            control: enabledSwitch
-        ))
-
-        let setupView = NSStackView()
-        setupView.orientation = .horizontal
-        setupView.alignment = .centerY
-        setupView.spacing = 12
-        setupView.translatesAutoresizingMaskIntoConstraints = false
-
-        let setupHint = NSTextField(wrappingLabelWithString: AppStrings.text(.finderExtensionSetupRequired))
-        setupHint.font = .systemFont(ofSize: 12)
-        setupHint.textColor = .secondaryLabelColor
-        setupHint.maximumNumberOfLines = 2
-
-        let setupButton = NSButton(
-            title: AppStrings.text(.finderExtensionOpenSettings),
-            target: self,
-            action: #selector(openFinderExtensionManagement(_:))
-        )
-        setupButton.bezelStyle = .rounded
-
-        setupView.addArrangedSubview(setupHint)
-        setupView.addArrangedSubview(setupButton)
-        setupHint.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        setupButton.setContentCompressionResistancePriority(.required, for: .horizontal)
-        stack.addArrangedSubview(setupView)
-        setupView.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-        finderExtensionSetupView = setupView
-
-        let permissions = makeFinderPermissionSection()
-        stack.addArrangedSubview(permissions)
-
-        let groupingSwitch = NSSwitch()
-        groupingSwitch.target = self
-        groupingSwitch.action = #selector(toggleFinderLaunchShortcutGrouping(_:))
-        finderLaunchShortcutsGroupedSwitch = groupingSwitch
-        stack.addArrangedSubview(makeSettingRow(
-            title: AppStrings.text(.finderQuickOpenGroupedTitle),
-            detail: AppStrings.text(.finderQuickOpenGroupedDetail),
-            control: groupingSwitch
-        ))
-
-        let launchShortcuts = makeFinderCollectionSection(
-            title: AppStrings.text(.finderQuickOpenTitle),
-            detail: AppStrings.text(.finderQuickOpenDetail),
-            buttonTitle: AppStrings.text(.finderQuickOpenAdd),
-            action: #selector(addFinderLaunchShortcut(_:))
-        )
-        finderLaunchShortcutsStack = launchShortcuts.rows
-        stack.addArrangedSubview(launchShortcuts.view)
-
-        let documentPresets = makeFinderCollectionSection(
-            title: AppStrings.text(.finderDocumentTypesTitle),
-            detail: AppStrings.text(.finderDocumentTypesDetail),
-            buttonTitle: AppStrings.text(.finderDocumentTypeAdd),
-            action: #selector(addFinderDocumentPreset(_:))
-        )
-        finderDocumentPresetsStack = documentPresets.rows
-        stack.addArrangedSubview(documentPresets.view)
-
-        for view in stack.arrangedSubviews {
-            view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-        }
-
-        return stack
-    }
-
     private func makeClipboardHistoryTab() -> NSView {
         let root = NSView()
 
@@ -1292,28 +1161,24 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         searchField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         clearButton.setContentCompressionResistancePriority(.required, for: .horizontal)
 
-        let scrollView = NSScrollView()
-        scrollView.borderType = .noBorder
-        scrollView.drawsBackground = false
-        scrollView.hasVerticalScroller = true
-        scrollView.autohidesScrollers = true
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.setContentHuggingPriority(.defaultLow, for: .vertical)
-        scrollView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
-        root.addSubview(scrollView)
-
-        let rows = NSStackView()
-        rows.orientation = .vertical
-        rows.alignment = .width
-        rows.spacing = 6
-        rows.translatesAutoresizingMaskIntoConstraints = false
-        rows.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        clipboardHistoryRowsStack = rows
-
-        let documentView = TopAnchoredDocumentView()
-        documentView.translatesAutoresizingMaskIntoConstraints = false
-        documentView.addSubview(rows)
-        scrollView.documentView = documentView
+        let listController = ClipboardHistoryListController()
+        listController.onCopy = { [weak self] recordID in
+            self?.clipboardHistoryService?.copy(id: recordID)
+        }
+        listController.onDelete = { [weak self] recordID in
+            self?.clipboardHistoryService?.delete(id: recordID)
+        }
+        listController.onHoverChanged = { [weak self] recordID, hovering in
+            self?.handleClipboardHistoryHover(
+                recordID: recordID,
+                hovering: hovering
+            )
+        }
+        clipboardHistoryListController = listController
+        let listView = listController.view
+        listView.setContentHuggingPriority(.defaultLow, for: .vertical)
+        listView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+        root.addSubview(listView)
 
         for view in settingsStack.arrangedSubviews {
             view.widthAnchor.constraint(equalTo: settingsStack.widthAnchor).isActive = true
@@ -1327,78 +1192,13 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             listHeader.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             listHeader.topAnchor.constraint(equalTo: settingsStack.bottomAnchor, constant: 16),
 
-            scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: listHeader.bottomAnchor, constant: 10),
-            scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-            scrollView.heightAnchor.constraint(greaterThanOrEqualToConstant: 140),
-
-            documentView.widthAnchor.constraint(equalTo: scrollView.contentView.widthAnchor),
-            documentView.heightAnchor.constraint(greaterThanOrEqualTo: scrollView.contentView.heightAnchor),
-            rows.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
-            rows.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
-            rows.topAnchor.constraint(equalTo: documentView.topAnchor),
-            rows.bottomAnchor.constraint(lessThanOrEqualTo: documentView.bottomAnchor)
+            listView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            listView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            listView.topAnchor.constraint(equalTo: listHeader.bottomAnchor, constant: 10),
+            listView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            listView.heightAnchor.constraint(greaterThanOrEqualToConstant: 140)
         ])
-        reloadClipboardHistoryRows()
         return root
-    }
-
-    private func makeFinderPermissionSection() -> NSView {
-        let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 8
-
-        let title = NSTextField(labelWithString: AppStrings.text(.finderPermissionStatus))
-        title.font = .systemFont(ofSize: 13, weight: .semibold)
-        title.textColor = .secondaryLabelColor
-        stack.addArrangedSubview(title)
-
-        for kind in [PermissionKind.finderExtension, .folderAccess, .accessibility] {
-            let view = PermissionStatusView(kind: kind)
-            view.onRequestPermission = { [weak self] kind in
-                self?.openPermissionSettings(kind)
-            }
-            permissionViews[kind, default: []].append(view)
-            stack.addArrangedSubview(view)
-        }
-        return stack
-    }
-
-    private func makeFinderCollectionSection(
-        title: String,
-        detail: String,
-        buttonTitle: String,
-        action: Selector
-    ) -> (view: NSView, rows: NSStackView) {
-        let container = NSStackView()
-        container.orientation = .vertical
-        container.alignment = .leading
-        container.spacing = 8
-
-        let button = NSButton(title: buttonTitle, target: self, action: action)
-        button.bezelStyle = .rounded
-        container.addArrangedSubview(makeSettingRow(
-            title: title,
-            detail: detail,
-            control: button
-        ))
-
-        let rows = NSStackView()
-        rows.orientation = .vertical
-        rows.alignment = .leading
-        rows.spacing = 6
-        container.addArrangedSubview(rows)
-        rows.widthAnchor.constraint(equalTo: container.widthAnchor).isActive = true
-        return (container, rows)
-    }
-
-    private func refreshFinderExtensionSetupVisibility() {
-        finderExtensionSetupView?.isHidden = !FinderExtensionActivation.requiresManualActivation(
-            isFeatureEnabled: settings.finderExtensionEnabled,
-            isExtensionEnabledInFinder: FinderExtensionActivation.isEnabledInFinder
-        )
     }
 
     private func makeLanguageControl() -> NSView {
@@ -1653,7 +1453,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     }
 
     private func displaySelectedTab() {
-        let viewsByTab: [(SettingsTab, NSView?)] = [
+        let existingViews: [(SettingsTab, NSView?)] = [
             (.settings, generalContentView),
             (.preview, previewContentView),
             (.hotkeys, hotkeysContentView),
@@ -1662,28 +1462,155 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             (.windowPlacement, windowPlacementContentView)
         ]
         guard let contentContainer,
-              let selectedView = viewsByTab.first(where: {
-                  $0.0 == selectedTab
-              })?.1
-        else {
+              let selectedView = contentView(for: selectedTab) else {
             return
         }
 
-        for (_, view) in viewsByTab where view !== selectedView {
+        for (_, view) in existingViews where view !== selectedView {
             view?.removeFromSuperview()
         }
+        selectedView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         if selectedView.superview !== contentContainer {
             embed(selectedView, in: contentContainer)
         }
     }
 
-    private func reloadClipboardHistoryRows() {
-        guard let rows = clipboardHistoryRowsStack else {
+    private func contentView(for tab: SettingsTab) -> NSView? {
+        switch tab {
+        case .settings:
+            if generalContentView == nil {
+                generalContentView = makeScrollableTab(makeGeneralTab())
+            }
+            return generalContentView
+        case .preview:
+            if previewContentView == nil {
+                previewContentView = makeScrollableTab(makePreviewTab())
+            }
+            return previewContentView
+        case .hotkeys:
+            if hotkeysContentView == nil {
+                hotkeysContentView = makeHotkeysTab()
+            }
+            return hotkeysContentView
+        case .finderExtension:
+            if finderExtensionContentView == nil {
+                let settingsView = makeFinderExtensionSettingsView()
+                finderExtensionSettingsView = settingsView
+                finderExtensionContentView = settingsView
+            }
+            return finderExtensionContentView
+        case .clipboardHistory:
+            if clipboardHistoryContentView == nil {
+                clipboardHistoryContentView = makeClipboardHistoryTab()
+            }
+            return clipboardHistoryContentView
+        case .windowPlacement:
+            if windowPlacementContentView == nil {
+                let settingsView = WindowPlacementSettingsView(
+                    settings: settings,
+                    registrationStatus: windowPlacementRegistrationStatus
+                )
+                settingsView.onEnableRequest = { [weak self] sender in
+                    self?.canEnable(.windowPlacement, sender: sender) ?? false
+                }
+                windowPlacementSettingsView = settingsView
+                windowPlacementContentView = makeScrollableTab(settingsView)
+            }
+            return windowPlacementContentView
+        }
+    }
+
+    private func makeFinderExtensionSettingsView() -> FinderExtensionSettingsView {
+        let settingsView = FinderExtensionSettingsView(settings: settings)
+        settingsView.onEnableRequest = { [weak self] sender in
+            self?.canEnable(.finderExtension, sender: sender) ?? false
+        }
+        settingsView.onOpenExtensionManagement = {
+            FinderExtensionActivation.showManagementInterface()
+        }
+        settingsView.onAddQuickAction = { [weak self] in
+            self?.presentFinderQuickActionPicker()
+        }
+        settingsView.onRemoveQuickAction = { [weak self] id in
+            self?.settings.deleteFinderLaunchShortcut(id: id)
+        }
+        settingsView.onAddDocumentType = { [weak self] in
+            self?.presentFinderDocumentTypeForm()
+        }
+        settingsView.onRemoveDocumentType = { [weak self] id in
+            self?.settings.deleteFinderDocumentPreset(id: id)
+        }
+        return settingsView
+    }
+
+    private func refreshClipboardHistoryStatus() {
+        let warning = clipboardHistoryRegistrationStatus.warning
+            ?? clipboardHistoryService?.snapshot().warning
+            ?? ""
+        clipboardHistoryWarningField?.stringValue = warning
+        clipboardHistoryWarningField?.isHidden = warning.isEmpty
+    }
+
+    private func scheduleClipboardHistoryReload(delay: TimeInterval = 0) {
+        guard selectedTab == .clipboardHistory,
+              let listController = clipboardHistoryListController
+        else {
+            clipboardHistoryNeedsReload = true
             return
         }
-        rows.removeAllArrangedSubviews()
+        let snapshot = clipboardHistoryService?.snapshot()
+            ?? ClipboardHistorySnapshot(records: [], warning: nil, revision: 0)
         let query = clipboardHistorySearchField?.stringValue ?? ""
-        let records = clipboardHistoryService?.filteredRecords(query: query) ?? []
+        guard clipboardHistoryNeedsReload
+            || clipboardHistoryAppliedRevision != snapshot.revision
+            || clipboardHistoryAppliedQuery != query
+        else {
+            return
+        }
+
+        clipboardHistorySearchWorkItem?.cancel()
+        clipboardHistorySearchGeneration &+= 1
+        let generation = clipboardHistorySearchGeneration
+        let workItem = DispatchWorkItem { [weak self, weak listController] in
+            guard let self, let listController else {
+                return
+            }
+            self.clipboardHistorySearchWorkItem = nil
+            DispatchQueue.global(qos: .userInitiated).async {
+                let filteredRecords = ClipboardArchiveSearch.filter(
+                    snapshot.records,
+                    query: query
+                )
+                DispatchQueue.main.async { [weak self, weak listController] in
+                    guard let self,
+                          let listController,
+                          self.selectedTab == .clipboardHistory,
+                          self.clipboardHistorySearchGeneration == generation
+                    else {
+                        return
+                    }
+                    self.applyClipboardHistoryRecords(
+                        filteredRecords,
+                        revision: snapshot.revision,
+                        query: query,
+                        to: listController
+                    )
+                }
+            }
+        }
+        clipboardHistorySearchWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + delay,
+            execute: workItem
+        )
+    }
+
+    private func applyClipboardHistoryRecords(
+        _ records: [ClipboardHistoryRecord],
+        revision: UInt64,
+        query: String,
+        to listController: ClipboardHistoryListController
+    ) {
         if let clipboardHistoryPendingPreviewRecordID,
            !records.contains(where: { $0.id == clipboardHistoryPendingPreviewRecordID }) {
             cancelPendingClipboardHistoryPreview()
@@ -1692,37 +1619,16 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
            !records.contains(where: { $0.id == clipboardHistoryPreviewRecordID }) {
             dismissClipboardHistoryPreview()
         }
-        guard !records.isEmpty else {
-            let empty = NSTextField(labelWithString: AppStrings.text(.clipboardEmpty))
-            empty.font = .systemFont(ofSize: 13)
-            empty.textColor = .secondaryLabelColor
-            rows.addArrangedSubview(empty)
-            return
-        }
+        listController.apply(records: records)
+        clipboardHistoryAppliedRevision = revision
+        clipboardHistoryAppliedQuery = query
+        clipboardHistoryNeedsReload = false
+    }
 
-        for record in records {
-            let fallbackImageData = record.thumbnailData == nil && record.kind == .image
-                ? clipboardHistoryService?.previewContent(id: record.id)?.imageData
-                : nil
-            let row = ClipboardArchiveSettingsRowView(
-                record: record,
-                fallbackImageData: fallbackImageData
-            )
-            row.onCopy = { [weak self] in
-                self?.clipboardHistoryService?.copy(id: record.id)
-            }
-            row.onDelete = { [weak self] in
-                self?.clipboardHistoryService?.delete(id: record.id)
-            }
-            row.onHoverChanged = { [weak self] hovering in
-                self?.handleClipboardHistoryHover(
-                    recordID: record.id,
-                    hovering: hovering
-                )
-            }
-            rows.addArrangedSubview(row)
-            row.widthAnchor.constraint(equalTo: rows.widthAnchor).isActive = true
-        }
+    private func cancelClipboardHistoryReload() {
+        clipboardHistorySearchGeneration &+= 1
+        clipboardHistorySearchWorkItem?.cancel()
+        clipboardHistorySearchWorkItem = nil
     }
 
     private func handleClipboardHistoryHover(recordID: UUID, hovering: Bool) {
@@ -1954,117 +1860,6 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         if let window {
             alert.beginSheetModal(for: window)
         }
-    }
-
-    private func reloadFinderLaunchShortcuts() {
-        guard let stack = finderLaunchShortcutsStack else {
-            return
-        }
-        stack.removeAllArrangedSubviews()
-
-        let shortcuts = settings.finderLaunchShortcuts
-        guard !shortcuts.isEmpty else {
-            stack.addArrangedSubview(makeFinderEmptyLabel(
-                AppStrings.text(.finderQuickOpenEmpty)
-            ))
-            return
-        }
-
-        for shortcut in shortcuts {
-            stack.addArrangedSubview(makeFinderListRow(
-                title: shortcut.displayName,
-                detail: shortcut.bundleIdentifier ?? shortcut.bundleURL?.path ?? "",
-                id: shortcut.id,
-                action: #selector(removeFinderLaunchShortcut(_:)),
-                icon: shortcut.bundleURL.map {
-                    NSWorkspace.shared.icon(forFile: $0.path)
-                }
-            ))
-        }
-    }
-
-    private func reloadFinderDocumentPresets() {
-        guard let stack = finderDocumentPresetsStack else {
-            return
-        }
-        stack.removeAllArrangedSubviews()
-        for preset in settings.finderDocumentPresets {
-            stack.addArrangedSubview(makeFinderListRow(
-                title: preset.displayName,
-                detail: ".\(preset.fileExtension)",
-                id: preset.id,
-                action: #selector(removeFinderDocumentPreset(_:))
-            ))
-        }
-    }
-
-    private func makeFinderEmptyLabel(_ value: String) -> NSTextField {
-        let label = NSTextField(labelWithString: value)
-        label.font = .systemFont(ofSize: 12)
-        label.textColor = .secondaryLabelColor
-        return label
-    }
-
-    private func makeFinderListRow(
-        title: String,
-        detail: String,
-        id: UUID,
-        action: Selector,
-        icon: NSImage? = nil
-    ) -> NSView {
-        let row = NSView()
-        let labels = NSStackView()
-        labels.orientation = .vertical
-        labels.alignment = .leading
-        labels.spacing = 2
-
-        let titleField = NSTextField(labelWithString: title)
-        titleField.font = .systemFont(ofSize: 13, weight: .medium)
-        let detailField = NSTextField(labelWithString: detail)
-        detailField.font = .systemFont(ofSize: 11)
-        detailField.textColor = .secondaryLabelColor
-        labels.addArrangedSubview(titleField)
-        labels.addArrangedSubview(detailField)
-
-        let removeButton = NSButton(
-            title: AppStrings.text(.finderRemove),
-            target: self,
-            action: action
-        )
-        removeButton.bezelStyle = .rounded
-        removeButton.identifier = NSUserInterfaceItemIdentifier(id.uuidString)
-
-        row.addSubview(labels)
-        row.addSubview(removeButton)
-        labels.translatesAutoresizingMaskIntoConstraints = false
-        removeButton.translatesAutoresizingMaskIntoConstraints = false
-
-        var leadingAnchor = row.leadingAnchor
-        if let icon {
-            icon.size = CGSize(width: 28, height: 28)
-            let iconView = NSImageView(image: icon)
-            iconView.imageScaling = .scaleProportionallyUpOrDown
-            iconView.translatesAutoresizingMaskIntoConstraints = false
-            row.addSubview(iconView)
-            NSLayoutConstraint.activate([
-                iconView.leadingAnchor.constraint(equalTo: row.leadingAnchor),
-                iconView.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-                iconView.widthAnchor.constraint(equalToConstant: 28),
-                iconView.heightAnchor.constraint(equalToConstant: 28)
-            ])
-            leadingAnchor = iconView.trailingAnchor
-        }
-
-        NSLayoutConstraint.activate([
-            row.heightAnchor.constraint(greaterThanOrEqualToConstant: 40),
-            labels.leadingAnchor.constraint(equalTo: leadingAnchor, constant: icon == nil ? 0 : 10),
-            labels.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            labels.trailingAnchor.constraint(lessThanOrEqualTo: removeButton.leadingAnchor, constant: -12),
-            removeButton.trailingAnchor.constraint(equalTo: row.trailingAnchor),
-            removeButton.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            row.widthAnchor.constraint(greaterThanOrEqualToConstant: 360)
-        ])
-        return row
     }
 
     private func openPermissionSettings(_ kind: PermissionKind) {

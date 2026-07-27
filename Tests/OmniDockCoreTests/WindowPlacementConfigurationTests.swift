@@ -583,6 +583,79 @@ final class WindowPlacementConfigurationTests: XCTestCase {
         XCTAssertEqual(presentationCount, 1)
     }
 
+    func testPaletteOutsideClickPolicyKeepsCommandAndAnchorClicksAlive() {
+        let palette = CGRect(x: 100, y: 100, width: 240, height: 360)
+        let anchor = CGRect(x: 150, y: 460, width: 18, height: 18)
+
+        XCTAssertFalse(WindowPlacementPaletteDismissalPolicy.shouldDismiss(
+            pointer: CGPoint(x: 180, y: 240),
+            paletteFrame: palette,
+            anchorFrame: anchor
+        ))
+        XCTAssertFalse(WindowPlacementPaletteDismissalPolicy.shouldDismiss(
+            pointer: CGPoint(x: 159, y: 469),
+            paletteFrame: palette,
+            anchorFrame: anchor
+        ))
+        XCTAssertTrue(WindowPlacementPaletteDismissalPolicy.shouldDismiss(
+            pointer: CGPoint(x: 20, y: 20),
+            paletteFrame: palette,
+            anchorFrame: anchor
+        ))
+    }
+
+    @MainActor
+    func testPaletteButtonReceivesClickAwayFromSuperviewOrigin() throws {
+        _ = NSApplication.shared
+        let window = NSWindow(
+            contentRect: CGRect(x: 0, y: 0, width: 300, height: 300),
+            styleMask: .borderless,
+            backing: .buffered,
+            defer: false
+        )
+        let container = NSView(frame: window.contentView?.bounds ?? .zero)
+        window.contentView = container
+        let receiver = WindowPlacementButtonActionReceiver()
+        let button = WindowPlacementHoverButton(
+            title: "Left",
+            image: nil,
+            target: receiver,
+            action: #selector(WindowPlacementButtonActionReceiver.performAction(_:))
+        )
+        button.frame = CGRect(x: 24, y: 180, width: 220, height: 32)
+        container.addSubview(button)
+
+        let location = CGPoint(x: 80, y: 196)
+        XCTAssertTrue(container.hitTest(location) === button)
+        let mouseDown = try XCTUnwrap(NSEvent.mouseEvent(
+            with: .leftMouseDown,
+            location: location,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 1,
+            clickCount: 1,
+            pressure: 1
+        ))
+        let mouseUp = try XCTUnwrap(NSEvent.mouseEvent(
+            with: .leftMouseUp,
+            location: location,
+            modifierFlags: [],
+            timestamp: 0.1,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 2,
+            clickCount: 1,
+            pressure: 0
+        ))
+
+        button.mouseDown(with: mouseDown)
+        button.mouseUp(with: mouseUp)
+
+        XCTAssertEqual(receiver.actionCount, 1)
+    }
+
     func testConfigurationRoundTripsAndRestoresMissingBuiltIns() throws {
         let custom = WindowPlacementCommand.custom(name: "Reading")
         var configuration = WindowPlacementConfiguration(commands: [custom])
@@ -756,45 +829,25 @@ final class WindowPlacementConfigurationTests: XCTestCase {
         )
     }
 
-    func testGreenButtonClickFailsOpenWithoutFreshOptionHit() {
-        let frame = CGRect(x: 100, y: 40, width: 16, height: 16)
-        XCTAssertTrue(WindowPlacementGreenButtonPolicy.shouldConsume(
-            point: CGPoint(x: 108, y: 48),
-            flags: [.maskAlternate],
-            buttonFrame: frame,
-            expiresAt: 5,
-            now: 4
-        ))
-        XCTAssertFalse(WindowPlacementGreenButtonPolicy.shouldConsume(
-            point: CGPoint(x: 108, y: 48),
-            flags: [],
-            buttonFrame: frame,
-            expiresAt: 5,
-            now: 4
-        ))
-        XCTAssertFalse(WindowPlacementGreenButtonPolicy.shouldConsume(
-            point: CGPoint(x: 108, y: 48),
-            flags: [.maskAlternate],
-            buttonFrame: frame,
-            expiresAt: 3,
-            now: 4
-        ))
-        XCTAssertGreaterThan(
-            WindowPlacementGreenButtonPolicy.snapshotLifetime,
-            WindowPlacementGreenButtonPolicy.refreshInterval
-        )
-    }
-
-    func testGreenButtonShieldForwardsPlainClickButKeepsOptionForPalette() {
+    func testGreenButtonShieldNeverReservesTheNativeButtonAction() {
         XCTAssertTrue(
             WindowPlacementGreenButtonPolicy.shouldForwardNativeAction(
                 modifiers: []
             )
         )
-        XCTAssertFalse(
+        XCTAssertTrue(
             WindowPlacementGreenButtonPolicy.shouldForwardNativeAction(
                 modifiers: [.option]
             )
+        )
+        XCTAssertTrue(
+            WindowPlacementGreenButtonPolicy.shouldForwardNativeAction(
+                modifiers: [.shift, .control]
+            )
+        )
+        XCTAssertGreaterThan(
+            WindowPlacementGreenButtonPolicy.snapshotLifetime,
+            WindowPlacementGreenButtonPolicy.refreshInterval
         )
     }
 
@@ -858,6 +911,80 @@ final class WindowPlacementConfigurationTests: XCTestCase {
         )
     }
 
+    func testGreenButtonAvailabilityRejectsInvisibleOrUnsupportedButtons() {
+        let windowFrame = CGRect(x: 100, y: 80, width: 900, height: 600)
+        let buttonFrame = CGRect(x: 158, y: 92, width: 14, height: 14)
+
+        XCTAssertTrue(WindowPlacementGreenButtonAvailabilityPolicy.isAvailable(
+            windowFrame: windowFrame,
+            buttonFrame: buttonFrame,
+            isWindowMinimized: false,
+            isWindowFullScreen: false,
+            canResizeWindow: true,
+            isButtonHidden: false,
+            isButtonEnabled: true
+        ))
+        XCTAssertFalse(WindowPlacementGreenButtonAvailabilityPolicy.isAvailable(
+            windowFrame: windowFrame,
+            buttonFrame: buttonFrame,
+            isWindowMinimized: false,
+            isWindowFullScreen: false,
+            canResizeWindow: true,
+            isButtonHidden: true,
+            isButtonEnabled: true
+        ))
+        XCTAssertFalse(WindowPlacementGreenButtonAvailabilityPolicy.isAvailable(
+            windowFrame: windowFrame,
+            buttonFrame: buttonFrame,
+            isWindowMinimized: false,
+            isWindowFullScreen: false,
+            canResizeWindow: true,
+            isButtonHidden: false,
+            isButtonEnabled: false
+        ))
+        XCTAssertFalse(WindowPlacementGreenButtonAvailabilityPolicy.isAvailable(
+            windowFrame: windowFrame,
+            buttonFrame: buttonFrame,
+            isWindowMinimized: false,
+            isWindowFullScreen: false,
+            canResizeWindow: false,
+            isButtonHidden: nil,
+            isButtonEnabled: nil
+        ))
+    }
+
+    func testGreenButtonAvailabilityRejectsStaleOrNonTitleBarFrames() {
+        let windowFrame = CGRect(x: 100, y: 80, width: 900, height: 600)
+
+        XCTAssertFalse(WindowPlacementGreenButtonAvailabilityPolicy.isAvailable(
+            windowFrame: windowFrame,
+            buttonFrame: CGRect(x: 158, y: 300, width: 14, height: 14),
+            isWindowMinimized: false,
+            isWindowFullScreen: false,
+            canResizeWindow: true,
+            isButtonHidden: nil,
+            isButtonEnabled: nil
+        ))
+        XCTAssertFalse(WindowPlacementGreenButtonAvailabilityPolicy.isAvailable(
+            windowFrame: windowFrame,
+            buttonFrame: CGRect(x: 40, y: 92, width: 14, height: 14),
+            isWindowMinimized: false,
+            isWindowFullScreen: false,
+            canResizeWindow: true,
+            isButtonHidden: nil,
+            isButtonEnabled: nil
+        ))
+        XCTAssertFalse(WindowPlacementGreenButtonAvailabilityPolicy.isAvailable(
+            windowFrame: windowFrame,
+            buttonFrame: CGRect(x: 158, y: 92, width: 14, height: 14),
+            isWindowMinimized: false,
+            isWindowFullScreen: true,
+            canResizeWindow: true,
+            isButtonHidden: nil,
+            isButtonEnabled: nil
+        ))
+    }
+
     func testDragPolicyRequiresTheWindowFrameToMove() {
         let initial = CGRect(x: 100, y: 100, width: 600, height: 400)
         XCTAssertFalse(WindowPlacementDragPolicy.recognizedWindowMovement(
@@ -868,6 +995,132 @@ final class WindowPlacementConfigurationTests: XCTestCase {
             initialFrame: initial,
             currentFrame: initial.offsetBy(dx: 4, dy: 0)
         ))
+    }
+
+    func testDragPolicySeparatesWindowMovementFromEdgeResizing() {
+        let initial = CGRect(x: 100, y: 100, width: 600, height: 400)
+
+        XCTAssertEqual(
+            WindowPlacementDragPolicy.interaction(
+                initialFrame: initial,
+                currentFrame: initial.offsetBy(dx: 12, dy: 8)
+            ),
+            .moving
+        )
+        XCTAssertEqual(
+            WindowPlacementDragPolicy.interaction(
+                initialFrame: initial,
+                currentFrame: CGRect(
+                    x: initial.minX,
+                    y: initial.minY,
+                    width: initial.width + 20,
+                    height: initial.height
+                )
+            ),
+            .resizing
+        )
+        XCTAssertEqual(
+            WindowPlacementDragPolicy.interaction(
+                initialFrame: initial,
+                currentFrame: CGRect(
+                    x: initial.minX - 20,
+                    y: initial.minY,
+                    width: initial.width + 20,
+                    height: initial.height
+                )
+            ),
+            .resizing
+        )
+        XCTAssertEqual(
+            WindowPlacementDragPolicy.interaction(
+                initialFrame: initial,
+                currentFrame: CGRect(
+                    x: initial.minX + 1,
+                    y: initial.minY,
+                    width: initial.width + 1,
+                    height: initial.height
+                )
+            ),
+            .pending
+        )
+    }
+
+    func testDragPolicyKeepsRecognizedInteractionAcrossSystemResize() {
+        let initial = CGRect(x: 100, y: 100, width: 600, height: 400)
+        let movedAndShrunk = CGRect(x: 400, y: 160, width: 500, height: 320)
+
+        XCTAssertEqual(
+            WindowPlacementDragPolicy.nextInteraction(
+                current: .moving,
+                initialFrame: initial,
+                currentFrame: movedAndShrunk
+            ),
+            .moving
+        )
+        XCTAssertEqual(
+            WindowPlacementDragPolicy.nextInteraction(
+                current: .resizing,
+                initialFrame: initial,
+                currentFrame: initial.offsetBy(dx: 40, dy: 0)
+            ),
+            .resizing
+        )
+        XCTAssertEqual(
+            WindowPlacementDragPolicy.nextInteraction(
+                current: .pending,
+                initialFrame: initial,
+                currentFrame: movedAndShrunk
+            ),
+            .resizing
+        )
+        XCTAssertEqual(
+            WindowPlacementDragPolicy.nextInteraction(
+                current: .pending,
+                initialFrame: initial,
+                currentFrame: initial.offsetBy(dx: 12, dy: 8)
+            ),
+            .moving
+        )
+    }
+
+    func testRestoreFramePolicyDropsOnlyTerminatedProcessEntries() {
+        let terminatedWindow = WindowPlacementRuntimeIdentifier(
+            processIdentifier: 100,
+            windowID: 7,
+            fallbackElementHash: 0
+        )
+        let terminatedFallback = WindowPlacementRuntimeIdentifier(
+            processIdentifier: 100,
+            windowID: nil,
+            fallbackElementHash: 42
+        )
+        let running = WindowPlacementRuntimeIdentifier(
+            processIdentifier: 200,
+            windowID: 7,
+            fallbackElementHash: 0
+        )
+        let frames = [
+            terminatedWindow: CGRect(x: 0, y: 0, width: 600, height: 400),
+            terminatedFallback: CGRect(x: 10, y: 10, width: 300, height: 200),
+            running: CGRect(x: 40, y: 40, width: 800, height: 500)
+        ]
+
+        let pruned = WindowPlacementRestoreFramePolicy.prunedAfterTermination(
+            frames,
+            processIdentifier: 100
+        )
+
+        XCTAssertEqual(
+            pruned,
+            [running: CGRect(x: 40, y: 40, width: 800, height: 500)]
+        )
+        XCTAssertEqual(
+            WindowPlacementRestoreFramePolicy.prunedAfterTermination(
+                frames,
+                processIdentifier: 300
+            ),
+            frames
+        )
     }
 
     func testDragPolicyOnlyActivatesInsideConfiguredZone() throws {
@@ -906,4 +1159,12 @@ final class WindowPlacementConfigurationTests: XCTestCase {
         )
     }
 
+}
+
+private final class WindowPlacementButtonActionReceiver: NSObject {
+    private(set) var actionCount = 0
+
+    @objc func performAction(_ sender: NSButton) {
+        actionCount += 1
+    }
 }

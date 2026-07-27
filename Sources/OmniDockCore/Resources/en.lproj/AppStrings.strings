@@ -61,12 +61,12 @@
 "finderExtensionFailureDismiss" = "OK";
 "finderExtensionAccessDetail" = "Choose “%@” or one of its parent folders to allow OmniDock to create files there. This is only required once.";
 "finderExtensionAccessButton" = "Allow";
-"finderQuickOpenTitle" = "Quick Open Apps";
+"finderQuickOpenTitle" = "Quick Actions";
 "finderQuickOpenDetail" = "Open selected Finder items with apps you choose.";
 "finderQuickOpenGroupedTitle" = "Group Apps in a Submenu";
 "finderQuickOpenGroupedDetail" = "Place selected apps under one Open With submenu.";
 "finderQuickOpenAdd" = "Choose App";
-"finderQuickOpenEmpty" = "No quick-open apps selected.";
+"finderQuickOpenEmpty" = "No quick actions configured.";
 "finderQuickOpenFailedTitle" = "Could Not Open Item";
 "finderQuickOpenFailedDetail" = "OmniDock could not open the selected item with “%@”. %@";
 "finderQuickOpenApplicationMissing" = "The application is no longer available.";
@@ -159,9 +159,9 @@
 "clipboardPreviewFiles" = "Files";
 
 "windowPlacementEnableTitle" = "Enable Window Layout";
-"windowPlacementEnableDetail" = "Resize and position the frontmost window with shortcuts, Option-click, or drag zones.";
+"windowPlacementEnableDetail" = "Resize and position the frontmost window with shortcuts, the green-button menu, or drag zones.";
 "windowPlacementGreenButtonTitle" = "Green Button Layout Menu";
-"windowPlacementGreenButtonDetail" = "Hover over a window's green button to choose a layout; Option-click is also supported.";
+"windowPlacementGreenButtonDetail" = "Hover over a window's green button to choose a layout without replacing the button's own action.";
 "windowPlacementDragTitle" = "Drag to Layout";
 "windowPlacementDragDetail" = "Release a moved window inside a configured screen zone to apply its layout.";
 "windowPlacementCommands" = "Layouts";
