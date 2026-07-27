@@ -67,6 +67,11 @@
 "finderQuickOpenGroupedDetail" = "将所选应用收纳到一个“打开方式”子菜单中。";
 "finderQuickOpenAdd" = "选择应用";
 "finderQuickOpenEmpty" = "还没有添加快捷操作。";
+"finderQuickOpenEnabled" = "启用";
+"finderQuickOpenApplication" = "应用";
+"finderQuickOpenStatus" = "状态";
+"finderQuickOpenInstalled" = "已安装";
+"finderQuickOpenNotInstalled" = "未安装";
 "finderQuickOpenFailedTitle" = "无法打开所选项目";
 "finderQuickOpenFailedDetail" = "无法使用“%@”打开所选项目。%@";
 "finderQuickOpenApplicationMissing" = "该应用已经不可用。";
@@ -75,6 +80,7 @@
 "finderDocumentTypeAdd" = "添加文件类型";
 "finderDocumentTypeName" = "名称";
 "finderDocumentTypeExtension" = "扩展名";
+"finderDocumentTypeEnabled" = "启用";
 "finderDocumentTypeInvalid" = "请输入名称，以及仅包含字母、数字、连字符或下划线的有效扩展名。";
 "finderDocumentTypeDuplicate" = "该文件扩展名已经存在于菜单中。";
 "finderRemove" = "移除";

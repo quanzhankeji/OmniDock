@@ -67,6 +67,11 @@
 "finderQuickOpenGroupedDetail" = "Place selected apps under one Open With submenu.";
 "finderQuickOpenAdd" = "Choose App";
 "finderQuickOpenEmpty" = "No quick actions configured.";
+"finderQuickOpenEnabled" = "Enabled";
+"finderQuickOpenApplication" = "Application";
+"finderQuickOpenStatus" = "Status";
+"finderQuickOpenInstalled" = "Installed";
+"finderQuickOpenNotInstalled" = "Not Installed";
 "finderQuickOpenFailedTitle" = "Could Not Open Item";
 "finderQuickOpenFailedDetail" = "OmniDock could not open the selected item with “%@”. %@";
 "finderQuickOpenApplicationMissing" = "The application is no longer available.";
@@ -75,6 +80,7 @@
 "finderDocumentTypeAdd" = "Add File Type";
 "finderDocumentTypeName" = "Name";
 "finderDocumentTypeExtension" = "Extension";
+"finderDocumentTypeEnabled" = "Enabled";
 "finderDocumentTypeInvalid" = "Enter a name and a valid extension using letters, numbers, hyphens, or underscores.";
 "finderDocumentTypeDuplicate" = "That file extension is already in the menu.";
 "finderRemove" = "Remove";

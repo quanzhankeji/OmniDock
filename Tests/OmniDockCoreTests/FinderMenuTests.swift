@@ -54,6 +54,53 @@ final class FinderMenuTests: XCTestCase {
         XCTAssertGreaterThan(navigationButtons[0].bounds.width, 180)
     }
 
+    @MainActor
+    func testFinderDocumentTypeListCreatesScrollableContent() throws {
+        let view = FinderExtensionSettingsView(
+            settings: SettingsStore(
+                defaults: isolatedDefaults(),
+                livePreviewLimitProvider: { 6 }
+            ),
+            isExtensionEnabledInFinder: { true }
+        )
+        view.frame = NSRect(x: 0, y: 0, width: 900, height: 440)
+        view.layoutSubtreeIfNeeded()
+
+        let scrollView = try XCTUnwrap(descendantScrollViews(in: view).first)
+        let documentView = try XCTUnwrap(scrollView.documentView)
+        let viewportHeight = scrollView.contentView.bounds.height
+
+        XCTAssertGreaterThan(documentView.bounds.height, viewportHeight)
+
+        let maximumOffset = documentView.bounds.height - viewportHeight
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: maximumOffset))
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+
+        XCTAssertGreaterThan(scrollView.contentView.bounds.minY, 0)
+    }
+
+    @MainActor
+    func testFinderQuickActionCatalogCreatesScrollableContent() throws {
+        let view = FinderExtensionSettingsView(
+            settings: SettingsStore(
+                defaults: isolatedDefaults(),
+                livePreviewLimitProvider: { 6 }
+            ),
+            isExtensionEnabledInFinder: { true }
+        )
+        view.frame = NSRect(x: 0, y: 0, width: 900, height: 440)
+        view.selectSection(.quickActions)
+        view.layoutSubtreeIfNeeded()
+
+        let scrollView = try XCTUnwrap(descendantScrollViews(in: view).first)
+        let documentView = try XCTUnwrap(scrollView.documentView)
+
+        XCTAssertGreaterThan(
+            documentView.bounds.height,
+            scrollView.contentView.bounds.height
+        )
+    }
+
     func testMenuActionRegistryConsumesFrozenContextOnce() {
         let registry = FinderMenuActionRegistry()
         let directory = URL(fileURLWithPath: "/tmp/Documents", isDirectory: true)
@@ -124,19 +171,28 @@ final class FinderMenuTests: XCTestCase {
             [
                 .action(.copyCurrentDirectoryPath),
                 .documentSubmenu(
-                    FinderDocumentPreset.defaultPresets.map(FinderMenuAction.createDocument)
-                )
+                    FinderDocumentPreset.defaultPresets
+                        .filter(\.isEnabled)
+                        .map(FinderMenuAction.createDocument)
+                ),
+                .action(.showHiddenFiles),
+                .action(.hideHiddenFiles)
             ]
         )
     }
 
     func testFinderCommandsCarryTheirRequiredMenuContext() {
-        XCTAssertEqual(
-            FinderMenuAction.createDocument(FinderDocumentPreset.defaultPresets[0]).location,
-            .folderBackground
-        )
-        XCTAssertEqual(FinderMenuAction.copyCurrentDirectoryPath.location, .folderBackground)
-        XCTAssertEqual(FinderMenuAction.copySelectedPaths.location, .selection)
+        let create = FinderMenuAction.createDocument(FinderDocumentPreset.defaultPresets[0])
+        XCTAssertTrue(create.isAvailable(in: .folderBackground))
+        XCTAssertFalse(create.isAvailable(in: .selection))
+        XCTAssertTrue(FinderMenuAction.copyCurrentDirectoryPath.isAvailable(in: .folderBackground))
+        XCTAssertFalse(FinderMenuAction.copyCurrentDirectoryPath.isAvailable(in: .selection))
+        XCTAssertTrue(FinderMenuAction.copySelectedPaths.isAvailable(in: .selection))
+        XCTAssertFalse(FinderMenuAction.copySelectedPaths.isAvailable(in: .folderBackground))
+        XCTAssertTrue(FinderMenuAction.showHiddenFiles.isAvailable(in: .folderBackground))
+        XCTAssertTrue(FinderMenuAction.showHiddenFiles.isAvailable(in: .selection))
+        XCTAssertTrue(FinderMenuAction.hideHiddenFiles.isAvailable(in: .folderBackground))
+        XCTAssertTrue(FinderMenuAction.hideHiddenFiles.isAvailable(in: .selection))
     }
 
     func testItemMenuOnlyAppearsForSelectedItems() {
@@ -151,7 +207,11 @@ final class FinderMenuTests: XCTestCase {
         XCTAssertTrue(FinderMenuCatalog.entries(for: empty, preferences: enabled).isEmpty)
         XCTAssertEqual(
             FinderMenuCatalog.entries(for: selected, preferences: enabled),
-            [.action(.copySelectedPaths)]
+            [
+                .action(.copySelectedPaths),
+                .action(.showHiddenFiles),
+                .action(.hideHiddenFiles)
+            ]
         )
         XCTAssertTrue(FinderMenuCatalog.entries(
             for: selected,
@@ -180,7 +240,12 @@ final class FinderMenuTests: XCTestCase {
                     launchShortcuts: [app]
                 )
             ),
-            [.action(.copySelectedPaths), .applicationSubmenu([.openSelection(app)])]
+            [
+                .action(.copySelectedPaths),
+                .applicationSubmenu([.openSelection(app)]),
+                .action(.showHiddenFiles),
+                .action(.hideHiddenFiles)
+            ]
         )
         XCTAssertEqual(
             FinderMenuCatalog.entries(
@@ -191,7 +256,12 @@ final class FinderMenuTests: XCTestCase {
                     launchShortcuts: [app]
                 )
             ),
-            [.action(.copySelectedPaths), .action(.openSelection(app))]
+            [
+                .action(.copySelectedPaths),
+                .action(.openSelection(app)),
+                .action(.showHiddenFiles),
+                .action(.hideHiddenFiles)
+            ]
         )
     }
 
@@ -302,6 +372,18 @@ final class FinderMenuTests: XCTestCase {
             FinderMenuLabels.applicationSubmenuTitle(languageIdentifier: "en"),
             "Open With"
         )
+        XCTAssertEqual(
+            FinderMenuLabels.title(for: .showHiddenFiles, languageIdentifier: "zhHans"),
+            "显示所有文件"
+        )
+        XCTAssertEqual(
+            FinderMenuLabels.title(for: .hideHiddenFiles, languageIdentifier: "zhHans"),
+            "隐藏所有文件"
+        )
+        XCTAssertEqual(
+            FinderMenuLabels.title(for: .hideHiddenFiles, languageIdentifier: "en"),
+            "Hide Hidden Files"
+        )
     }
 
     func testDocumentPresetValidationNormalizesSafeExtensions() {
@@ -328,8 +410,50 @@ final class FinderMenuTests: XCTestCase {
                     documentPresets: []
                 )
             ),
-            [.action(.copyCurrentDirectoryPath)]
+            [
+                .action(.copyCurrentDirectoryPath),
+                .action(.showHiddenFiles),
+                .action(.hideHiddenFiles)
+            ]
         )
+    }
+
+    func testHiddenFilesVisibilityCommandRoundTrips() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let mailbox = FinderCommandMailbox(directoryProvider: { root })
+        let request = FinderCommandEnvelope(command: .setHiddenFilesVisible(true))
+
+        try mailbox.enqueue(request)
+
+        XCTAssertEqual(mailbox.take(id: request.id), request)
+    }
+
+    @MainActor
+    func testHiddenFilesControllerOnlyTogglesWhenStateMustChange() {
+        var toggleCount = 0
+        let alreadyVisible = FinderHiddenFilesController(
+            isShowingHiddenFiles: { true },
+            sendVisibilityToggle: {
+                toggleCount += 1
+                return true
+            }
+        )
+
+        XCTAssertTrue(alreadyVisible.setHiddenFilesVisible(true))
+        XCTAssertEqual(toggleCount, 0)
+
+        let currentlyHidden = FinderHiddenFilesController(
+            isShowingHiddenFiles: { false },
+            sendVisibilityToggle: {
+                toggleCount += 1
+                return true
+            }
+        )
+
+        XCTAssertTrue(currentlyHidden.setHiddenFilesVisible(true))
+        XCTAssertEqual(toggleCount, 1)
     }
 
     func testOlderSharedPreferencesReceiveNewFeatureDefaults() throws {
@@ -342,7 +466,8 @@ final class FinderMenuTests: XCTestCase {
 
         XCTAssertTrue(decoded.isEnabled)
         XCTAssertTrue(decoded.groupsLaunchShortcuts)
-        XCTAssertTrue(decoded.launchShortcuts.isEmpty)
+        XCTAssertEqual(decoded.launchShortcuts, FinderLaunchShortcut.defaultShortcuts)
+        XCTAssertTrue(decoded.launchShortcuts.allSatisfy { !$0.isEnabled })
         XCTAssertEqual(decoded.documentPresets, FinderDocumentPreset.defaultPresets)
     }
 
@@ -406,6 +531,10 @@ final class FinderMenuTests: XCTestCase {
         settings.finderLaunchShortcuts = [app]
         let logPreset = FinderDocumentPreset(displayName: "Log", fileExtension: "log")!
         settings.finderDocumentPresets = [logPreset]
+        let expectedPresets = FinderDocumentPreset.catalog(
+            merging: [logPreset],
+            missingBuiltInsUseDefaults: false
+        )
 
         XCTAssertEqual(
             groupStore.snapshot(),
@@ -414,7 +543,7 @@ final class FinderMenuTests: XCTestCase {
                 languageIdentifier: AppLanguage.zhHans.rawValue,
                 groupsLaunchShortcuts: false,
                 launchShortcuts: [app],
-                documentPresets: [logPreset]
+                documentPresets: expectedPresets
             )
         )
 
@@ -426,9 +555,95 @@ final class FinderMenuTests: XCTestCase {
                 languageIdentifier: AppLanguage.en.rawValue,
                 groupsLaunchShortcuts: false,
                 launchShortcuts: [app],
-                documentPresets: [logPreset]
+                documentPresets: expectedPresets
             )
         )
+    }
+
+    func testDocumentMenuIncludesOnlyEnabledPresets() {
+        let context = FinderMenuContext(
+            location: .folderBackground,
+            currentDirectory: URL(fileURLWithPath: "/tmp"),
+            selectedURLs: []
+        )
+        let enabled = FinderDocumentPreset(
+            displayName: "Log",
+            fileExtension: "log",
+            isEnabled: true
+        )!
+        let disabled = FinderDocumentPreset(
+            displayName: "Config",
+            fileExtension: "conf",
+            isEnabled: false
+        )!
+
+        XCTAssertEqual(
+            FinderMenuCatalog.entries(
+                for: context,
+                preferences: FinderMenuPreferences(
+                    isEnabled: true,
+                    documentPresets: [enabled, disabled]
+                )
+            ),
+            [
+                .action(.copyCurrentDirectoryPath),
+                .documentSubmenu([.createDocument(enabled)]),
+                .action(.showHiddenFiles),
+                .action(.hideHiddenFiles)
+            ]
+        )
+    }
+
+    func testOlderDocumentPresetsRemainEnabledAndGainDisabledBuiltIns() throws {
+        let legacyPreset = FinderDocumentPreset(
+            displayName: "Legacy",
+            fileExtension: "legacy"
+        )!
+        let legacyData = try JSONSerialization.data(withJSONObject: [
+            "id": legacyPreset.id.uuidString,
+            "displayName": legacyPreset.displayName,
+            "fileExtension": legacyPreset.fileExtension
+        ])
+        let decodedLegacy = try JSONDecoder().decode(
+            FinderDocumentPreset.self,
+            from: legacyData
+        )
+
+        XCTAssertTrue(decodedLegacy.isEnabled)
+
+        let catalog = FinderDocumentPreset.catalog(
+            merging: [decodedLegacy],
+            missingBuiltInsUseDefaults: false
+        )
+        XCTAssertTrue(catalog.contains {
+            $0.id == decodedLegacy.id && $0.isEnabled
+        })
+        XCTAssertTrue(catalog.filter(\.isBuiltIn).allSatisfy { !$0.isEnabled })
+    }
+
+    func testBuiltInDocumentPresetCanBeDisabledButNotDeleted() {
+        let defaults = isolatedDefaults()
+        let settings = SettingsStore(defaults: defaults, livePreviewLimitProvider: { 6 })
+        let text = FinderDocumentPreset.defaultPresets[0]
+
+        settings.setFinderDocumentPresetEnabled(id: text.id, isEnabled: false)
+        XCTAssertFalse(settings.finderDocumentPresets.first { $0.id == text.id }!.isEnabled)
+
+        settings.deleteFinderDocumentPreset(id: text.id)
+        XCTAssertNotNil(settings.finderDocumentPresets.first { $0.id == text.id })
+        XCTAssertFalse(settings.finderDocumentPresets.first { $0.id == text.id }!.isEnabled)
+    }
+
+    func testCustomDocumentPresetCanBeRemoved() {
+        let defaults = isolatedDefaults()
+        let settings = SettingsStore(defaults: defaults, livePreviewLimitProvider: { 6 })
+        let custom = FinderDocumentPreset(displayName: "Log", fileExtension: "log")!
+
+        settings.addFinderDocumentPreset(custom)
+        XCTAssertTrue(settings.finderDocumentPresets.contains { $0.id == custom.id })
+
+        settings.deleteFinderDocumentPreset(id: custom.id)
+        XCTAssertFalse(settings.finderDocumentPresets.contains { $0.id == custom.id })
     }
 
     func testSettingsRoundTripThroughTheSharedContainerFile() throws {
@@ -443,7 +658,8 @@ final class FinderMenuTests: XCTestCase {
         XCTAssertEqual(store.snapshot(), FinderMenuPreferences())
 
         let expected = FinderMenuPreferences(isEnabled: true, languageIdentifier: "en")
-        store.update(expected)
+        XCTAssertTrue(store.update(expected))
+        XCTAssertFalse(store.update(expected))
 
         XCTAssertEqual(store.snapshot(), expected)
     }
@@ -467,24 +683,176 @@ final class FinderMenuTests: XCTestCase {
             FinderDocumentPreset(displayName: "Text copy", fileExtension: ".TXT")!
         )
 
-        XCTAssertEqual(settings.finderLaunchShortcuts, [app])
+        XCTAssertEqual(
+            settings.finderLaunchShortcuts,
+            FinderLaunchShortcut.catalog(
+                merging: [app],
+                missingBuiltInsUseDefaults: false
+            )
+        )
         XCTAssertEqual(settings.finderDocumentPresets, FinderDocumentPreset.defaultPresets)
     }
 
-    func testStandardFinderLocationsAreManagedAndDesktopIsUsedWhenTargetIsMissing() {
+    func testQuickActionCatalogListsCommonApplicationsDisabledByDefault() {
+        XCTAssertEqual(
+            FinderLaunchShortcut.defaultShortcuts.map(\.displayName),
+            [
+                "Terminal",
+                "iTerm2",
+                "Visual Studio Code",
+                "Sublime Text",
+                "Sublime Merge",
+                "Warp",
+                "MarkText",
+                "Obsidian",
+                "Tabby",
+                "Visual Studio",
+                "Hyper",
+                "Emacs",
+                "CLion",
+                "CotEditor",
+                "HBuilderX",
+                "PhpStorm",
+                "PyCharm",
+                "Typora",
+                "WebStorm",
+                "IntelliJ IDEA",
+                "Android Studio",
+                "AppCode",
+                "DataGrip",
+                "GoLand",
+                "Rider",
+                "RubyMine"
+            ]
+        )
+        XCTAssertTrue(FinderLaunchShortcut.defaultShortcuts.allSatisfy { !$0.isEnabled })
+        XCTAssertEqual(
+            Set(FinderLaunchShortcut.defaultShortcuts.map(\.id)).count,
+            FinderLaunchShortcut.defaultShortcuts.count
+        )
+        XCTAssertEqual(
+            Set(FinderLaunchShortcut.defaultShortcuts.compactMap(\.bundleIdentifier)).count,
+            FinderLaunchShortcut.defaultShortcuts.count
+        )
+    }
+
+    func testLegacyQuickActionRemainsEnabledAndMergesIntoBuiltInCatalog() throws {
+        let visualStudioCode = FinderLaunchShortcut.defaultShortcuts.first {
+            $0.bundleIdentifier == "com.microsoft.VSCode"
+        }!
+        let legacyData = try JSONSerialization.data(withJSONObject: [
+            "id": UUID().uuidString,
+            "displayName": "Code",
+            "bundleURLString": URL(
+                fileURLWithPath: "/Applications/Visual Studio Code.app"
+            ).absoluteString,
+            "bundleIdentifier": "com.microsoft.VSCode"
+        ])
+        let decodedLegacy = try JSONDecoder().decode(
+            FinderLaunchShortcut.self,
+            from: legacyData
+        )
+
+        XCTAssertTrue(decodedLegacy.isEnabled)
+
+        let catalog = FinderLaunchShortcut.catalog(
+            merging: [decodedLegacy],
+            missingBuiltInsUseDefaults: false
+        )
+        let merged = catalog.first { $0.id == visualStudioCode.id }
+
+        XCTAssertEqual(merged?.displayName, "Visual Studio Code")
+        XCTAssertTrue(merged?.isEnabled == true)
+    }
+
+    func testBuiltInQuickActionCanBeDisabledButNotDeleted() {
+        let defaults = isolatedDefaults()
+        let settings = SettingsStore(defaults: defaults, livePreviewLimitProvider: { 6 })
+        let terminal = FinderLaunchShortcut.defaultShortcuts[0]
+
+        settings.setFinderLaunchShortcutEnabled(id: terminal.id, isEnabled: true)
+        XCTAssertTrue(settings.finderLaunchShortcuts.first { $0.id == terminal.id }!.isEnabled)
+
+        settings.deleteFinderLaunchShortcut(id: terminal.id)
+        XCTAssertNotNil(settings.finderLaunchShortcuts.first { $0.id == terminal.id })
+        XCTAssertFalse(settings.finderLaunchShortcuts.first { $0.id == terminal.id }!.isEnabled)
+    }
+
+    func testChoosingBuiltInApplicationEnablesItsExistingCatalogEntry() {
+        let defaults = isolatedDefaults()
+        let settings = SettingsStore(defaults: defaults, livePreviewLimitProvider: { 6 })
+        let builtIn = FinderLaunchShortcut.defaultShortcuts.first {
+            $0.bundleIdentifier == "com.microsoft.VSCode"
+        }!
+        let installedURL = URL(fileURLWithPath: "/Custom/Visual Studio Code.app")
+
+        settings.addFinderLaunchShortcut(FinderLaunchShortcut(
+            displayName: "Code",
+            bundleURLString: installedURL.absoluteString,
+            bundleIdentifier: builtIn.bundleIdentifier
+        ))
+
+        let saved = settings.finderLaunchShortcuts.first { $0.id == builtIn.id }
+        XCTAssertEqual(saved?.bundleURL, installedURL)
+        XCTAssertTrue(saved?.isEnabled == true)
+        XCTAssertEqual(
+            settings.finderLaunchShortcuts.filter {
+                $0.bundleIdentifier == builtIn.bundleIdentifier
+            }.count,
+            1
+        )
+    }
+
+    func testFinderMenuOmitsDisabledQuickActions() {
+        let context = FinderMenuContext(
+            location: .selection,
+            currentDirectory: nil,
+            selectedURLs: [URL(fileURLWithPath: "/tmp/item")]
+        )
+        let disabled = FinderLaunchShortcut(
+            displayName: "Disabled",
+            bundleURLString: URL(fileURLWithPath: "/Applications").absoluteString,
+            bundleIdentifier: "com.example.disabled",
+            isEnabled: false
+        )
+
+        XCTAssertEqual(
+            FinderMenuCatalog.entries(
+                for: context,
+                preferences: FinderMenuPreferences(
+                    isEnabled: true,
+                    launchShortcuts: [disabled]
+                )
+            ),
+            [
+                .action(.copySelectedPaths),
+                .action(.showHiddenFiles),
+                .action(.hideHiddenFiles)
+            ]
+        )
+    }
+
+    func testFinderRoutingRootAndStandardLocationsAreManaged() {
         let home = URL(fileURLWithPath: "/Users/omnidock-test", isDirectory: true)
         let desktop = home.appendingPathComponent("Desktop", isDirectory: true)
         let documents = home.appendingPathComponent("Documents", isDirectory: true)
         let downloads = home.appendingPathComponent("Downloads", isDirectory: true)
+        let cloudDrive = home
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Mobile Documents", isDirectory: true)
+            .appendingPathComponent("com~apple~CloudDocs", isDirectory: true)
 
         let directories = FinderObservationRoots.registeredURLs(homeDirectory: home)
 
         XCTAssertEqual(
             directories,
             [
+                URL(fileURLWithPath: "/", isDirectory: true),
                 desktop,
                 documents,
-                downloads
+                downloads,
+                cloudDrive.appendingPathComponent("Desktop", isDirectory: true),
+                cloudDrive.appendingPathComponent("Documents", isDirectory: true)
             ]
         )
         XCTAssertEqual(
@@ -652,6 +1020,12 @@ final class FinderMenuTests: XCTestCase {
     private func descendantButtons(in view: NSView) -> [NSButton] {
         view.subviews.flatMap { child in
             (child as? NSButton).map { [$0] } ?? descendantButtons(in: child)
+        }
+    }
+
+    private func descendantScrollViews(in view: NSView) -> [NSScrollView] {
+        view.subviews.flatMap { child in
+            (child as? NSScrollView).map { [$0] } ?? descendantScrollViews(in: child)
         }
     }
 }

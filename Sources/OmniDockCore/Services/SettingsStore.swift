@@ -241,16 +241,26 @@ public final class SettingsStore {
     var finderLaunchShortcuts: [FinderLaunchShortcut] {
         get {
             cachedValue(\.cachedFinderLaunchShortcuts) {
-                decoded(
+                let storedShortcuts = decoded(
                     [FinderLaunchShortcut].self,
                     from: defaults.data(forKey: Key.finderLaunchShortcuts.rawValue)
                 ) ?? []
+                return FinderLaunchShortcut.catalog(
+                    merging: storedShortcuts,
+                    missingBuiltInsUseDefaults: defaults.data(
+                        forKey: Key.finderLaunchShortcuts.rawValue
+                    ) == nil
+                )
             }
         }
         set {
-            let data = encoded(newValue)
+            let normalized = FinderLaunchShortcut.catalog(
+                merging: newValue,
+                missingBuiltInsUseDefaults: false
+            )
+            let data = encoded(normalized)
             defaults.set(data, forKey: Key.finderLaunchShortcuts.rawValue)
-            updateCache(\.cachedFinderLaunchShortcuts, to: data == nil ? [] : newValue)
+            updateCache(\.cachedFinderLaunchShortcuts, to: data == nil ? [] : normalized)
             syncFinderExtensionSettings()
             postChange(.finderExtension)
         }
@@ -259,20 +269,23 @@ public final class SettingsStore {
     var finderDocumentPresets: [FinderDocumentPreset] {
         get {
             cachedValue(\.cachedFinderDocumentPresets) {
-                decoded(
+                guard let saved = decoded(
                     [FinderDocumentPreset].self,
                     from: defaults.data(forKey: Key.finderDocumentPresets.rawValue)
-                ) ?? FinderDocumentPreset.defaultPresets
+                ) else {
+                    return FinderDocumentPreset.defaultPresets
+                }
+                return FinderDocumentPreset.catalog(
+                    merging: saved,
+                    missingBuiltInsUseDefaults: false
+                )
             }
         }
         set {
-            let normalized = newValue.compactMap {
-                FinderDocumentPreset(
-                    id: $0.id,
-                    displayName: $0.displayName,
-                    fileExtension: $0.fileExtension
-                )
-            }
+            let normalized = FinderDocumentPreset.catalog(
+                merging: newValue,
+                missingBuiltInsUseDefaults: false
+            )
             let data = encoded(normalized)
             defaults.set(data, forKey: Key.finderDocumentPresets.rawValue)
             updateCache(
@@ -498,13 +511,20 @@ public final class SettingsStore {
     func addFinderLaunchShortcut(_ shortcut: FinderLaunchShortcut) {
         var shortcuts = finderLaunchShortcuts
         let newURL = shortcut.bundleURL?.standardizedFileURL
-        guard !shortcuts.contains(where: {
+        if let existingIndex = shortcuts.firstIndex(where: {
             if let bundleIdentifier = shortcut.bundleIdentifier,
-               $0.bundleIdentifier == bundleIdentifier {
+               $0.bundleIdentifier?.caseInsensitiveCompare(bundleIdentifier) == .orderedSame {
                 return true
             }
             return $0.bundleURL?.standardizedFileURL == newURL
-        }) else {
+        }) {
+            guard shortcuts[existingIndex].isBuiltIn else {
+                return
+            }
+            shortcuts[existingIndex].bundleURLString = shortcut.bundleURLString
+            shortcuts[existingIndex].bundleIdentifier = shortcut.bundleIdentifier
+            shortcuts[existingIndex].isEnabled = true
+            finderLaunchShortcuts = shortcuts
             return
         }
         shortcuts.append(shortcut)
@@ -512,7 +532,29 @@ public final class SettingsStore {
     }
 
     func deleteFinderLaunchShortcut(id: UUID) {
+        guard !FinderLaunchShortcut.defaultShortcuts.contains(where: { $0.id == id }) else {
+            setFinderLaunchShortcutEnabled(id: id, isEnabled: false)
+            return
+        }
         finderLaunchShortcuts = finderLaunchShortcuts.filter { $0.id != id }
+    }
+
+    func setFinderLaunchShortcutEnabled(
+        id: UUID,
+        isEnabled: Bool,
+        resolvedApplicationURL: URL? = nil
+    ) {
+        var shortcuts = finderLaunchShortcuts
+        guard let index = shortcuts.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+        shortcuts[index].isEnabled = isEnabled
+        if let resolvedApplicationURL {
+            shortcuts[index].bundleURLString = resolvedApplicationURL.absoluteString
+            shortcuts[index].bundleIdentifier = Bundle(url: resolvedApplicationURL)?
+                .bundleIdentifier ?? shortcuts[index].bundleIdentifier
+        }
+        finderLaunchShortcuts = shortcuts
     }
 
     func addFinderDocumentPreset(_ preset: FinderDocumentPreset) {
@@ -527,7 +569,22 @@ public final class SettingsStore {
     }
 
     func deleteFinderDocumentPreset(id: UUID) {
+        guard !FinderDocumentPreset.defaultPresets.contains(where: { $0.id == id }) else {
+            setFinderDocumentPresetEnabled(id: id, isEnabled: false)
+            return
+        }
         finderDocumentPresets = finderDocumentPresets.filter { $0.id != id }
+    }
+
+    func setFinderDocumentPresetEnabled(id: UUID, isEnabled: Bool) {
+        var presets = finderDocumentPresets
+        guard let index = presets.firstIndex(where: { $0.id == id }),
+              presets[index].isEnabled != isEnabled
+        else {
+            return
+        }
+        presets[index].isEnabled = isEnabled
+        finderDocumentPresets = presets
     }
 
     public func enablePermissionBackedDefaultsAfterOnboarding() {
