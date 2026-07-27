@@ -613,12 +613,16 @@ public final class SettingsStore {
     }
 
     private func syncFinderExtensionSettings() {
+        let observationRootPaths = finderMenuPreferencesStore?
+            .snapshot()
+            .observationRootPaths ?? []
         finderMenuPreferencesStore?.update(FinderMenuPreferences(
             isEnabled: finderExtensionEnabled,
             languageIdentifier: appLanguage.rawValue,
             groupsLaunchShortcuts: finderLaunchShortcutsGrouped,
             launchShortcuts: finderLaunchShortcuts,
-            documentPresets: finderDocumentPresets
+            documentPresets: finderDocumentPresets,
+            observationRootPaths: observationRootPaths
         ))
     }
 

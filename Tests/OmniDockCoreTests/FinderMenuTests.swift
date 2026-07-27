@@ -471,17 +471,20 @@ final class FinderMenuTests: XCTestCase {
         XCTAssertEqual(settings.finderDocumentPresets, FinderDocumentPreset.defaultPresets)
     }
 
-    func testRootIsManagedAndDesktopIsUsedWhenFinderOmitsTheContainerTarget() {
+    func testStandardFinderLocationsAreManagedAndDesktopIsUsedWhenTargetIsMissing() {
         let home = URL(fileURLWithPath: "/Users/omnidock-test", isDirectory: true)
         let desktop = home.appendingPathComponent("Desktop", isDirectory: true)
+        let documents = home.appendingPathComponent("Documents", isDirectory: true)
+        let downloads = home.appendingPathComponent("Downloads", isDirectory: true)
 
         let directories = FinderObservationRoots.registeredURLs(homeDirectory: home)
 
         XCTAssertEqual(
             directories,
             [
-                URL(fileURLWithPath: "/", isDirectory: true),
-                desktop
+                desktop,
+                documents,
+                downloads
             ]
         )
         XCTAssertEqual(
@@ -493,6 +496,59 @@ final class FinderMenuTests: XCTestCase {
             FinderObservationRoots.folderURL(targetedURL: folder, homeDirectory: home),
             folder
         )
+    }
+
+    func testAuthorizedFinderLocationsAreCanonicalizedAndDeduplicated() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let home = root.appendingPathComponent("Home", isDirectory: true)
+        let projects = root.appendingPathComponent("Projects", isDirectory: true)
+        let linkedProjects = root.appendingPathComponent("LinkedProjects", isDirectory: true)
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: projects, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: linkedProjects,
+            withDestinationURL: projects
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let directories = FinderObservationRoots.registeredURLs(
+            homeDirectory: home,
+            authorizedDirectoryPaths: [
+                projects.path,
+                linkedProjects.path,
+                projects.path
+            ]
+        )
+
+        XCTAssertTrue(directories.contains(projects.standardizedFileURL))
+        XCTAssertTrue(directories.contains(linkedProjects.standardizedFileURL))
+        XCTAssertEqual(
+            directories.filter { $0.resolvingSymlinksInPath() == projects }.count,
+            2
+        )
+    }
+
+    func testDirectoryGrantPublishesObservationRootsWithoutSharingBookmarks() throws {
+        let defaults = isolatedDefaults()
+        var publishedPaths: [String] = []
+        let store = FinderDirectoryGrantStore(
+            defaults: defaults,
+            observationRootUpdater: { publishedPaths = $0 }
+        )
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        try store.remember(directory: directory)
+
+        XCTAssertEqual(publishedPaths, [directory.standardizedFileURL.path])
+        XCTAssertNotNil(defaults.data(forKey: "finderExtensionDirectoryBookmarks"))
+
+        publishedPaths = []
+        XCTAssertTrue(store.hasUsableGrant())
+        XCTAssertEqual(publishedPaths, [directory.standardizedFileURL.path])
     }
 
     func testFinderExtensionActivationOnlyNeedsManualSetupWhenFeatureIsOn() {
