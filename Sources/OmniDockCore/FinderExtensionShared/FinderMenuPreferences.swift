@@ -674,6 +674,9 @@ enum FinderObservationRoots {
 
     private static func canonicalURLs(for url: URL) -> [URL] {
         let standardized = url.standardizedFileURL
+        guard FileManager.default.fileExists(atPath: standardized.path) else {
+            return [standardized]
+        }
         let resolved = standardized.resolvingSymlinksInPath()
         return standardized == resolved ? [standardized] : [standardized, resolved]
     }
