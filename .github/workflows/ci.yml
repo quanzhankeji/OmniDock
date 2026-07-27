@@ -64,6 +64,15 @@ jobs:
           binary="$app/Contents/MacOS/OmniDock"
           resources="$app/Contents/Resources"
           extension="$app/Contents/PlugIns/OmniDockFinderSync.appex"
+          build_settings="$(
+            xcodebuild \
+              -project OmniDock.xcodeproj \
+              -target OmniDock \
+              -configuration Release \
+              -showBuildSettings
+          )"
+          expected_version="$(printf '%s\n' "$build_settings" | awk -F ' = ' '/^[[:space:]]*MARKETING_VERSION = / { print $2; exit }')"
+          expected_build="$(printf '%s\n' "$build_settings" | awk -F ' = ' '/^[[:space:]]*CURRENT_PROJECT_VERSION = / { print $2; exit }')"
 
           test -x "$binary"
           test -x "$extension/Contents/MacOS/OmniDockFinderSync"
@@ -90,5 +99,7 @@ jobs:
           plutil -lint "$resources/zh-Hans.lproj/InfoPlist.strings"
 
           test "$(plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist")" = "com.quanzhankeji.OmniDock"
-          test "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" = "1.1.2"
-          test "$(plutil -extract CFBundleVersion raw "$app/Contents/Info.plist")" = "9"
+          test -n "$expected_version"
+          test -n "$expected_build"
+          test "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" = "$expected_version"
+          test "$(plutil -extract CFBundleVersion raw "$app/Contents/Info.plist")" = "$expected_build"
