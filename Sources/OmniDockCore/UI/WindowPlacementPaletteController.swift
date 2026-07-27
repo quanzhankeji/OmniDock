@@ -141,6 +141,22 @@ enum WindowPlacementDragZonePolicy {
     }
 }
 
+enum WindowPlacementPaletteDismissalPolicy {
+    static func shouldDismiss(
+        pointer: CGPoint,
+        paletteFrame: CGRect?,
+        anchorFrame: CGRect?
+    ) -> Bool {
+        if paletteFrame?.contains(pointer) == true {
+            return false
+        }
+        if anchorFrame?.contains(pointer) == true {
+            return false
+        }
+        return true
+    }
+}
+
 @MainActor
 final class WindowPlacementPaletteController: NSObject {
     typealias DeferredAction = @MainActor () -> Void
@@ -216,7 +232,7 @@ final class WindowPlacementPaletteController: NSObject {
             matching: [.leftMouseDown, .rightMouseDown],
             handler: { [weak self] _ in
                 Task { @MainActor in
-                    self?.hide()
+                    self?.dismissForOutsideClick(at: NSEvent.mouseLocation)
                 }
             }
         ) {
@@ -232,10 +248,8 @@ final class WindowPlacementPaletteController: NSObject {
                     self.hide()
                     return nil
                 }
-                if event.type == .leftMouseDown || event.type == .rightMouseDown,
-                   self.panel?.frame.contains(NSEvent.mouseLocation) == false,
-                   self.anchorShieldPanel?.frame.contains(NSEvent.mouseLocation) == false {
-                    self.hide()
+                if event.type == .leftMouseDown || event.type == .rightMouseDown {
+                    self.dismissForOutsideClick(at: NSEvent.mouseLocation)
                 }
                 return event
             }
@@ -352,6 +366,17 @@ final class WindowPlacementPaletteController: NSObject {
     private func cancelPendingHoverClose() {
         pendingHoverClose?.cancel()
         pendingHoverClose = nil
+    }
+
+    private func dismissForOutsideClick(at pointer: CGPoint) {
+        guard WindowPlacementPaletteDismissalPolicy.shouldDismiss(
+            pointer: pointer,
+            paletteFrame: panel?.frame,
+            anchorFrame: anchorShieldPanel?.frame
+        ) else {
+            return
+        }
+        hide()
     }
 
     private func observeTermination(of processIdentifier: pid_t) {
@@ -636,8 +661,8 @@ final class WindowPlacementPaletteController: NSObject {
             return
         }
         let commandID = sender.commandID
-        hide()
         onChoose?(commandID, target)
+        hide()
     }
 
     @objc private func openSettings(_ sender: NSButton) {
@@ -710,9 +735,10 @@ private final class WindowPlacementDragRegionOverlayView: NSView {
     }
 }
 
-private class WindowPlacementHoverButton: NSButton {
+class WindowPlacementHoverButton: NSButton {
     private var tracking: NSTrackingArea?
     private var isPointerInside = false
+    private var isPressedInside = false
     private var displayTitle: String
     private let commandImageView = NSImageView()
     private let commandTitleLabel = NSTextField(labelWithString: "")
@@ -798,11 +824,42 @@ private class WindowPlacementHoverButton: NSButton {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        bounds.contains(point) ? self : nil
+        guard !isHidden, isEnabled, frame.contains(point) else {
+            return nil
+        }
+        return self
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        isPressedInside = contains(event)
+        updateAppearance()
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        isPressedInside = contains(event)
+        updateAppearance()
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let shouldPerformAction = isPressedInside && contains(event)
+        isPressedInside = false
+        updateAppearance()
+        guard shouldPerformAction else {
+            return
+        }
+        _ = sendAction(action, to: target)
+    }
+
+    private func contains(_ event: NSEvent) -> Bool {
+        guard let superview else {
+            return false
+        }
+        let point = superview.convert(event.locationInWindow, from: nil)
+        return frame.contains(point)
     }
 
     private func updateAppearance() {
-        let isHighlighted = isPointerInside && isEnabled
+        let isHighlighted = (isPointerInside || isPressedInside) && isEnabled
         layer?.backgroundColor = isHighlighted
             ? NSColor.controlAccentColor.cgColor
             : NSColor.clear.cgColor

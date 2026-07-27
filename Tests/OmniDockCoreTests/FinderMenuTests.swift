@@ -1,7 +1,59 @@
+import AppKit
 import XCTest
 @testable import OmniDockCore
 
 final class FinderMenuTests: XCTestCase {
+    @MainActor
+    func testFinderExtensionSettingsUsesTwoIndependentEditorSections() {
+        let view = FinderExtensionSettingsView(
+            settings: SettingsStore(
+                defaults: isolatedDefaults(),
+                livePreviewLimitProvider: { 6 }
+            ),
+            isExtensionEnabledInFinder: { false }
+        )
+
+        XCTAssertEqual(
+            FinderExtensionSettingsSection.allCases,
+            [.documentTypes, .quickActions]
+        )
+        XCTAssertEqual(view.selectedSection, .documentTypes)
+
+        view.selectSection(.quickActions)
+
+        XCTAssertEqual(view.selectedSection, .quickActions)
+    }
+
+    @MainActor
+    func testFinderExtensionNavigationRowsFillTheSameLeftColumnWidth() {
+        let view = FinderExtensionSettingsView(
+            settings: SettingsStore(
+                defaults: isolatedDefaults(),
+                livePreviewLimitProvider: { 6 }
+            ),
+            isExtensionEnabledInFinder: { true }
+        )
+        view.frame = NSRect(x: 0, y: 0, width: 900, height: 600)
+        view.layoutSubtreeIfNeeded()
+
+        let navigationButtons = descendantButtons(in: view).filter {
+            FinderExtensionSettingsSection.allCases.map(\.title).contains($0.title)
+        }
+
+        XCTAssertEqual(navigationButtons.count, 2)
+        XCTAssertEqual(
+            navigationButtons[0].frame.minX,
+            navigationButtons[1].frame.minX,
+            accuracy: 0.5
+        )
+        XCTAssertEqual(
+            navigationButtons[0].bounds.width,
+            navigationButtons[1].bounds.width,
+            accuracy: 0.5
+        )
+        XCTAssertGreaterThan(navigationButtons[0].bounds.width, 180)
+    }
+
     func testMenuActionRegistryConsumesFrozenContextOnce() {
         let registry = FinderMenuActionRegistry()
         let directory = URL(fileURLWithPath: "/tmp/Documents", isDirectory: true)
@@ -539,5 +591,11 @@ final class FinderMenuTests: XCTestCase {
         let defaults = UserDefaults(suiteName: name)!
         defaults.removePersistentDomain(forName: name)
         return defaults
+    }
+
+    private func descendantButtons(in view: NSView) -> [NSButton] {
+        view.subviews.flatMap { child in
+            (child as? NSButton).map { [$0] } ?? descendantButtons(in: child)
+        }
     }
 }

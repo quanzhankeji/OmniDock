@@ -66,7 +66,22 @@ public enum OmniDockTheme {
         window.appearance = appearance.forcedNSAppearance
     }
 
+    // Palettes are immutable and NSColor is thread-safe, so build each variant
+    // once instead of allocating 23 colors on every palette() call (which
+    // happens on hover/appearance updates for every themed view).
+    private static let lightPalette = makePalette(for: .light)
+    private static let darkPalette = makePalette(for: .dark)
+
     private static func palette(for appearance: AppAppearance.Resolved) -> OmniDockThemePalette {
+        switch appearance {
+        case .light:
+            return lightPalette
+        case .dark:
+            return darkPalette
+        }
+    }
+
+    private static func makePalette(for appearance: AppAppearance.Resolved) -> OmniDockThemePalette {
         switch appearance {
         case .light:
             OmniDockThemePalette(

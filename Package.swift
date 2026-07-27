@@ -27,6 +27,7 @@ let package = Package(
                 .linkedFramework("CoreMedia"),
                 .linkedFramework("CryptoKit"),
                 .linkedFramework("FinderSync"),
+                .linkedFramework("ImageIO"),
                 .linkedFramework("IOKit"),
                 .linkedFramework("ScreenCaptureKit")
             ]

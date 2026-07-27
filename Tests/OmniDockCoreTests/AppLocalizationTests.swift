@@ -148,10 +148,12 @@ final class AppLocalizationTests: XCTestCase {
         XCTAssertEqual(AppLocalization.text(.tabFinderExtension, language: .en), "Finder Extension")
         XCTAssertEqual(AppLocalization.text(.finderExtensionEnableTitle, language: .en), "Enable")
         XCTAssertEqual(AppLocalization.text(.finderExtensionOpenSettings, language: .en), "Open Finder Extensions")
+        XCTAssertEqual(AppLocalization.text(.finderQuickOpenTitle, language: .en), "Quick Actions")
         XCTAssertEqual(AppLocalization.text(.tabSettings, language: .zhHans), "设置")
         XCTAssertEqual(AppLocalization.text(.tabFinderExtension, language: .zhHans), "右键扩展")
         XCTAssertEqual(AppLocalization.text(.finderExtensionEnableTitle, language: .zhHans), "启用")
         XCTAssertEqual(AppLocalization.text(.finderExtensionOpenSettings, language: .zhHans), "打开 Finder 扩展设置")
+        XCTAssertEqual(AppLocalization.text(.finderQuickOpenTitle, language: .zhHans), "快捷操作")
     }
 
     func testEverySettingsTabHasAStatusMenuTitle() {

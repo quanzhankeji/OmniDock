@@ -5,22 +5,10 @@ enum WindowPlacementGreenButtonPolicy {
     static let refreshInterval: TimeInterval = 0.45
     static let snapshotLifetime: TimeInterval = 0.9
 
-    static func shouldConsume(
-        point: CGPoint,
-        flags: CGEventFlags,
-        buttonFrame: CGRect?,
-        expiresAt: TimeInterval?,
-        now: TimeInterval
-    ) -> Bool {
-        flags.contains(.maskAlternate)
-            && (expiresAt ?? -.infinity) >= now
-            && buttonFrame?.contains(point) == true
-    }
-
     static func shouldForwardNativeAction(
-        modifiers: NSEvent.ModifierFlags
+        modifiers _: NSEvent.ModifierFlags
     ) -> Bool {
-        !modifiers.contains(.option)
+        true
     }
 
     static func shouldSuppressNativeHover(
@@ -59,6 +47,48 @@ struct WindowPlacementGreenButtonHoverTracker {
 }
 
 enum WindowPlacementDragPolicy {
+    enum Interaction: Equatable {
+        case pending
+        case moving
+        case resizing
+    }
+
+    static func interaction(
+        initialFrame: CGRect,
+        currentFrame: CGRect,
+        threshold: CGFloat = 3
+    ) -> Interaction {
+        let sizeChanged = abs(currentFrame.width - initialFrame.width) >= threshold
+            || abs(currentFrame.height - initialFrame.height) >= threshold
+        if sizeChanged {
+            return .resizing
+        }
+        return recognizedWindowMovement(
+            initialFrame: initialFrame,
+            currentFrame: currentFrame,
+            threshold: threshold
+        ) ? .moving : .pending
+    }
+
+    // macOS can resize a window mid-move, for example when it crosses onto a
+    // smaller display. A drag session therefore keeps its first recognized
+    // interaction; only a pending session may still be classified.
+    static func nextInteraction(
+        current: Interaction,
+        initialFrame: CGRect,
+        currentFrame: CGRect,
+        threshold: CGFloat = 3
+    ) -> Interaction {
+        guard current == .pending else {
+            return current
+        }
+        return interaction(
+            initialFrame: initialFrame,
+            currentFrame: currentFrame,
+            threshold: threshold
+        )
+    }
+
     static func recognizedWindowMovement(
         initialFrame: CGRect,
         currentFrame: CGRect,
@@ -96,7 +126,6 @@ private final class WindowPlacementPointerState: @unchecked Sendable {
 
     private let lock = NSLock()
     private var greenButton: GreenButtonSnapshot?
-    private var consumesGreenClick = false
 
     func updateGreenButton(_ snapshot: GreenButtonSnapshot?) {
         lock.lock()
@@ -122,50 +151,10 @@ private final class WindowPlacementPointerState: @unchecked Sendable {
         }
         return greenButton
     }
-
-    func beginGreenClick(
-        at point: CGPoint,
-        flags: CGEventFlags,
-        now: TimeInterval
-    ) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        guard let greenButton,
-              WindowPlacementGreenButtonPolicy.shouldConsume(
-                  point: point,
-                  flags: flags,
-                  buttonFrame: greenButton.frame,
-                  expiresAt: greenButton.expiresAt,
-                  now: now
-              )
-        else {
-            consumesGreenClick = false
-            return false
-        }
-        consumesGreenClick = true
-        return true
-    }
-
-    func finishGreenClick() -> GreenButtonSnapshot? {
-        lock.lock()
-        defer { lock.unlock() }
-        guard consumesGreenClick else {
-            return nil
-        }
-        consumesGreenClick = false
-        return greenButton
-    }
-
-    func cancelGreenClick() {
-        lock.lock()
-        consumesGreenClick = false
-        lock.unlock()
-    }
 }
 
 @MainActor
 final class WindowPlacementPointerMonitor {
-    var onGreenButtonClick: ((WindowPlacementTarget, CGRect) -> Void)?
     var onGreenButtonHover: ((WindowPlacementTarget, CGRect) -> Void)?
     var onPointerMoved: ((CGPoint) -> Void)?
     var onDragBegan: ((
@@ -187,7 +176,7 @@ final class WindowPlacementPointerMonitor {
     private struct DragSession {
         let target: WindowPlacementTarget
         let originalFrame: CGRect
-        var isMovingWindow = false
+        var interaction: WindowPlacementDragPolicy.Interaction = .pending
         var hasPresentedDragRegions = false
         var activeCommand: WindowPlacementCommand?
         var activeScreen: WindowPlacementScreen?
@@ -244,7 +233,6 @@ final class WindowPlacementPointerMonitor {
         lastGreenButtonRefreshAt = 0
         greenButtonHoverTracker.leftButton()
         pointerState.updateGreenButton(nil)
-        pointerState.cancelGreenClick()
         if let eventTap {
             CGEvent.tapEnable(tap: eventTap, enable: false)
         }
@@ -281,13 +269,6 @@ final class WindowPlacementPointerMonitor {
                 self?.handlePointerMoved(at: point)
             }
         case .leftMouseDown:
-            if pointerState.beginGreenClick(
-                at: point,
-                flags: event.flags,
-                now: timestamp
-            ) {
-                return nil
-            }
             Task { @MainActor [weak self] in
                 self?.beginDragCandidate(at: point)
             }
@@ -296,12 +277,6 @@ final class WindowPlacementPointerMonitor {
                 self?.updateDrag(at: point, timestamp: timestamp)
             }
         case .leftMouseUp:
-            if let snapshot = pointerState.finishGreenClick() {
-                Task { @MainActor [weak self] in
-                    self?.onGreenButtonClick?(snapshot.target, snapshot.frame)
-                }
-                return nil
-            }
             Task { @MainActor [weak self] in
                 self?.finishDrag()
             }
@@ -433,15 +408,14 @@ final class WindowPlacementPointerMonitor {
             return
         }
 
-        if !session.isMovingWindow {
-            guard WindowPlacementDragPolicy.recognizedWindowMovement(
-                initialFrame: session.originalFrame,
-                currentFrame: currentFrame
-            ) else {
-                dragSession = session
-                return
-            }
-            session.isMovingWindow = true
+        session.interaction = WindowPlacementDragPolicy.nextInteraction(
+            current: session.interaction,
+            initialFrame: session.originalFrame,
+            currentFrame: currentFrame
+        )
+        guard session.interaction == .moving else {
+            dragSession = session
+            return
         }
 
         let screens = WindowPlacementScreens.current()
@@ -480,7 +454,7 @@ final class WindowPlacementPointerMonitor {
             return
         }
         dragSession = nil
-        guard session.isMovingWindow,
+        guard session.interaction == .moving,
               let command = session.activeCommand,
               let screen = session.activeScreen
         else {

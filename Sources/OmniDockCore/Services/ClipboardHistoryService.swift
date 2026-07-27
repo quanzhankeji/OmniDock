@@ -45,12 +45,18 @@ final class ClipboardHistoryService {
     private let registrationStatus: ClipboardHistoryRegistrationStatus
     private let hotkeyRegistry: ClipboardHistoryHotkeyRegistering
     private let pasteboard: NSPasteboard
+    private let captureQueue = DispatchQueue(
+        label: "com.quanzhankeji.OmniDock.clipboard-capture",
+        qos: .utility
+    )
     private var monitor: Timer?
     private var lastObservedChangeCount = 0
     private var selfWrittenChangeCount: Int?
+    private var captureGeneration = 0
     private var isStarted = false
     private var isHotkeyRegistered = false
     private var records: [ClipboardHistoryRecord]
+    private var recordsRevision: UInt64 = 0
 
     var isMonitoring: Bool {
         monitor != nil
@@ -119,11 +125,11 @@ final class ClipboardHistoryService {
     }
 
     func snapshot() -> ClipboardHistorySnapshot {
-        ClipboardHistorySnapshot(records: records, warning: store.warning ?? registrationStatus.warning)
-    }
-
-    func filteredRecords(query: String) -> [ClipboardHistoryRecord] {
-        ClipboardArchiveSearch.filter(records, query: query)
+        ClipboardHistorySnapshot(
+            records: records,
+            warning: store.warning ?? registrationStatus.warning,
+            revision: recordsRevision
+        )
     }
 
     func previewContent(id: UUID) -> ClipboardHistoryPreviewContent? {
@@ -219,6 +225,7 @@ final class ClipboardHistoryService {
         monitor?.invalidate()
         monitor = nil
         selfWrittenChangeCount = nil
+        captureGeneration += 1
     }
 
     private func unregisterHotkeyIfNeeded() {
@@ -240,13 +247,49 @@ final class ClipboardHistoryService {
             return
         }
 
-        guard let candidate = ClipboardHistoryCodec.candidate(
-            from: pasteboard,
-            sourceApplication: NSWorkspace.shared.frontmostApplication,
-            maximumPayloadBytes: Self.maximumEntryBytes
-        ) else {
+        guard let payload = ClipboardHistoryCodec.payload(from: pasteboard) else {
             return
         }
+        // Encoding, hashing, and thumbnail rendering can take a visible beat
+        // for large payloads, so they run off the main run loop. The serial
+        // queue preserves capture order, and the generation check drops
+        // results that finish after monitoring stopped.
+        let generation = captureGeneration
+        let sourceApplication = NSWorkspace.shared.frontmostApplication
+        let capturedAt = Date()
+        let maximumPayloadBytes = Self.maximumEntryBytes
+        captureQueue.async { [weak self] in
+            guard let processed = ClipboardHistoryCodec.processedCapture(
+                from: payload,
+                maximumPayloadBytes: maximumPayloadBytes
+            ) else {
+                return
+            }
+            Task { @MainActor [weak self] in
+                self?.finishCapture(
+                    processed,
+                    sourceApplication: sourceApplication,
+                    capturedAt: capturedAt,
+                    generation: generation
+                )
+            }
+        }
+    }
+
+    private func finishCapture(
+        _ processed: ClipboardHistoryCodec.ProcessedCapture,
+        sourceApplication: NSRunningApplication?,
+        capturedAt: Date,
+        generation: Int
+    ) {
+        guard generation == captureGeneration else {
+            return
+        }
+        let candidate = ClipboardHistoryCodec.candidate(
+            from: processed,
+            sourceApplication: sourceApplication,
+            capturedAt: capturedAt
+        )
         _ = store.store(
             candidate,
             limit: settings.clipboardHistoryLimit,
@@ -305,6 +348,7 @@ final class ClipboardHistoryService {
 
     private func refreshRecords() {
         records = store.records()
+        recordsRevision &+= 1
         panelController.update(records: records, warning: store.warning)
         NotificationCenter.default.post(name: Self.changedNotification, object: self)
     }

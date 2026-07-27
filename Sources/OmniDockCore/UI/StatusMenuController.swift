@@ -15,6 +15,7 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
     private let onOpenPermissionOnboarding: () -> Void
     private var statusItem: NSStatusItem?
     private var statusMenu: NSMenu?
+    private var isSettingsWindowControllerLoaded = false
     private lazy var settingsWindowController = SettingsWindowController(
         settings: settings,
         permissionService: permissionService,
@@ -133,6 +134,7 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
     }
 
     func show(tab: SettingsTab) {
+        isSettingsWindowControllerLoaded = true
         settingsWindowController.show(tab: tab)
     }
 
@@ -141,15 +143,26 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
     }
 
     @objc private func settingsChanged(_ notification: Notification) {
-        if SettingsStore.change(in: notification).affectsDockInteraction {
+        let change = SettingsStore.change(in: notification)
+        if change.affectsDockInteraction {
             coordinator.refreshForSettingsChange()
         }
-        rebuildMenu()
+        // Menu item titles only depend on the localized tab names, so a full
+        // rebuild is only needed for language changes; menuWillOpen rebuilds
+        // right before display anyway.
+        if change == .language || change == .all {
+            rebuildMenu()
+        }
     }
 
     @objc private func appDidBecomeActive() {
         coordinator.refreshPermissionsAndMonitors()
-        settingsWindowController.refresh()
+        // Refreshing the lazy settings window controller would otherwise
+        // force-instantiate the entire settings UI on every app activation
+        // even when the user never opened it.
+        if isSettingsWindowControllerLoaded {
+            settingsWindowController.refresh()
+        }
     }
 
     private func rebuildMenu() {

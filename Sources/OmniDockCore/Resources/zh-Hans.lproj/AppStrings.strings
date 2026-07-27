@@ -61,12 +61,12 @@
 "finderExtensionFailureDismiss" = "好";
 "finderExtensionAccessDetail" = "请选择“%@”或它的上级文件夹，允许 OmniDock 在其中新建文件。此授权只需完成一次。";
 "finderExtensionAccessButton" = "允许";
-"finderQuickOpenTitle" = "快捷应用";
+"finderQuickOpenTitle" = "快捷操作";
 "finderQuickOpenDetail" = "使用选择的应用打开 Finder 中选中的项目。";
 "finderQuickOpenGroupedTitle" = "折叠应用菜单";
 "finderQuickOpenGroupedDetail" = "将所选应用收纳到一个“打开方式”子菜单中。";
 "finderQuickOpenAdd" = "选择应用";
-"finderQuickOpenEmpty" = "还没有选择快捷应用。";
+"finderQuickOpenEmpty" = "还没有添加快捷操作。";
 "finderQuickOpenFailedTitle" = "无法打开所选项目";
 "finderQuickOpenFailedDetail" = "无法使用“%@”打开所选项目。%@";
 "finderQuickOpenApplicationMissing" = "该应用已经不可用。";
@@ -99,7 +99,7 @@
 "onboardingAccessibilityPurpose" = "识别 Dock 图标，唤起、隐藏和聚焦窗口。";
 "onboardingInputMonitoringPurpose" = "检测轻点 Dock 图标，并且只在窗口切换器打开期间检测 Option-Tab；OmniDock 不记录或保存输入文字。";
 "onboardingScreenRecordingPurpose" = "生成 Dock 窗口缩略图，包括实时画面和一次性静态截图，只用于本机预览。若列表为空，请点 + 添加 OmniDock。";
-"onboardingFinderExtensionPurpose" = "在 Finder 右键菜单中加入复制路径、新建文件和快捷应用命令。";
+"onboardingFinderExtensionPurpose" = "在 Finder 右键菜单中加入复制路径、新建文件和快捷操作命令。";
 "onboardingFolderAccessPurpose" = "只保存用户明确选择的文件夹授权，让新建文件无需请求完全磁盘访问。";
 "onboardingStatusReady" = "已准备就绪";
 "onboardingStatusNeedsPermissions" = "请完成以下授权";
@@ -159,9 +159,9 @@
 "clipboardPreviewFiles" = "文件";
 
 "windowPlacementEnableTitle" = "启用窗口调整";
-"windowPlacementEnableDetail" = "通过快捷键、Option 点击或拖拽区域调整桌面最前方窗口。";
+"windowPlacementEnableDetail" = "通过快捷键、绿色按钮菜单或拖拽区域调整桌面最前方窗口。";
 "windowPlacementGreenButtonTitle" = "绿色按钮布局菜单";
-"windowPlacementGreenButtonDetail" = "将鼠标停在窗口绿色按钮上即可选择布局，也支持按住 Option 点击。";
+"windowPlacementGreenButtonDetail" = "将鼠标停在窗口绿色按钮上即可选择布局，同时保留按钮原本的点击功能。";
 "windowPlacementDragTitle" = "拖拽调整";
 "windowPlacementDragDetail" = "将正在移动的窗口拖入指定屏幕区域并松开，即可应用布局。";
 "windowPlacementCommands" = "窗口布局";

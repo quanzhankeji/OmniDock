@@ -26,12 +26,37 @@ enum ClipboardHistoryCodec {
         NSPasteboard.PasteboardType.tiff.rawValue
     ]
 
+    struct ProcessedCapture {
+        let payload: ClipboardPayload
+        let payloadData: Data
+        let fingerprint: String
+        let thumbnailData: Data?
+    }
+
     static func candidate(
         from pasteboard: NSPasteboard,
         sourceApplication: NSRunningApplication?,
         capturedAt: Date = Date(),
         maximumPayloadBytes: Int
     ) -> ClipboardHistoryCandidate? {
+        guard let payload = payload(from: pasteboard),
+              let processed = processedCapture(
+                  from: payload,
+                  maximumPayloadBytes: maximumPayloadBytes
+              )
+        else {
+            return nil
+        }
+        return candidate(
+            from: processed,
+            sourceApplication: sourceApplication,
+            capturedAt: capturedAt
+        )
+    }
+
+    // Pasteboard access is main-thread work; this stage only snapshots the
+    // supported representations so the expensive processing can run later.
+    static func payload(from pasteboard: NSPasteboard) -> ClipboardPayload? {
         guard let pasteboardItems = pasteboard.pasteboardItems,
               !pasteboardItems.isEmpty
         else {
@@ -47,16 +72,41 @@ enum ClipboardHistoryCodec {
         guard !items.isEmpty else {
             return nil
         }
+        return ClipboardPayload(items: items)
+    }
 
-        let originalPayload = ClipboardPayload(items: items)
-        let boundedPayload = boundedPayload(originalPayload, maximumBytes: maximumPayloadBytes)
-        guard let payloadData = encode(boundedPayload),
-              !boundedPayload.items.isEmpty
+    // Encoding, hashing, and thumbnail rendering are CPU-heavy for payloads
+    // up to tens of megabytes. This stage touches no pasteboard or shared
+    // state, so callers may run it on a background queue; the NSImage used
+    // for the thumbnail stays confined to that thread.
+    static func processedCapture(
+        from payload: ClipboardPayload,
+        maximumPayloadBytes: Int
+    ) -> ProcessedCapture? {
+        guard let bounded = encodedBoundedPayload(
+            payload,
+            maximumBytes: maximumPayloadBytes
+        ),
+        !bounded.payload.items.isEmpty
         else {
             return nil
         }
+        return ProcessedCapture(
+            payload: bounded.payload,
+            payloadData: bounded.data,
+            fingerprint: fingerprint(for: bounded.data),
+            thumbnailData: thumbnailData(from: bounded.payload)
+        )
+    }
 
-        let description = describe(boundedPayload)
+    // HTML-backed attributed strings in describe() must be created on the
+    // main thread, so candidate assembly stays out of the background stage.
+    static func candidate(
+        from processed: ProcessedCapture,
+        sourceApplication: NSRunningApplication?,
+        capturedAt: Date = Date()
+    ) -> ClipboardHistoryCandidate {
+        let description = describe(processed.payload)
         let sourceName = sourceApplication?.localizedName
             ?? sourceApplication?.bundleIdentifier
             ?? AppStrings.text(.genericApplication)
@@ -74,10 +124,10 @@ enum ClipboardHistoryCodec {
             kind: description.kind,
             summary: description.summary,
             searchableText: searchParts.joined(separator: "\n"),
-            fingerprint: fingerprint(for: payloadData),
-            payloadData: payloadData,
-            thumbnailData: thumbnailData(from: boundedPayload),
-            byteCount: payloadData.count
+            fingerprint: processed.fingerprint,
+            payloadData: processed.payloadData,
+            thumbnailData: processed.thumbnailData,
+            byteCount: processed.payloadData.count
         )
     }
 
@@ -163,12 +213,15 @@ enum ClipboardHistoryCodec {
         return representations.isEmpty ? nil : ClipboardPayloadItem(representations: representations)
     }
 
-    private static func boundedPayload(
+    private static func encodedBoundedPayload(
         _ payload: ClipboardPayload,
         maximumBytes: Int
-    ) -> ClipboardPayload {
-        guard let encoded = encode(payload), encoded.count > maximumBytes else {
-            return payload
+    ) -> (payload: ClipboardPayload, data: Data)? {
+        guard let encoded = encode(payload) else {
+            return nil
+        }
+        if encoded.count <= maximumBytes {
+            return (payload, encoded)
         }
 
         let textAndURLItems = payload.items.compactMap { item -> ClipboardPayloadItem? in
@@ -179,9 +232,9 @@ enum ClipboardHistoryCodec {
         }
         let fallback = ClipboardPayload(items: textAndURLItems)
         guard let encodedFallback = encode(fallback), encodedFallback.count <= maximumBytes else {
-            return ClipboardPayload(items: [])
+            return nil
         }
-        return fallback
+        return (fallback, encodedFallback)
     }
 
     private static func encode(_ payload: ClipboardPayload) -> Data? {

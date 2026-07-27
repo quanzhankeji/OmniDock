@@ -14,15 +14,43 @@ struct PreviewPowerState: Equatable {
 
     static var current: PreviewPowerState {
         PreviewPowerState(
+            // The low-power-mode flag is a cheap in-process read and stays
+            // live so NSProcessInfoPowerStateDidChange reconciles see the new
+            // value immediately.
             isLowPowerModeEnabled: ProcessInfo.processInfo.isLowPowerModeEnabled,
             isOnBatteryPower: Self.isCurrentlyOnBatteryPower()
         )
     }
 
+    private final class BatteryStateCache: @unchecked Sendable {
+        let lock = NSLock()
+        var isOnBattery = false
+        var capturedAt = Date.distantPast
+    }
+
+    private static let batteryStateCache = BatteryStateCache()
+    private static let batteryStateLifetime: TimeInterval = 1.0
+
     private static func isCurrentlyOnBatteryPower() -> Bool {
+        // Querying IOKit power sources on every policy evaluation adds up on
+        // the preview refresh paths; a short-lived cache keeps the answer
+        // fresh enough (plug/unplug transitions are tolerant to ~1s latency).
+        batteryStateCache.lock.lock()
+        if Date().timeIntervalSince(batteryStateCache.capturedAt) < Self.batteryStateLifetime {
+            let cached = batteryStateCache.isOnBattery
+            batteryStateCache.lock.unlock()
+            return cached
+        }
+        batteryStateCache.lock.unlock()
+
         let info = IOPSCopyPowerSourcesInfo().takeRetainedValue()
         let source = IOPSGetProvidingPowerSourceType(info).takeRetainedValue() as NSString as String
-        return source == kIOPMBatteryPowerKey
+        let isOnBattery = source == kIOPMBatteryPowerKey
+        batteryStateCache.lock.lock()
+        batteryStateCache.isOnBattery = isOnBattery
+        batteryStateCache.capturedAt = Date()
+        batteryStateCache.lock.unlock()
+        return isOnBattery
     }
 }
 
@@ -73,13 +101,14 @@ struct PreviewPerformanceProfile: Equatable {
         return min(limit, Self.safetyMaximumLiveWindowLimit)
     }
 
-    static var current: PreviewPerformanceProfile {
-        PreviewPerformanceProfile(
-            physicalMemoryBytes: ProcessInfo.processInfo.physicalMemory,
-            processorCount: ProcessInfo.processInfo.processorCount,
-            chipName: currentChipName()
-        )
-    }
+    // Hardware characteristics cannot change while the process is running, so
+    // probe sysctl/ProcessInfo exactly once instead of on every policy or
+    // settings read.
+    static let current = PreviewPerformanceProfile(
+        physicalMemoryBytes: ProcessInfo.processInfo.physicalMemory,
+        processorCount: ProcessInfo.processInfo.processorCount,
+        chipName: currentChipName()
+    )
 
     private var memoryGigabytes: Int {
         let gibibyte = 1_073_741_824.0

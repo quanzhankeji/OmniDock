@@ -81,6 +81,67 @@ final class ClipboardHistoryTests: XCTestCase {
         }
     }
 
+    func testSettingsHistoryListVirtualizesLargeArchive() {
+        let controller = ClipboardHistoryListController()
+        let records = (0..<999).map { index in
+            ClipboardHistoryRecord(
+                id: UUID(),
+                capturedAt: Date(),
+                lastCopiedAt: Date(),
+                sourceApplicationName: "Source \(index)",
+                sourceBundleIdentifier: nil,
+                kind: .text,
+                summary: "Clipboard entry \(index)",
+                searchableText: "Clipboard entry \(index)",
+                copyCount: 1,
+                byteCount: 32,
+                thumbnailData: nil
+            )
+        }
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: 620, height: 320))
+        host.addSubview(controller.view)
+        NSLayoutConstraint.activate([
+            controller.view.leadingAnchor.constraint(equalTo: host.leadingAnchor),
+            controller.view.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+            controller.view.topAnchor.constraint(equalTo: host.topAnchor),
+            controller.view.bottomAnchor.constraint(equalTo: host.bottomAnchor)
+        ])
+
+        controller.apply(records: records)
+        host.layoutSubtreeIfNeeded()
+        host.displayIfNeeded()
+
+        XCTAssertEqual(controller.recordCount, 999)
+        XCTAssertGreaterThan(controller.createdRowViewCount, 0)
+        XCTAssertLessThan(controller.createdRowViewCount, 40)
+    }
+
+    func testClipboardHistorySnapshotRevisionChangesAfterMutation() throws {
+        let store = ClipboardHistoryStore(storeURL: nil, inMemory: true)
+        let record = try XCTUnwrap(store.store(
+            try candidate(text: "Revision", capturedAt: Date()),
+            limit: 200,
+            maximumTotalBytes: 1_000_000
+        ))
+        let service = ClipboardHistoryService(
+            settings: SettingsStore(
+                defaults: isolatedDefaults(),
+                livePreviewLimitProvider: { 8 }
+            ),
+            permissionService: PermissionService(),
+            store: store,
+            panelController: ClipboardPaletteController(),
+            registrationStatus: ClipboardHistoryRegistrationStatus(),
+            hotkeyRegistry: ClipboardHistoryHotkeyRegistrySpy()
+        )
+        let initialRevision = service.snapshot().revision
+
+        service.delete(id: record.id)
+
+        XCTAssertGreaterThan(service.snapshot().revision, initialRevision)
+        XCTAssertTrue(service.snapshot().records.isEmpty)
+    }
+
     func testSettingsHistoryRowShowsStoredAndFallbackImageThumbnails() throws {
         let imageData = try tinyPNGData()
         for usesStoredThumbnail in [true, false] {
@@ -99,11 +160,11 @@ final class ClipboardHistoryTests: XCTestCase {
             )
             let row = ClipboardArchiveSettingsRowView(
                 record: record,
-                fallbackImageData: usesStoredThumbnail ? nil : imageData
+                fallbackImage: usesStoredThumbnail ? nil : NSImage(data: imageData)
             )
 
             XCTAssertEqual(
-                row.subviews.compactMap { $0 as? NSImageView }.count,
+                descendantImageViews(in: row).count,
                 2
             )
         }
@@ -286,6 +347,63 @@ final class ClipboardHistoryTests: XCTestCase {
         let imageCandidate = try XCTUnwrap(makeCandidate(from: imagePasteboard))
         XCTAssertEqual(imageCandidate.kind, .image)
         XCTAssertNotNil(imageCandidate.thumbnailData)
+    }
+
+    func testStagedCaptureMatchesDirectCandidate() throws {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.clearContents()
+        XCTAssertTrue(pasteboard.setString("Staged capture", forType: .string))
+
+        let direct = try XCTUnwrap(makeCandidate(from: pasteboard))
+        let payload = try XCTUnwrap(ClipboardHistoryCodec.payload(from: pasteboard))
+        let processed = try XCTUnwrap(ClipboardHistoryCodec.processedCapture(
+            from: payload,
+            maximumPayloadBytes: ClipboardHistoryService.maximumEntryBytes
+        ))
+        let staged = ClipboardHistoryCodec.candidate(
+            from: processed,
+            sourceApplication: nil
+        )
+
+        XCTAssertEqual(staged.fingerprint, direct.fingerprint)
+        XCTAssertEqual(staged.payloadData, direct.payloadData)
+        XCTAssertEqual(staged.kind, direct.kind)
+        XCTAssertEqual(staged.summary, direct.summary)
+        XCTAssertEqual(staged.searchableText, direct.searchableText)
+        XCTAssertEqual(staged.byteCount, direct.byteCount)
+    }
+
+    func testOversizedCaptureDropsImagesAndKeepsTextRepresentations() throws {
+        let text = "Bounded caption"
+        let payload = ClipboardPayload(items: [
+            ClipboardPayloadItem(representations: [
+                ClipboardPayloadRepresentation(
+                    typeIdentifier: NSPasteboard.PasteboardType.string.rawValue,
+                    data: Data(text.utf8)
+                ),
+                ClipboardPayloadRepresentation(
+                    typeIdentifier: NSPasteboard.PasteboardType.png.rawValue,
+                    data: Data(count: 4_096)
+                )
+            ])
+        ])
+
+        let processed = try XCTUnwrap(ClipboardHistoryCodec.processedCapture(
+            from: payload,
+            maximumPayloadBytes: 1_024
+        ))
+        let retainedTypes = processed.payload.items.flatMap {
+            $0.representations.map(\.typeIdentifier)
+        }
+        XCTAssertEqual(retainedTypes, [NSPasteboard.PasteboardType.string.rawValue])
+        XCTAssertLessThanOrEqual(processed.payloadData.count, 1_024)
+        XCTAssertNil(processed.thumbnailData)
+
+        XCTAssertNil(ClipboardHistoryCodec.processedCapture(
+            from: payload,
+            maximumPayloadBytes: 8
+        ))
     }
 
     func testStoreDeduplicatesContentAndMovesItToTheTop() throws {
@@ -780,6 +898,13 @@ final class ClipboardHistoryTests: XCTestCase {
         view.subviews.flatMap { subview in
             let current = (subview as? NSTextField).map { [$0] } ?? []
             return current + descendantTextFields(in: subview)
+        }
+    }
+
+    private func descendantImageViews(in view: NSView) -> [NSImageView] {
+        view.subviews.flatMap { subview in
+            let current = (subview as? NSImageView).map { [$0] } ?? []
+            return current + descendantImageViews(in: subview)
         }
     }
 }
