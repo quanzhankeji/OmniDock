@@ -29,6 +29,7 @@ let package = Package(
                 .linkedFramework("FinderSync"),
                 .linkedFramework("ImageIO"),
                 .linkedFramework("IOKit"),
+                .linkedFramework("Security"),
                 .linkedFramework("ScreenCaptureKit")
             ]
         ),

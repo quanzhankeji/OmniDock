@@ -66,6 +66,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     private let clipboardHistoryService: ClipboardHistoryService?
     private let clipboardHistoryRegistrationStatus: ClipboardHistoryRegistrationStatus
     private let windowPlacementRegistrationStatus: WindowPlacementRegistrationStatusStore
+    private let applicationUpdateService: ApplicationUpdateService?
     private let presentationCoordinator: ApplicationPresentationCoordinator
     private let onPermissionGateRequired: (PermissionFeature) -> Void
     private let onOpenPermissionOnboarding: () -> Void
@@ -83,6 +84,9 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     private var finderExtensionSettingsView: FinderExtensionSettingsView?
     private var languagePopupButton: NSPopUpButton?
     private var appearancePopupButton: NSPopUpButton?
+    private var updateVersionField: NSTextField?
+    private var updateStatusField: NSTextField?
+    private var updateButton: NSButton?
     private var previewSwitch: NSSwitch?
     private var commandTabPreviewSwitch: NSSwitch?
     private var windowCycleSwitch: NSSwitch?
@@ -130,6 +134,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         clipboardHistoryService: ClipboardHistoryService? = nil,
         clipboardHistoryRegistrationStatus: ClipboardHistoryRegistrationStatus? = nil,
         windowPlacementRegistrationStatus: WindowPlacementRegistrationStatusStore? = nil,
+        applicationUpdateService: ApplicationUpdateService? = nil,
         onPermissionGateRequired: @escaping (PermissionFeature) -> Void,
         onOpenPermissionOnboarding: @escaping () -> Void = {}
     ) {
@@ -145,6 +150,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
                 ?? ClipboardHistoryRegistrationStatus(),
             windowPlacementRegistrationStatus: windowPlacementRegistrationStatus
                 ?? WindowPlacementRegistrationStatusStore(),
+            applicationUpdateService: applicationUpdateService,
             presentationCoordinator: ApplicationPresentationCoordinator(),
             onPermissionGateRequired: onPermissionGateRequired,
             onOpenPermissionOnboarding: onOpenPermissionOnboarding
@@ -160,6 +166,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         clipboardHistoryService: ClipboardHistoryService? = nil,
         clipboardHistoryRegistrationStatus: ClipboardHistoryRegistrationStatus? = nil,
         windowPlacementRegistrationStatus: WindowPlacementRegistrationStatusStore? = nil,
+        applicationUpdateService: ApplicationUpdateService? = nil,
         presentationCoordinator: ApplicationPresentationCoordinator,
         onPermissionGateRequired: @escaping (PermissionFeature) -> Void,
         onOpenPermissionOnboarding: @escaping () -> Void
@@ -174,6 +181,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             ?? ClipboardHistoryRegistrationStatus()
         self.windowPlacementRegistrationStatus = windowPlacementRegistrationStatus
             ?? WindowPlacementRegistrationStatusStore()
+        self.applicationUpdateService = applicationUpdateService
         self.presentationCoordinator = presentationCoordinator
         self.onPermissionGateRequired = onPermissionGateRequired
         self.onOpenPermissionOnboarding = onOpenPermissionOnboarding
@@ -220,6 +228,14 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             name: WindowPlacementRegistrationStatusStore.changedNotification,
             object: self.windowPlacementRegistrationStatus
         )
+        if let applicationUpdateService {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(applicationUpdateStatusChanged),
+                name: ApplicationUpdateService.changedNotification,
+                object: applicationUpdateService
+            )
+        }
     }
 
     public func show(tab: SettingsTab = .settings) {
@@ -263,6 +279,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         }
         refreshLanguageControl()
         refreshAppearanceControl()
+        refreshUpdateControls()
         previewSwitch?.state = settings.showDockPreviews ? .on : .off
         commandTabPreviewSwitch?.state = settings.showCommandTabPreviews ? .on : .off
         commandTabPreviewSwitch?.isEnabled = settings.showDockPreviews
@@ -311,6 +328,14 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
 
     @objc private func windowCycleRegistrationStatusChanged() {
         refresh()
+    }
+
+    @objc private func applicationUpdateStatusChanged() {
+        refreshUpdateControls()
+    }
+
+    @objc private func checkForUpdates(_ sender: NSButton) {
+        applicationUpdateService?.checkManually()
     }
 
     @objc private func changeLanguage(_ sender: NSPopUpButton) {
@@ -500,6 +525,85 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             return
         }
         popup.select(item)
+    }
+
+    private func refreshUpdateControls() {
+        guard let applicationUpdateService else {
+            return
+        }
+        let snapshot = applicationUpdateService.snapshot
+        updateVersionField?.stringValue = AppStrings.format(
+            .updateCurrentVersion,
+            snapshot.currentVersion,
+            snapshot.currentBuild
+        )
+
+        let statusText: String
+        let isBusy: Bool
+        switch snapshot.status {
+        case .idle:
+            statusText = AppStrings.text(.updateNeverChecked)
+            isBusy = false
+        case .checking:
+            statusText = AppStrings.text(.updateChecking)
+            isBusy = true
+        case .current:
+            statusText = AppStrings.text(.updateCurrentStatus)
+            isBusy = false
+        case let .available(version, _):
+            statusText = AppStrings.format(
+                .updateAvailableStatus,
+                version
+            )
+            isBusy = false
+        case let .downloading(progress):
+            statusText = AppStrings.format(
+                .updateDownloadProgress,
+                Int((progress * 100).rounded())
+            )
+            isBusy = true
+        case .installing:
+            statusText = AppStrings.text(.updateInstalling)
+            isBusy = true
+        case .failed:
+            statusText = AppStrings.text(.updateFailedStatus)
+            isBusy = false
+        }
+        updateStatusField?.stringValue = statusText
+        updateButton?.isEnabled = !isBusy
+    }
+
+    private func makeUpdateControl() -> NSView {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .trailing
+        stack.spacing = 4
+
+        let versionField = NSTextField(labelWithString: "")
+        versionField.font = .systemFont(ofSize: 12, weight: .medium)
+        versionField.textColor = .labelColor
+        versionField.alignment = .right
+        updateVersionField = versionField
+
+        let statusField = NSTextField(labelWithString: "")
+        statusField.font = .systemFont(ofSize: 11)
+        statusField.textColor = .secondaryLabelColor
+        statusField.alignment = .right
+        updateStatusField = statusField
+
+        let button = NSButton(
+            title: AppStrings.text(.updateCheckButton),
+            target: self,
+            action: #selector(checkForUpdates(_:))
+        )
+        button.bezelStyle = .rounded
+        updateButton = button
+
+        stack.addArrangedSubview(versionField)
+        stack.addArrangedSubview(statusField)
+        stack.addArrangedSubview(button)
+        refreshUpdateControls()
+        return stack
     }
 
     @objc private func toggleDockClick(_ sender: NSSwitch) {
@@ -802,6 +906,14 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             detail: AppStrings.text(.appearanceDetail),
             control: makeAppearanceControl()
         ))
+
+        if applicationUpdateService != nil {
+            settings.addArrangedSubview(makeSettingRow(
+                title: AppStrings.text(.updateVersionTitle),
+                detail: AppStrings.text(.updateVersionDetail),
+                control: makeUpdateControl()
+            ))
+        }
 
         let permissions = makeCorePermissionSection()
         stack.addArrangedSubview(permissions)

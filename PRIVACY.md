@@ -10,6 +10,8 @@ OmniDock does not collect, sell, share, or transmit personal data.
 
 OmniDock does not require an account, does not include analytics, does not use advertising SDKs, and does not send usage data to a server.
 
+Shortly after launch, OmniDock makes an asynchronous HTTPS request to GitHub's public Releases API to check for a newer version. The request contains no OmniDock settings, clipboard contents, file paths, window information, or usage history. Manual update checks use the same endpoint. If the user accepts an update, OmniDock downloads the selected release asset from GitHub.
+
 ## Local Data
 
 OmniDock stores settings locally on your Mac, including feature toggles, language and permission-onboarding state, and configured app shortcut bindings. Each shortcut binding stores the selected app's display name, bundle identifier, application URL or path, shortcut key code and modifiers, enabled state, and an internal binding identifier. This data remains on your device and is used only to provide the app's features.
@@ -34,7 +36,7 @@ These permissions are used locally for OmniDock features. OmniDock does not uplo
 
 OmniDock does not use third-party analytics, advertising, crash reporting, or tracking services.
 
-The public source repository may be hosted by a third party. That hosting provider has its own privacy practices for visitors who access the repository or submit issues.
+The public source repository and release downloads are hosted by GitHub. GitHub has its own privacy practices for API requests, downloads, repository visitors, and issue submissions.
 
 ## Changes
 

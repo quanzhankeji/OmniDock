@@ -42,6 +42,13 @@ Each release is split into two output directories:
 
 GitHub automatically adds source ZIP and TAR.GZ archives for the release tag. They do not need to be generated or uploaded by the release script.
 
+The in-app updater requires both public assets to use the exact semantic version:
+
+- `OmniDock-<version>.zip` is used for verified automatic replacement.
+- `OmniDock-<version>.dmg` is used when the current installation cannot be replaced in place.
+
+Both assets must finish uploading so GitHub exposes their SHA-256 digests through the Releases API. The ZIP must contain `OmniDock.app` at its root, with the Finder extension and update helper mode in the signed executable. Before publishing, verify that the tag, the app's marketing version, and both asset names match exactly. Missing assets, missing digests, a different signing requirement, or failed Gatekeeper assessment intentionally disables automatic replacement.
+
 Notarization can occasionally outlast the local wait period. The service continues processing after a timeout. Resume that exact release from the same source commit, version, build, license mode, and signing identity without uploading a duplicate:
 
 ```bash

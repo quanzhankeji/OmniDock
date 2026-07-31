@@ -72,6 +72,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.statusMenuController.show(tab: .windowPlacement)
         }
     )
+    private lazy var applicationUpdateService = ApplicationUpdateService(
+        presentationCoordinator: presentationCoordinator
+    )
     private lazy var statusMenuController = StatusMenuController(
         settings: settings,
         permissionService: permissionService,
@@ -81,6 +84,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         clipboardHistoryService: clipboardHistoryService,
         clipboardHistoryRegistrationStatus: clipboardHistoryRegistrationStatus,
         windowPlacementRegistrationStatus: windowPlacementRegistrationStatus,
+        applicationUpdateService: applicationUpdateService,
         presentationCoordinator: presentationCoordinator,
         onPermissionGateRequired: { [weak self] feature in
             self?.showPermissionOnboarding(for: feature)
@@ -136,6 +140,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         clipboardHistoryService.start()
         windowPlacementService.start()
         showPermissionOnboardingIfNeeded()
+        applicationUpdateService.start()
         schedulePermissionRecheckAfterLaunch()
     }
 
@@ -145,6 +150,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationWillTerminate(_ notification: Notification) {
         NotificationCenter.default.removeObserver(self)
+        applicationUpdateService.stop()
         finderFileCommandCoordinator.stop()
         windowPlacementService.stop()
         clipboardHistoryService.stop()
