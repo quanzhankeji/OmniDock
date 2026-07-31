@@ -45,6 +45,7 @@ final class FinderExtensionSettingsView: NSView {
     private(set) var selectedSection: FinderExtensionSettingsSection = .documentTypes
 
     private let settings: SettingsStore
+    private let quickActionPresentationLoader: FinderQuickActionPresentationLoader
     // Injectable because the default implementation queries Finder over XPC,
     // which unit tests must not depend on.
     private let isExtensionEnabledInFinder: () -> Bool
@@ -58,14 +59,23 @@ final class FinderExtensionSettingsView: NSView {
     private let addButton = FinderSettingsButton()
     private let itemRows = NSStackView()
     private var sectionButtons: [FinderExtensionSettingsSection: FinderSettingsSectionButton] = [:]
+    private var quickActionPresentationTask: Task<Void, Never>?
+    private var quickActionPresentations: [UUID: FinderQuickActionPresentation] = [:]
+    private var requestedQuickActionKeys: [FinderQuickActionPresentationKey]?
+    private var loadedQuickActionKeys: [FinderQuickActionPresentationKey]?
+    private var renderedDocumentPresets: [FinderDocumentPreset]?
+    private var renderedQuickActions: [FinderLaunchShortcut]?
 
     init(
         settings: SettingsStore,
+        quickActionPresentationLoader: FinderQuickActionPresentationLoader? = nil,
         isExtensionEnabledInFinder: @escaping () -> Bool = {
             FinderExtensionActivation.isEnabledInFinder
         }
     ) {
         self.settings = settings
+        self.quickActionPresentationLoader =
+            quickActionPresentationLoader ?? FinderQuickActionPresentationLoader()
         self.isExtensionEnabledInFinder = isExtensionEnabledInFinder
         super.init(frame: .zero)
         build()
@@ -85,7 +95,7 @@ final class FinderExtensionSettingsView: NSView {
             isExtensionEnabledInFinder: isExtensionEnabledInFinder()
         )
         updateSectionSelection()
-        rebuildDetail()
+        rebuildDetailIfNeeded()
     }
 
     func selectSection(_ section: FinderExtensionSettingsSection) {
@@ -94,7 +104,7 @@ final class FinderExtensionSettingsView: NSView {
         }
         selectedSection = section
         updateSectionSelection()
-        rebuildDetail()
+        rebuildDetail(force: true)
     }
 
     private func build() {
@@ -304,7 +314,25 @@ final class FinderExtensionSettingsView: NSView {
         return scrollView
     }
 
-    private func rebuildDetail() {
+    private func rebuildDetailIfNeeded() {
+        switch selectedSection {
+        case .documentTypes:
+            guard renderedDocumentPresets != settings.finderDocumentPresets else {
+                return
+            }
+        case .quickActions:
+            guard renderedQuickActions != settings.finderLaunchShortcuts else {
+                return
+            }
+        }
+        rebuildDetail(force: true)
+    }
+
+    private func rebuildDetail(force: Bool = false) {
+        guard force else {
+            rebuildDetailIfNeeded()
+            return
+        }
         detailTitle.stringValue = selectedSection.title
         detailDescription.stringValue = selectedSection.detail
         addButton.title = selectedSection == .documentTypes
@@ -315,11 +343,13 @@ final class FinderExtensionSettingsView: NSView {
         itemRows.removeAllArrangedSubviews()
         switch selectedSection {
         case .documentTypes:
+            renderedDocumentPresets = settings.finderDocumentPresets
             itemRows.addArrangedSubview(makeDocumentTypeHeader())
             for preset in settings.finderDocumentPresets {
                 itemRows.addArrangedSubview(makeDocumentTypeRow(preset))
             }
         case .quickActions:
+            renderedQuickActions = settings.finderLaunchShortcuts
             rebuildQuickActions()
         }
     }
@@ -447,6 +477,10 @@ final class FinderExtensionSettingsView: NSView {
     private func rebuildQuickActions() {
         let actions = settings.finderLaunchShortcuts
         guard !actions.isEmpty else {
+            quickActionPresentationTask?.cancel()
+            quickActionPresentationLoader.cancel()
+            requestedQuickActionKeys = nil
+            loadedQuickActionKeys = []
             let empty = NSTextField(labelWithString: AppStrings.text(.finderQuickOpenEmpty))
             empty.font = .systemFont(ofSize: 12)
             empty.textColor = .secondaryLabelColor
@@ -454,10 +488,16 @@ final class FinderExtensionSettingsView: NSView {
             return
         }
 
+        let keys = actions.map(FinderQuickActionPresentationKey.init)
+        let metadataIsReady = loadedQuickActionKeys == keys
         itemRows.addArrangedSubview(makeQuickActionHeader())
         for action in actions {
-            itemRows.addArrangedSubview(makeQuickActionRow(action))
+            itemRows.addArrangedSubview(makeQuickActionRow(
+                action,
+                metadataIsReady: metadataIsReady
+            ))
         }
+        scheduleQuickActionPresentationLoad(for: actions)
     }
 
     private func makeQuickActionHeader() -> NSView {
@@ -488,12 +528,16 @@ final class FinderExtensionSettingsView: NSView {
         return header
     }
 
-    private func makeQuickActionRow(_ shortcut: FinderLaunchShortcut) -> NSView {
+    private func makeQuickActionRow(
+        _ shortcut: FinderLaunchShortcut,
+        metadataIsReady: Bool
+    ) -> NSView {
         let row = FinderSettingsSurfaceView(style: .item)
         row.translatesAutoresizingMaskIntoConstraints = false
         row.heightAnchor.constraint(equalToConstant: 50).isActive = true
 
-        let applicationURL = resolvedApplicationURL(for: shortcut)
+        let presentation = quickActionPresentations[shortcut.id]
+        let applicationURL = presentation?.applicationURL
         let isAvailable = applicationURL != nil
         let enabled = NSButton(
             checkboxWithTitle: "",
@@ -501,7 +545,7 @@ final class FinderExtensionSettingsView: NSView {
             action: #selector(toggleQuickAction(_:))
         )
         enabled.state = shortcut.isEnabled ? .on : .off
-        enabled.isEnabled = isAvailable || shortcut.isEnabled
+        enabled.isEnabled = shortcut.isEnabled || (metadataIsReady && isAvailable)
         enabled.identifier = NSUserInterfaceItemIdentifier(shortcut.id.uuidString)
         enabled.setAccessibilityLabel(
             "\(AppStrings.text(.finderQuickOpenEnabled)): \(shortcut.displayName)"
@@ -509,11 +553,9 @@ final class FinderExtensionSettingsView: NSView {
         enabled.translatesAutoresizingMaskIntoConstraints = false
 
         let iconView = NSImageView()
-        iconView.image = applicationURL.map {
-            NSWorkspace.shared.icon(forFile: $0.path)
-        } ?? NSImage(named: NSImage.applicationIconName)
+        iconView.image = presentation?.icon ?? FinderQuickActionBrandIcon.image(for: shortcut)
         iconView.imageScaling = .scaleProportionallyUpOrDown
-        iconView.alphaValue = isAvailable ? 1 : 0.45
+        iconView.alphaValue = metadataIsReady && !isAvailable ? 0.55 : 1
         iconView.translatesAutoresizingMaskIntoConstraints = false
 
         let name = NSTextField(labelWithString: shortcut.displayName)
@@ -522,9 +564,12 @@ final class FinderExtensionSettingsView: NSView {
         name.lineBreakMode = .byTruncatingTail
         name.translatesAutoresizingMaskIntoConstraints = false
 
-        let status = NSTextField(labelWithString: AppStrings.text(
+        let statusKey: AppStringKey = if metadataIsReady {
             isAvailable ? .finderQuickOpenInstalled : .finderQuickOpenNotInstalled
-        ))
+        } else {
+            .finderQuickOpenLoading
+        }
+        let status = NSTextField(labelWithString: AppStrings.text(statusKey))
         status.font = .systemFont(ofSize: 11)
         status.textColor = .secondaryLabelColor
         status.alignment = .left
@@ -575,16 +620,39 @@ final class FinderExtensionSettingsView: NSView {
         return row
     }
 
-    private func resolvedApplicationURL(for shortcut: FinderLaunchShortcut) -> URL? {
-        FinderApplicationTargetResolver.resolve(
-            shortcut: shortcut,
-            fileExists: FileManager.default.fileExists(atPath:),
-            installedApplicationURL: { bundleIdentifier in
-                NSWorkspace.shared.urlForApplication(
-                    withBundleIdentifier: bundleIdentifier
-                )
+    private func scheduleQuickActionPresentationLoad(
+        for shortcuts: [FinderLaunchShortcut]
+    ) {
+        let keys = shortcuts.map(FinderQuickActionPresentationKey.init)
+        guard loadedQuickActionKeys != keys,
+              requestedQuickActionKeys != keys
+        else {
+            return
+        }
+
+        quickActionPresentationTask?.cancel()
+        quickActionPresentationLoader.cancel()
+        requestedQuickActionKeys = keys
+        quickActionPresentationTask = Task { [weak self] in
+            guard let self else {
+                return
             }
-        )
+            let presentations = await quickActionPresentationLoader.load(
+                shortcuts: shortcuts
+            )
+            guard !Task.isCancelled,
+                  requestedQuickActionKeys == keys
+            else {
+                return
+            }
+            quickActionPresentations = presentations
+            loadedQuickActionKeys = keys
+            requestedQuickActionKeys = nil
+            quickActionPresentationTask = nil
+            if selectedSection == .quickActions {
+                rebuildDetail(force: true)
+            }
+        }
     }
 
     private func makeSettingRow(title: String, detail: String, control: NSView) -> NSView {
@@ -659,19 +727,19 @@ final class FinderExtensionSettingsView: NSView {
             return
         }
         settings.setFinderDocumentPresetEnabled(id: id, isEnabled: sender.state == .on)
-        rebuildDetail()
+        rebuildDetail(force: true)
     }
 
     @objc private func toggleQuickAction(_ sender: NSButton) {
         guard let rawValue = sender.identifier?.rawValue,
               let id = UUID(uuidString: rawValue),
-              let shortcut = settings.finderLaunchShortcuts.first(where: { $0.id == id })
+              settings.finderLaunchShortcuts.contains(where: { $0.id == id })
         else {
             return
         }
 
         if sender.state == .on {
-            guard let applicationURL = resolvedApplicationURL(for: shortcut) else {
+            guard let applicationURL = quickActionPresentations[id]?.applicationURL else {
                 sender.state = .off
                 NSSound.beep()
                 return
@@ -684,7 +752,7 @@ final class FinderExtensionSettingsView: NSView {
         } else {
             settings.setFinderLaunchShortcutEnabled(id: id, isEnabled: false)
         }
-        rebuildDetail()
+        rebuildDetail(force: true)
     }
 
     @objc private func addItem(_ sender: NSButton) {

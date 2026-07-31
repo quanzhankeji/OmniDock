@@ -5,12 +5,12 @@ import XCTest
 @MainActor
 final class ApplicationMainMenuControllerTests: XCTestCase {
     override func tearDown() {
-        AppLocalization.configure(language: .system)
+        LocalizedResourceCatalog.configure(language: .system)
         super.tearDown()
     }
 
     func testEnglishMenuContainsStandardApplicationEditAndWindowCommands() throws {
-        AppLocalization.configure(language: .en)
+        LocalizedResourceCatalog.configure(language: .en)
         let menu = ApplicationMainMenuController(onOpenSettings: {}).makeMainMenu()
 
         XCTAssertEqual(menu.items.map(\.title), ["OmniDock", "Edit", "Window"])
@@ -41,7 +41,7 @@ final class ApplicationMainMenuControllerTests: XCTestCase {
     }
 
     func testChineseMenuUsesLocalizedTitlesAndSameKeyboardCommands() throws {
-        AppLocalization.configure(language: .zhHans)
+        LocalizedResourceCatalog.configure(language: .zhHans)
         let menu = ApplicationMainMenuController(onOpenSettings: {}).makeMainMenu()
 
         XCTAssertEqual(menu.items.map(\.title), ["OmniDock", "编辑", "窗口"])

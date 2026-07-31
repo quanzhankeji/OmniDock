@@ -533,14 +533,14 @@ final class WindowPlacementCommandRowView: NSView {
 
     private let selectionButton = WindowPlacementFirstClickButton()
     private let enabledSwitch = WindowPlacementFirstClickSwitch()
+    private let isSelected: Bool
 
     init(command: WindowPlacementCommand, title: String, isSelected: Bool) {
+        self.isSelected = isSelected
         super.init(frame: .zero)
         wantsLayer = true
         layer?.cornerRadius = 5
-        layer?.backgroundColor = isSelected
-            ? NSColor.selectedContentBackgroundColor.withAlphaComponent(0.22).cgColor
-            : NSColor.clear.cgColor
+        updateAppearance()
 
         selectionButton.title = title
         selectionButton.image = WindowPlacementGlyph.image(for: command)
@@ -585,12 +585,24 @@ final class WindowPlacementCommandRowView: NSView {
         onSelect?()
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
     @objc private func select(_ sender: NSButton) {
         onSelect?()
     }
 
     @objc private func toggle(_ sender: NSSwitch) {
         onToggle?(sender.state == .on)
+    }
+
+    private func updateAppearance() {
+        let palette = OmniDockTheme.palette(for: effectiveAppearance)
+        layer?.backgroundColor = isSelected
+            ? palette.selection.withAlphaComponent(0.22).cgColor
+            : NSColor.clear.cgColor
     }
 }
 
@@ -671,7 +683,9 @@ final class WindowPlacementGridView: NSControl {
         button.isBordered = false
         button.focusRingType = .none
         button.wantsLayer = true
-        button.layer?.backgroundColor = NSColor.secondaryLabelColor.cgColor
+        button.layer?.backgroundColor = OmniDockTheme.palette(
+            for: effectiveAppearance
+        ).secondaryText.cgColor
         button.layer?.cornerRadius = 10
         button.toolTip = AppStrings.text(.windowPlacementNoActivationRegion)
         button.target = self
@@ -723,6 +737,12 @@ final class WindowPlacementGridView: NSControl {
         }
 
         drawSelectionFrame()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateRemovalControlAppearance()
+        needsDisplay = true
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -855,13 +875,14 @@ final class WindowPlacementGridView: NSControl {
     }
 
     private func cellColor(selected: Bool, occupied: Bool) -> NSColor {
+        let palette = OmniDockTheme.palette(for: effectiveAppearance)
         if selected {
-            return .controlAccentColor
+            return palette.accent
         }
         if occupied {
-            return NSColor.secondaryLabelColor.withAlphaComponent(0.62)
+            return palette.secondaryText.withAlphaComponent(0.62)
         }
-        return .quaternaryLabelColor
+        return palette.tertiaryText.withAlphaComponent(0.28)
     }
 
     private func drawSelectionFrame() {
@@ -871,7 +892,8 @@ final class WindowPlacementGridView: NSControl {
             return
         }
         let outline = frame.insetBy(dx: 1, dy: 1)
-        NSColor.controlAccentColor.setStroke()
+        let palette = OmniDockTheme.palette(for: effectiveAppearance)
+        palette.accent.setStroke()
         let path = NSBezierPath(rect: outline)
         path.lineWidth = 2
         path.stroke()
@@ -883,13 +905,22 @@ final class WindowPlacementGridView: NSControl {
                 width: 6,
                 height: 6
             )
-            NSColor.controlBackgroundColor.setFill()
-            NSColor.controlAccentColor.setStroke()
+            palette.surface.setFill()
+            palette.accent.setStroke()
             let handlePath = NSBezierPath(ovalIn: handle)
             handlePath.lineWidth = 1.5
             handlePath.fill()
             handlePath.stroke()
         }
+    }
+
+    private func updateRemovalControlAppearance() {
+        guard let button = subviews.compactMap({ $0 as? NSButton }).first else {
+            return
+        }
+        button.layer?.backgroundColor = OmniDockTheme.palette(
+            for: effectiveAppearance
+        ).secondaryText.cgColor
     }
 
     private var selectedFrame: CGRect? {

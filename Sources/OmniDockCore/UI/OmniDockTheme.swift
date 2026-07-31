@@ -62,6 +62,16 @@ public enum OmniDockTheme {
     }
 
     @MainActor
+    public static func applicationPalette(
+        appearance: AppAppearance? = nil
+    ) -> OmniDockThemePalette {
+        palette(
+            for: NSApp.effectiveAppearance,
+            appearance: appearance
+        )
+    }
+
+    @MainActor
     public static func applyCurrentAppearance(to window: NSWindow) {
         window.appearance = appearance.forcedNSAppearance
     }
@@ -82,68 +92,109 @@ public enum OmniDockTheme {
     }
 
     private static func makePalette(for appearance: AppAppearance.Resolved) -> OmniDockThemePalette {
-        switch appearance {
-        case .light:
-            OmniDockThemePalette(
-                appearance: .light,
-                canvas: color(0.97, 0.975, 0.98),
-                surface: color(1, 1, 1),
-                raisedSurface: color(0.94, 0.95, 0.97),
-                interactiveSurface: color(0.89, 0.90, 0.92),
-                primaryText: color(0.11, 0.11, 0.12),
-                secondaryText: color(0.39, 0.40, 0.42),
-                tertiaryText: color(0.55, 0.56, 0.58),
-                disabledText: color(0.60, 0.61, 0.63),
-                separator: color(0.79, 0.80, 0.82),
-                accent: color(0, 0.48, 1),
-                selection: color(0, 0.48, 1),
-                success: color(0.18, 0.72, 0.35),
-                neutral: color(0.56, 0.57, 0.60),
-                destructive: color(1, 0.36, 0.32),
-                destructivePressed: color(0.82, 0.14, 0.12),
-                destructiveBorder: color(0.70, 0.08, 0.07, 0.85),
-                destructiveGlyph: color(0.42, 0.04, 0.03, 0.9),
-                quietAction: color(0.72, 0.72, 0.74),
-                quietActionPressed: color(0.56, 0.56, 0.58),
-                quietActionBorder: color(0.48, 0.48, 0.50, 0.78),
-                quietActionGlyph: color(0.18, 0.18, 0.20, 0.9),
-                overlay: color(0, 0, 0, 0.78)
-            )
-        case .dark:
-            OmniDockThemePalette(
-                appearance: .dark,
-                canvas: color(0.11, 0.11, 0.12),
-                surface: color(0.15, 0.15, 0.16),
-                raisedSurface: color(0.19, 0.19, 0.20),
-                interactiveSurface: color(0.25, 0.25, 0.27),
-                primaryText: color(0.96, 0.96, 0.97),
-                secondaryText: color(0.72, 0.72, 0.75),
-                tertiaryText: color(0.55, 0.55, 0.58),
-                disabledText: color(0.42, 0.42, 0.45),
-                separator: color(0.31, 0.31, 0.33),
-                accent: color(0.04, 0.52, 1),
-                selection: color(0.04, 0.52, 1),
-                success: color(0.19, 0.82, 0.39),
-                neutral: color(0.56, 0.56, 0.59),
-                destructive: color(1, 0.41, 0.38),
-                destructivePressed: color(0.77, 0.17, 0.15),
-                destructiveBorder: color(0.93, 0.27, 0.24, 0.9),
-                destructiveGlyph: color(0.25, 0.03, 0.03, 0.95),
-                quietAction: color(0.47, 0.47, 0.50),
-                quietActionPressed: color(0.34, 0.34, 0.37),
-                quietActionBorder: color(0.64, 0.64, 0.67, 0.75),
-                quietActionGlyph: color(0.96, 0.96, 0.97, 0.92),
-                overlay: color(0, 0, 0, 0.82)
-            )
-        }
+        let canvas = resolved(.windowBackgroundColor, for: appearance)
+        let surface = resolved(.controlBackgroundColor, for: appearance)
+        // The second alternating content color is the native subtle row/card
+        // background. underPageBackgroundColor is intentionally much darker
+        // in Aqua and is not suitable for foreground settings surfaces.
+        let raisedSurface = resolved(
+            NSColor.alternatingContentBackgroundColors[1],
+            for: appearance
+        )
+        let interactiveSurface = resolved(
+            .unemphasizedSelectedContentBackgroundColor,
+            for: appearance
+        )
+        let primaryText = resolved(.labelColor, for: appearance)
+        let secondaryText = resolved(.secondaryLabelColor, for: appearance)
+        let tertiaryText = resolved(.tertiaryLabelColor, for: appearance)
+        let disabledText = resolved(.disabledControlTextColor, for: appearance)
+        let separator = resolved(.separatorColor, for: appearance)
+        let accent = resolved(.controlAccentColor, for: appearance)
+        let selection = resolved(.selectedContentBackgroundColor, for: appearance)
+        let success = resolved(.systemGreen, for: appearance)
+        let neutral = resolved(.systemGray, for: appearance)
+        let destructive = resolved(.systemRed, for: appearance)
+        let quietAction = resolved(.systemGray, for: appearance)
+
+        return OmniDockThemePalette(
+            appearance: appearance,
+            canvas: canvas,
+            surface: surface,
+            raisedSurface: raisedSurface,
+            interactiveSurface: interactiveSurface,
+            primaryText: primaryText,
+            secondaryText: secondaryText,
+            tertiaryText: tertiaryText,
+            disabledText: disabledText,
+            separator: separator,
+            accent: accent,
+            selection: selection,
+            success: success,
+            neutral: neutral,
+            destructive: destructive,
+            destructivePressed: blended(destructive, with: primaryText, fraction: 0.18),
+            destructiveBorder: blended(destructive, with: primaryText, fraction: 0.28)
+                .withAlphaComponent(0.85),
+            destructiveGlyph: primaryText.withAlphaComponent(0.92),
+            quietAction: quietAction,
+            quietActionPressed: blended(quietAction, with: primaryText, fraction: 0.18),
+            quietActionBorder: blended(quietAction, with: primaryText, fraction: 0.24)
+                .withAlphaComponent(0.78),
+            quietActionGlyph: primaryText.withAlphaComponent(0.92),
+            overlay: surface.withAlphaComponent(0.94)
+        )
     }
 
-    private static func color(
-        _ red: CGFloat,
-        _ green: CGFloat,
-        _ blue: CGFloat,
-        _ alpha: CGFloat = 1
+    private static func resolved(
+        _ color: NSColor,
+        for appearance: AppAppearance.Resolved
     ) -> NSColor {
-        NSColor(srgbRed: red, green: green, blue: blue, alpha: alpha)
+        guard let drawingAppearance = NSAppearance(
+            named: appearance == .dark ? .darkAqua : .aqua
+        ) else {
+            return color
+        }
+
+        var resolvedColor = color
+        drawingAppearance.performAsCurrentDrawingAppearance {
+            if let concreteColor = NSColor(cgColor: color.cgColor) {
+                resolvedColor = concreteColor
+            }
+        }
+        return resolvedColor
+    }
+
+    private static func blended(
+        _ color: NSColor,
+        with otherColor: NSColor,
+        fraction: CGFloat
+    ) -> NSColor {
+        color.blended(withFraction: fraction, of: otherColor) ?? color
+    }
+}
+
+final class OmniDockWindowBackgroundView: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        refreshTheme()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        wantsLayer = true
+        refreshTheme()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshTheme()
+    }
+
+    func refreshTheme() {
+        layer?.backgroundColor = OmniDockTheme.palette(
+            for: effectiveAppearance
+        ).canvas.cgColor
     }
 }

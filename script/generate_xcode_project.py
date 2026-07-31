@@ -468,6 +468,11 @@ for localization_dir in "${SRCROOT}"/Sources/OmniDockCore/Resources/*.lproj; do
   /usr/bin/ditto "$localization_dir" "${resources_dir}/$(basename "$localization_dir")"
 done
 
+quick_action_icons="${SRCROOT}/Sources/OmniDockCore/Resources/FinderQuickActionIcons"
+if [[ -d "$quick_action_icons" ]]; then
+  /usr/bin/ditto "$quick_action_icons" "${resources_dir}/FinderQuickActionIcons"
+fi
+
 /usr/bin/xattr -dr com.apple.quarantine "$resources_dir" 2>/dev/null || true
 /usr/bin/xattr -cr "${TARGET_BUILD_DIR}/${WRAPPER_NAME}" 2>/dev/null || true
 """

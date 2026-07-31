@@ -236,30 +236,22 @@ final class WindowPlacementConfigurationTests: XCTestCase {
         )
     }
 
-    func testPaletteGeometryPlacesArrowTipAtGreenButtonLowerEdge() {
-        let anchor = CGRect(x: 600, y: 850, width: 16, height: 16)
-        let panelSize = CGSize(width: 240, height: 400)
-        let visibleFrame = CGRect(x: 0, y: 0, width: 1_200, height: 900)
-
-        let origin = WindowPlacementPaletteGeometry.origin(
-            panelSize: panelSize,
-            anchor: anchor,
-            visibleFrame: visibleFrame
+    @MainActor
+    func testHotkeyRowPreservesNativeDarkSurfaceOpacity() {
+        let binding = AppHotkeyBinding(
+            appName: "Example",
+            bundleURLString: "file:///Applications/Example.app",
+            bundleIdentifier: "com.example.app"
         )
+        let row = AppHotkeyRowView(binding: binding, warning: nil)
+        row.appearance = NSAppearance(named: .darkAqua)
 
-        XCTAssertEqual(origin.x, 578)
-        XCTAssertEqual(origin.y, 451)
         XCTAssertEqual(
-            origin.y + panelSize.height,
-            anchor.minY + WindowPlacementPaletteGeometry.anchorOverlap
-        )
-        XCTAssertEqual(
-            WindowPlacementPaletteGeometry.arrowCenterX(
-                anchor: anchor,
-                panelOrigin: origin,
-                panelWidth: panelSize.width
-            ),
-            WindowPlacementPaletteGeometry.preferredArrowCenterX
+            row.layer?.backgroundColor,
+            OmniDockTheme.palette(
+                for: NSAppearance(named: .darkAqua),
+                appearance: .system
+            ).raisedSurface.cgColor
         )
     }
 
@@ -270,57 +262,6 @@ final class WindowPlacementConfigurationTests: XCTestCase {
         view.subviews.flatMap { child in
             (child as? T).map { [$0] } ?? descendants(of: child, matching: type)
         }
-    }
-
-
-    func testPaletteGeometryKeepsBubbleInsideOffsetDisplay() {
-        let anchor = CGRect(x: -1_435, y: 80, width: 16, height: 16)
-        let panelSize = CGSize(width: 240, height: 400)
-        let visibleFrame = CGRect(x: -1_440, y: -200, width: 1_440, height: 900)
-
-        let origin = WindowPlacementPaletteGeometry.origin(
-            panelSize: panelSize,
-            anchor: anchor,
-            visibleFrame: visibleFrame
-        )
-
-        XCTAssertEqual(origin.x, visibleFrame.minX)
-        XCTAssertGreaterThanOrEqual(origin.y, visibleFrame.minY)
-        XCTAssertLessThanOrEqual(
-            origin.y + panelSize.height,
-            visibleFrame.maxY
-        )
-        XCTAssertEqual(
-            WindowPlacementPaletteGeometry.arrowCenterX(
-                anchor: anchor,
-                panelOrigin: origin,
-                panelWidth: panelSize.width
-            ),
-            WindowPlacementPaletteGeometry.arrowHorizontalInset
-        )
-    }
-
-    func testBubbleShapeUsesOneContinuousOutline() {
-        let path = WindowPlacementBubbleShape.path(
-            in: CGRect(x: 0, y: 0, width: 260, height: 420),
-            arrowCenterX: 100
-        )
-        var moveCount = 0
-        var closeCount = 0
-
-        path.applyWithBlock { element in
-            switch element.pointee.type {
-            case .moveToPoint:
-                moveCount += 1
-            case .closeSubpath:
-                closeCount += 1
-            default:
-                break
-            }
-        }
-
-        XCTAssertEqual(moveCount, 1)
-        XCTAssertEqual(closeCount, 1)
     }
 
     func testBuiltInRegionsUseExpectedFractions() {
@@ -338,6 +279,21 @@ final class WindowPlacementConfigurationTests: XCTestCase {
             BuiltInWindowPlacement.rightTwoThirds.defaultRegion?.frame(in: frame),
             CGRect(x: -960, y: 30, width: 960, height: 900)
         )
+    }
+
+    @MainActor
+    func testWindowPlacementMenuUsesNativePopoverPresentation() {
+        _ = NSApplication.shared
+        let content = NSView()
+        let popover = WindowPlacementPopoverFactory.make(
+            contentView: content,
+            contentSize: NSSize(width: 240, height: 320)
+        )
+
+        XCTAssertEqual(popover.behavior, .applicationDefined)
+        XCTAssertFalse(popover.animates)
+        XCTAssertEqual(popover.contentSize, NSSize(width: 240, height: 320))
+        XCTAssertTrue(popover.contentViewController?.view === content)
     }
 
     func testGridSelectionNormalizesReverseDrag() {
@@ -812,19 +768,19 @@ final class WindowPlacementConfigurationTests: XCTestCase {
 
     func testWindowPlacementLabelsAreLocalized() {
         XCTAssertEqual(
-            AppLocalization.text(.tabWindowPlacement, language: .en),
+            LocalizedResourceCatalog.text(.tabWindowPlacement, language: .en),
             "Window Layout"
         )
         XCTAssertEqual(
-            AppLocalization.text(.tabWindowPlacement, language: .zhHans),
+            LocalizedResourceCatalog.text(.tabWindowPlacement, language: .zhHans),
             "窗口调整"
         )
         XCTAssertEqual(
-            AppLocalization.text(.windowPlacementLeftHalf, language: .en),
+            LocalizedResourceCatalog.text(.windowPlacementLeftHalf, language: .en),
             "Left"
         )
         XCTAssertEqual(
-            AppLocalization.text(.windowPlacementLeftHalf, language: .zhHans),
+            LocalizedResourceCatalog.text(.windowPlacementLeftHalf, language: .zhHans),
             "左侧"
         )
     }

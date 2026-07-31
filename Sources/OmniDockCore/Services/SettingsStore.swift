@@ -193,7 +193,7 @@ public final class SettingsStore {
             Key.permissionOnboardingCompleted.rawValue: false,
             Key.permissionOnboardingSkipped.rawValue: false
         ])
-        AppLocalization.configure(language: appLanguage)
+        LocalizedResourceCatalog.configure(language: appLanguage)
         OmniDockTheme.configure(appearance: appAppearance)
         syncFinderExtensionSettings()
     }
@@ -411,7 +411,7 @@ public final class SettingsStore {
         }
         set {
             defaults.set(newValue.rawValue, forKey: Key.appLanguage.rawValue)
-            AppLocalization.configure(language: newValue)
+            LocalizedResourceCatalog.configure(language: newValue)
             syncFinderExtensionSettings()
             postChange(.language)
         }

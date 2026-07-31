@@ -257,7 +257,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             applyTheme(to: window)
         }
         if let window,
-           renderedLanguage != AppLocalization.currentResolvedLanguage {
+           renderedLanguage != LocalizedResourceCatalog.currentResolvedLanguage {
             hotkeyWarnings.removeAll()
             rebuildContentView(in: window)
         }
@@ -724,10 +724,8 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     }
 
     private func makeContentView() -> NSView {
-        renderedLanguage = AppLocalization.currentResolvedLanguage
-        let content = NSView()
-        content.wantsLayer = true
-        content.layer?.backgroundColor = OmniDockTheme.palette().canvas.cgColor
+        renderedLanguage = LocalizedResourceCatalog.currentResolvedLanguage
+        let content = OmniDockWindowBackgroundView()
 
         let segmentedControl = NSSegmentedControl(
             labels: SettingsTab.allCases.map(\.localizedTitle),

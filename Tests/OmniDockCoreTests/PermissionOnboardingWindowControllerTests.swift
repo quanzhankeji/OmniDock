@@ -100,19 +100,19 @@ final class PermissionOnboardingWindowControllerTests: XCTestCase {
         harness.controller.show(mode: .review)
         let contentView = try XCTUnwrap(harness.controller.window?.contentView)
         XCTAssertTrue(textValues(in: contentView).contains(
-            AppLocalization.text(.onboardingTitle, language: .en)
+            LocalizedResourceCatalog.text(.onboardingTitle, language: .en)
         ))
 
         harness.settings.appLanguage = .zhHans
         let updatedValues = textValues(in: contentView)
         XCTAssertTrue(updatedValues.contains(
-            AppLocalization.text(.onboardingTitle, language: .zhHans)
+            LocalizedResourceCatalog.text(.onboardingTitle, language: .zhHans)
         ))
         XCTAssertTrue(updatedValues.contains(
-            AppLocalization.text(.onboardingSubtitle, language: .zhHans)
+            LocalizedResourceCatalog.text(.onboardingSubtitle, language: .zhHans)
         ))
         XCTAssertTrue(updatedValues.contains(
-            AppLocalization.text(.onboardingPrivacyNote, language: .zhHans)
+            LocalizedResourceCatalog.text(.onboardingPrivacyNote, language: .zhHans)
         ))
     }
 

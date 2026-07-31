@@ -20,7 +20,6 @@
 		7E7DCB0663A643F5C1AA2C49 /* WindowPlacementConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 611ABD4166063837BFE97BB4 /* WindowPlacementConfiguration.swift */; };
 		18EE1F35D72CF68A1A53A338 /* AppHotkeyRegistrationStatusStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19338243A57ECECAE299BE22 /* AppHotkeyRegistrationStatusStore.swift */; };
 		70D244A63BD462F048EF0080 /* AppHotkeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 241193355ECE5B8B4B706807 /* AppHotkeyService.swift */; };
-		215983A2C66D3BE46DB11D4E /* AppLocalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = AACED853BFBA6434A2140D8F /* AppLocalization.swift */; };
 		4AC80169CFFF36CDE4D25817 /* ApplicationPresentationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E10EED6D6A911629989ECC7 /* ApplicationPresentationCoordinator.swift */; };
 		89182724F61B136567EF01D2 /* CGWindowDictionary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E00C378893CB08991CC38B /* CGWindowDictionary.swift */; };
 		EB24CA44E5E925CBAFA9B9D2 /* ClipboardHistoryCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACDDD18EF72F718165F4AEE /* ClipboardHistoryCodec.swift */; };
@@ -42,6 +41,7 @@
 		92136C573348886F35F18726 /* HotkeyShortcutPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D765A2CAC69408FD0D02DE75 /* HotkeyShortcutPolicy.swift */; };
 		5E50495DFD801F094898630B /* IndependentWindowIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30D41B0DCA3A55E6E103BA1 /* IndependentWindowIdentity.swift */; };
 		8FECE3B5E53FD8392CB4303F /* LivePreviewCaptureSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAFFA2BCCC66961497DCE50 /* LivePreviewCaptureSession.swift */; };
+		340A3DD220433F342BECFA72 /* LocalizedResourceCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3033C62D64E624BFF8B5B231 /* LocalizedResourceCatalog.swift */; };
 		EBCE645D836C38D5EF7CFB4A /* PermissionFeatureGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10437BC999C1A1308759C9D7 /* PermissionFeatureGate.swift */; };
 		8FBBEBF4FD11BC90225961B7 /* PermissionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EB156D36C57534D57A0C3C7 /* PermissionService.swift */; };
 		3CA3D2CDF2ACB367DB6E60FF /* PreviewCaptureConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCEC50E0969F4AB6AC97D390 /* PreviewCaptureConfiguration.swift */; };
@@ -79,6 +79,7 @@
 		BB936BB462FC57F1A89BEC22 /* ClipboardPaletteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 105E8920C60506E064E693A9 /* ClipboardPaletteController.swift */; };
 		72F6A12BB3E197ABCC29EEE3 /* FinderDocumentTypeFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B8EB8BBB990A69F07FBA8AC /* FinderDocumentTypeFormView.swift */; };
 		F78604FBDFAE2DF025CAAB33 /* FinderExtensionSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A101B972CD5E545A1B5B7477 /* FinderExtensionSettingsView.swift */; };
+		22D3D498E790C8FC1E0BA6A1 /* FinderQuickActionPresentationLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAA126003771B0322301B5D4 /* FinderQuickActionPresentationLoader.swift */; };
 		4B25A6E2CCE956FCA6803215 /* OmniDockTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B27BA2F9693182C1AD68617 /* OmniDockTheme.swift */; };
 		2E5446BE6F842A50575D5658 /* PermissionOnboardingWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE1FB8E57F55CD535BC669CD /* PermissionOnboardingWindowController.swift */; };
 		A08FE851F96BDB9A4AADBFDC /* PreviewLayoutCalculator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1AF691FED19F9D41F836BBF /* PreviewLayoutCalculator.swift */; };
@@ -130,7 +131,6 @@
 		611ABD4166063837BFE97BB4 /* WindowPlacementConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Models/WindowPlacementConfiguration.swift"; sourceTree = SOURCE_ROOT; };
 		19338243A57ECECAE299BE22 /* AppHotkeyRegistrationStatusStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/AppHotkeyRegistrationStatusStore.swift"; sourceTree = SOURCE_ROOT; };
 		241193355ECE5B8B4B706807 /* AppHotkeyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/AppHotkeyService.swift"; sourceTree = SOURCE_ROOT; };
-		AACED853BFBA6434A2140D8F /* AppLocalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/AppLocalization.swift"; sourceTree = SOURCE_ROOT; };
 		2E10EED6D6A911629989ECC7 /* ApplicationPresentationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/ApplicationPresentationCoordinator.swift"; sourceTree = SOURCE_ROOT; };
 		27E00C378893CB08991CC38B /* CGWindowDictionary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/CGWindowDictionary.swift"; sourceTree = SOURCE_ROOT; };
 		4ACDDD18EF72F718165F4AEE /* ClipboardHistoryCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/ClipboardHistoryCodec.swift"; sourceTree = SOURCE_ROOT; };
@@ -152,6 +152,7 @@
 		D765A2CAC69408FD0D02DE75 /* HotkeyShortcutPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/HotkeyShortcutPolicy.swift"; sourceTree = SOURCE_ROOT; };
 		D30D41B0DCA3A55E6E103BA1 /* IndependentWindowIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/IndependentWindowIdentity.swift"; sourceTree = SOURCE_ROOT; };
 		2AAFFA2BCCC66961497DCE50 /* LivePreviewCaptureSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/LivePreviewCaptureSession.swift"; sourceTree = SOURCE_ROOT; };
+		3033C62D64E624BFF8B5B231 /* LocalizedResourceCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/LocalizedResourceCatalog.swift"; sourceTree = SOURCE_ROOT; };
 		10437BC999C1A1308759C9D7 /* PermissionFeatureGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/PermissionFeatureGate.swift"; sourceTree = SOURCE_ROOT; };
 		8EB156D36C57534D57A0C3C7 /* PermissionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/PermissionService.swift"; sourceTree = SOURCE_ROOT; };
 		CCEC50E0969F4AB6AC97D390 /* PreviewCaptureConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/PreviewCaptureConfiguration.swift"; sourceTree = SOURCE_ROOT; };
@@ -189,6 +190,7 @@
 		105E8920C60506E064E693A9 /* ClipboardPaletteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/ClipboardPaletteController.swift"; sourceTree = SOURCE_ROOT; };
 		2B8EB8BBB990A69F07FBA8AC /* FinderDocumentTypeFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/FinderDocumentTypeFormView.swift"; sourceTree = SOURCE_ROOT; };
 		A101B972CD5E545A1B5B7477 /* FinderExtensionSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/FinderExtensionSettingsView.swift"; sourceTree = SOURCE_ROOT; };
+		FAA126003771B0322301B5D4 /* FinderQuickActionPresentationLoader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/FinderQuickActionPresentationLoader.swift"; sourceTree = SOURCE_ROOT; };
 		5B27BA2F9693182C1AD68617 /* OmniDockTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/OmniDockTheme.swift"; sourceTree = SOURCE_ROOT; };
 		DE1FB8E57F55CD535BC669CD /* PermissionOnboardingWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/PermissionOnboardingWindowController.swift"; sourceTree = SOURCE_ROOT; };
 		F1AF691FED19F9D41F836BBF /* PreviewLayoutCalculator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/PreviewLayoutCalculator.swift"; sourceTree = SOURCE_ROOT; };
@@ -209,6 +211,32 @@
 		D1347A9D29A0026DA7D553F5 /* OmniDockFinderSync.entitlements */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Resources/OmniDockFinderSync.entitlements"; sourceTree = SOURCE_ROOT; };
 		E20CF96D82C877A23B78D06F /* OmniDockFinderSync-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Resources/OmniDockFinderSync-Info.plist"; sourceTree = SOURCE_ROOT; };
 		6327A1005FF0B783151E530B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = "Resources/PrivacyInfo.xcprivacy"; sourceTree = SOURCE_ROOT; };
+		0274BDF3538D909E4826C062 /* ATTRIBUTION.txt */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/ATTRIBUTION.txt"; sourceTree = SOURCE_ROOT; };
+		51F668B1CADE9739DA2F28FB /* abnerworks.Typora.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/abnerworks.Typora.png"; sourceTree = SOURCE_ROOT; };
+		A84B7E964553B924F2AB99F4 /* co.zeit.hyper.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/co.zeit.hyper.png"; sourceTree = SOURCE_ROOT; };
+		AE7ADC6063EA8520E2A77833 /* com.coteditor.CotEditor.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/com.coteditor.CotEditor.png"; sourceTree = SOURCE_ROOT; };
+		F8D2957778F7C6B3E09E477A /* com.github.marktext.marktext.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/com.github.marktext.marktext.png"; sourceTree = SOURCE_ROOT; };
+		9F1F48F9B01D09315C70003D /* com.google.android.studio.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/com.google.android.studio.png"; sourceTree = SOURCE_ROOT; };
+		E316318FD134FFAD72CDDBCB /* com.googlecode.iterm2.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/com.googlecode.iterm2.png"; sourceTree = SOURCE_ROOT; };
+		1FC9829BAEE5EDD64795C597 /* com.jetbrains.AppCode.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/com.jetbrains.AppCode.png"; sourceTree = SOURCE_ROOT; };
+		3E1270B30DA3B2810B021B91 /* com.jetbrains.CLion.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/com.jetbrains.CLion.png"; sourceTree = SOURCE_ROOT; };
+		FF0157EAAA0CC618D544DBA1 /* com.jetbrains.PhpStorm.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/com.jetbrains.PhpStorm.png"; sourceTree = SOURCE_ROOT; };
+		929B7BA1A2CF2355E8AF56AE /* com.jetbrains.WebStorm.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/com.jetbrains.WebStorm.png"; sourceTree = SOURCE_ROOT; };
+		BF3FFF9322EB0555B15158D8 /* com.jetbrains.datagrip.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/com.jetbrains.datagrip.png"; sourceTree = SOURCE_ROOT; };
+		A1768B020FB046D05C918F2E /* com.jetbrains.goland.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/com.jetbrains.goland.png"; sourceTree = SOURCE_ROOT; };
+		951AC21E8E82C029B4FACDDF /* com.jetbrains.intellij.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/com.jetbrains.intellij.png"; sourceTree = SOURCE_ROOT; };
+		57F3A36616AA75F23610E606 /* com.jetbrains.pycharm.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/com.jetbrains.pycharm.png"; sourceTree = SOURCE_ROOT; };
+		A80CCE04E5BFFB0759C96EDE /* com.jetbrains.rider.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/com.jetbrains.rider.png"; sourceTree = SOURCE_ROOT; };
+		0A67B00199E7F030432F199B /* com.jetbrains.rubymine.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/com.jetbrains.rubymine.png"; sourceTree = SOURCE_ROOT; };
+		660B176EEA00A7A1C9A45D75 /* com.microsoft.VSCode.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/com.microsoft.VSCode.png"; sourceTree = SOURCE_ROOT; };
+		F7DF93F3638ECC58BB506D88 /* com.microsoft.visual-studio.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/com.microsoft.visual-studio.png"; sourceTree = SOURCE_ROOT; };
+		0ADB1350D63205FBAEFC2A1B /* com.sublimemerge.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/com.sublimemerge.png"; sourceTree = SOURCE_ROOT; };
+		E3A978C3F525DA8C6A3554A2 /* com.sublimetext.4.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/com.sublimetext.4.png"; sourceTree = SOURCE_ROOT; };
+		180505F6772C02F7222BBB09 /* dev.warp.Warp-Stable.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/dev.warp.Warp-Stable.png"; sourceTree = SOURCE_ROOT; };
+		9A8A9308706AC64EB3B09CA3 /* io.dcloud.HBuilder.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/io.dcloud.HBuilder.png"; sourceTree = SOURCE_ROOT; };
+		BABE94BE1108E944D51E667A /* md.obsidian.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/md.obsidian.png"; sourceTree = SOURCE_ROOT; };
+		680622409848B57D39BEF90F /* org.gnu.Emacs.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/org.gnu.Emacs.png"; sourceTree = SOURCE_ROOT; };
+		DEB5E805B425B6B71EAF4706 /* org.tabby.png */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Sources/OmniDockCore/Resources/FinderQuickActionIcons/org.tabby.png"; sourceTree = SOURCE_ROOT; };
 		C4C6323CDCF11527E8BABD52 /* AppStrings.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = "Sources/OmniDockCore/Resources/en.lproj/AppStrings.strings"; sourceTree = SOURCE_ROOT; };
 		E70ECD50972126886EDD1D30 /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = "Sources/OmniDockCore/Resources/en.lproj/InfoPlist.strings"; sourceTree = SOURCE_ROOT; };
 		BB5D46036A15263BD4105B4F /* AppStrings.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = "Sources/OmniDockCore/Resources/zh-Hans.lproj/AppStrings.strings"; sourceTree = SOURCE_ROOT; };
@@ -300,7 +328,6 @@
 				611ABD4166063837BFE97BB4 /* WindowPlacementConfiguration.swift */,
 				19338243A57ECECAE299BE22 /* AppHotkeyRegistrationStatusStore.swift */,
 				241193355ECE5B8B4B706807 /* AppHotkeyService.swift */,
-				AACED853BFBA6434A2140D8F /* AppLocalization.swift */,
 				2E10EED6D6A911629989ECC7 /* ApplicationPresentationCoordinator.swift */,
 				27E00C378893CB08991CC38B /* CGWindowDictionary.swift */,
 				4ACDDD18EF72F718165F4AEE /* ClipboardHistoryCodec.swift */,
@@ -322,6 +349,7 @@
 				D765A2CAC69408FD0D02DE75 /* HotkeyShortcutPolicy.swift */,
 				D30D41B0DCA3A55E6E103BA1 /* IndependentWindowIdentity.swift */,
 				2AAFFA2BCCC66961497DCE50 /* LivePreviewCaptureSession.swift */,
+				3033C62D64E624BFF8B5B231 /* LocalizedResourceCatalog.swift */,
 				10437BC999C1A1308759C9D7 /* PermissionFeatureGate.swift */,
 				8EB156D36C57534D57A0C3C7 /* PermissionService.swift */,
 				CCEC50E0969F4AB6AC97D390 /* PreviewCaptureConfiguration.swift */,
@@ -359,6 +387,7 @@
 				105E8920C60506E064E693A9 /* ClipboardPaletteController.swift */,
 				2B8EB8BBB990A69F07FBA8AC /* FinderDocumentTypeFormView.swift */,
 				A101B972CD5E545A1B5B7477 /* FinderExtensionSettingsView.swift */,
+				FAA126003771B0322301B5D4 /* FinderQuickActionPresentationLoader.swift */,
 				5B27BA2F9693182C1AD68617 /* OmniDockTheme.swift */,
 				DE1FB8E57F55CD535BC669CD /* PermissionOnboardingWindowController.swift */,
 				F1AF691FED19F9D41F836BBF /* PreviewLayoutCalculator.swift */,
@@ -386,6 +415,32 @@
 				D1347A9D29A0026DA7D553F5 /* OmniDockFinderSync.entitlements */,
 				E20CF96D82C877A23B78D06F /* OmniDockFinderSync-Info.plist */,
 				6327A1005FF0B783151E530B /* PrivacyInfo.xcprivacy */,
+				0274BDF3538D909E4826C062 /* ATTRIBUTION.txt */,
+				51F668B1CADE9739DA2F28FB /* abnerworks.Typora.png */,
+				A84B7E964553B924F2AB99F4 /* co.zeit.hyper.png */,
+				AE7ADC6063EA8520E2A77833 /* com.coteditor.CotEditor.png */,
+				F8D2957778F7C6B3E09E477A /* com.github.marktext.marktext.png */,
+				9F1F48F9B01D09315C70003D /* com.google.android.studio.png */,
+				E316318FD134FFAD72CDDBCB /* com.googlecode.iterm2.png */,
+				1FC9829BAEE5EDD64795C597 /* com.jetbrains.AppCode.png */,
+				3E1270B30DA3B2810B021B91 /* com.jetbrains.CLion.png */,
+				FF0157EAAA0CC618D544DBA1 /* com.jetbrains.PhpStorm.png */,
+				929B7BA1A2CF2355E8AF56AE /* com.jetbrains.WebStorm.png */,
+				BF3FFF9322EB0555B15158D8 /* com.jetbrains.datagrip.png */,
+				A1768B020FB046D05C918F2E /* com.jetbrains.goland.png */,
+				951AC21E8E82C029B4FACDDF /* com.jetbrains.intellij.png */,
+				57F3A36616AA75F23610E606 /* com.jetbrains.pycharm.png */,
+				A80CCE04E5BFFB0759C96EDE /* com.jetbrains.rider.png */,
+				0A67B00199E7F030432F199B /* com.jetbrains.rubymine.png */,
+				660B176EEA00A7A1C9A45D75 /* com.microsoft.VSCode.png */,
+				F7DF93F3638ECC58BB506D88 /* com.microsoft.visual-studio.png */,
+				0ADB1350D63205FBAEFC2A1B /* com.sublimemerge.png */,
+				E3A978C3F525DA8C6A3554A2 /* com.sublimetext.4.png */,
+				180505F6772C02F7222BBB09 /* dev.warp.Warp-Stable.png */,
+				9A8A9308706AC64EB3B09CA3 /* io.dcloud.HBuilder.png */,
+				BABE94BE1108E944D51E667A /* md.obsidian.png */,
+				680622409848B57D39BEF90F /* org.gnu.Emacs.png */,
+				DEB5E805B425B6B71EAF4706 /* org.tabby.png */,
 				C4C6323CDCF11527E8BABD52 /* AppStrings.strings */,
 				E70ECD50972126886EDD1D30 /* InfoPlist.strings */,
 				BB5D46036A15263BD4105B4F /* AppStrings.strings */,
@@ -553,7 +608,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "set -euo pipefail\n\nresources_dir=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nmkdir -p \"$resources_dir\"\n\n/usr/bin/ditto \"${SRCROOT}/Resources/PrivacyInfo.xcprivacy\" \"${resources_dir}/PrivacyInfo.xcprivacy\"\n/usr/bin/ditto \"${SRCROOT}/LICENSE\" \"${resources_dir}/COPYING.txt\"\n\nfor localization_dir in \"${SRCROOT}\"/Sources/OmniDockCore/Resources/*.lproj; do\n  [[ -d \"$localization_dir\" ]] || continue\n  /usr/bin/ditto \"$localization_dir\" \"${resources_dir}/$(basename \"$localization_dir\")\"\ndone\n\n/usr/bin/xattr -dr com.apple.quarantine \"$resources_dir\" 2>/dev/null || true\n/usr/bin/xattr -cr \"${TARGET_BUILD_DIR}/${WRAPPER_NAME}\" 2>/dev/null || true\n";
+			shellScript = "set -euo pipefail\n\nresources_dir=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nmkdir -p \"$resources_dir\"\n\n/usr/bin/ditto \"${SRCROOT}/Resources/PrivacyInfo.xcprivacy\" \"${resources_dir}/PrivacyInfo.xcprivacy\"\n/usr/bin/ditto \"${SRCROOT}/LICENSE\" \"${resources_dir}/COPYING.txt\"\n\nfor localization_dir in \"${SRCROOT}\"/Sources/OmniDockCore/Resources/*.lproj; do\n  [[ -d \"$localization_dir\" ]] || continue\n  /usr/bin/ditto \"$localization_dir\" \"${resources_dir}/$(basename \"$localization_dir\")\"\ndone\n\nquick_action_icons=\"${SRCROOT}/Sources/OmniDockCore/Resources/FinderQuickActionIcons\"\nif [[ -d \"$quick_action_icons\" ]]; then\n  /usr/bin/ditto \"$quick_action_icons\" \"${resources_dir}/FinderQuickActionIcons\"\nfi\n\n/usr/bin/xattr -dr com.apple.quarantine \"$resources_dir\" 2>/dev/null || true\n/usr/bin/xattr -cr \"${TARGET_BUILD_DIR}/${WRAPPER_NAME}\" 2>/dev/null || true\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -576,7 +631,6 @@
 				7E7DCB0663A643F5C1AA2C49 /* WindowPlacementConfiguration.swift in Sources */,
 				18EE1F35D72CF68A1A53A338 /* AppHotkeyRegistrationStatusStore.swift in Sources */,
 				70D244A63BD462F048EF0080 /* AppHotkeyService.swift in Sources */,
-				215983A2C66D3BE46DB11D4E /* AppLocalization.swift in Sources */,
 				4AC80169CFFF36CDE4D25817 /* ApplicationPresentationCoordinator.swift in Sources */,
 				89182724F61B136567EF01D2 /* CGWindowDictionary.swift in Sources */,
 				EB24CA44E5E925CBAFA9B9D2 /* ClipboardHistoryCodec.swift in Sources */,
@@ -598,6 +652,7 @@
 				92136C573348886F35F18726 /* HotkeyShortcutPolicy.swift in Sources */,
 				5E50495DFD801F094898630B /* IndependentWindowIdentity.swift in Sources */,
 				8FECE3B5E53FD8392CB4303F /* LivePreviewCaptureSession.swift in Sources */,
+				340A3DD220433F342BECFA72 /* LocalizedResourceCatalog.swift in Sources */,
 				EBCE645D836C38D5EF7CFB4A /* PermissionFeatureGate.swift in Sources */,
 				8FBBEBF4FD11BC90225961B7 /* PermissionService.swift in Sources */,
 				3CA3D2CDF2ACB367DB6E60FF /* PreviewCaptureConfiguration.swift in Sources */,
@@ -635,6 +690,7 @@
 				BB936BB462FC57F1A89BEC22 /* ClipboardPaletteController.swift in Sources */,
 				72F6A12BB3E197ABCC29EEE3 /* FinderDocumentTypeFormView.swift in Sources */,
 				F78604FBDFAE2DF025CAAB33 /* FinderExtensionSettingsView.swift in Sources */,
+				22D3D498E790C8FC1E0BA6A1 /* FinderQuickActionPresentationLoader.swift in Sources */,
 				4B25A6E2CCE956FCA6803215 /* OmniDockTheme.swift in Sources */,
 				2E5446BE6F842A50575D5658 /* PermissionOnboardingWindowController.swift in Sources */,
 				A08FE851F96BDB9A4AADBFDC /* PreviewLayoutCalculator.swift in Sources */,

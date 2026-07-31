@@ -1,6 +1,6 @@
 import Foundation
 
-struct FinderLaunchShortcut: Codable, Equatable, Hashable, Identifiable {
+struct FinderLaunchShortcut: Codable, Equatable, Hashable, Identifiable, Sendable {
     private static let terminalIdentifier = UUID(uuidString: "E7DA8E94-B549-4B5A-B839-531212685D2A")!
     private static let iTermIdentifier = UUID(uuidString: "06FDDE36-9A9E-4492-AFEA-6E6A83D64E03")!
     private static let visualStudioCodeIdentifier = UUID(uuidString: "7EC4217C-070F-40DB-B9EA-18092E106EA7")!

@@ -221,7 +221,6 @@ final class AppHotkeyRowView: NSView {
     private func applyTheme() {
         layer?.backgroundColor = OmniDockTheme.palette(for: effectiveAppearance)
             .raisedSurface
-            .withAlphaComponent(0.88)
             .cgColor
     }
 

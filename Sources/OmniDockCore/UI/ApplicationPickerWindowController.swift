@@ -106,6 +106,7 @@ final class ApplicationPickerWindowController: NSWindowController, NSWindowDeleg
         guard let window else {
             return
         }
+        OmniDockTheme.applyCurrentAppearance(to: window)
         reloadCandidates()
         parentWindow.beginSheet(window) { [weak self] _ in
             self?.invalidateCandidateLoading()

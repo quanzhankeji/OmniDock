@@ -52,6 +52,7 @@ enum ClipboardInspectorPlacement {
 @MainActor
 final class ClipboardInspectorPanel: NSPanel {
     private let detailView = ClipboardInspectorView()
+    private var themeObserver: NSObjectProtocol?
 
     init() {
         super.init(
@@ -74,12 +75,28 @@ final class ClipboardInspectorPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient, .ignoresCycle]
         contentView = detailView
         OmniDockTheme.applyCurrentAppearance(to: self)
+        themeObserver = NotificationCenter.default.addObserver(
+            forName: OmniDockTheme.changedNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshTheme()
+            }
+        }
+    }
+
+    deinit {
+        if let themeObserver {
+            NotificationCenter.default.removeObserver(themeObserver)
+        }
     }
 
     func present(
         _ content: ClipboardHistoryPreviewContent,
         beside sourceWindow: NSWindow
     ) {
+        refreshTheme()
         if parent !== sourceWindow {
             parent?.removeChildWindow(self)
             sourceWindow.addChildWindow(self, ordered: .above)
@@ -113,6 +130,11 @@ final class ClipboardInspectorPanel: NSPanel {
     func dismiss() {
         parent?.removeChildWindow(self)
         orderOut(nil)
+    }
+
+    func refreshTheme() {
+        OmniDockTheme.applyCurrentAppearance(to: self)
+        detailView.refreshTheme()
     }
 }
 
@@ -273,6 +295,11 @@ private final class ClipboardInspectorView: NSVisualEffectView {
             contentView.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor)
         ])
         displayedContentView = contentView
+    }
+
+    func refreshTheme() {
+        needsDisplay = true
+        subviews.forEach { $0.needsDisplay = true }
     }
 
     private static func makeScrollableTextRegion(_ text: String) -> NSScrollView {

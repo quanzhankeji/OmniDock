@@ -1,9 +1,9 @@
 import XCTest
 @testable import OmniDockCore
 
-final class AppLocalizationTests: XCTestCase {
+final class LocalizedResourceCatalogTests: XCTestCase {
     override func tearDown() {
-        AppLocalization.configure(language: .system)
+        LocalizedResourceCatalog.configure(language: .system)
         super.tearDown()
     }
 
@@ -19,7 +19,7 @@ final class AppLocalizationTests: XCTestCase {
 
     func testLocalizedStringTablesContainAllKeys() {
         for language in AppLanguage.Resolved.allCases {
-            let values = AppLocalization.values(language: language)
+            let values = LocalizedResourceCatalog.values(language: language)
             for key in AppStringKey.allCases {
                 XCTAssertNotNil(values[key.rawValue], "Missing \(key.rawValue) for \(language.rawValue)")
             }
@@ -27,36 +27,36 @@ final class AppLocalizationTests: XCTestCase {
     }
 
     func testLocalizedShortcutMessagesFollowSelectedLanguage() {
-        AppLocalization.configure(language: .zhHans)
+        LocalizedResourceCatalog.configure(language: .zhHans)
         XCTAssertEqual(
             ShortcutRecorderValidation.regularKeyMinimumModifierMessage,
-            AppLocalization.text(.hotkeyGuidance, language: .zhHans)
+            LocalizedResourceCatalog.text(.hotkeyGuidance, language: .zhHans)
         )
 
-        AppLocalization.configure(language: .en)
+        LocalizedResourceCatalog.configure(language: .en)
         XCTAssertEqual(
             ShortcutRecorderValidation.regularKeyMinimumModifierMessage,
-            AppLocalization.text(.hotkeyGuidance, language: .en)
+            LocalizedResourceCatalog.text(.hotkeyGuidance, language: .en)
         )
     }
 
     func testHotkeyGuidancePresentationReadsCurrentLanguageEachTime() {
-        AppLocalization.configure(language: .en)
+        LocalizedResourceCatalog.configure(language: .en)
         XCTAssertEqual(
             HotkeyGuidancePresentation.message,
-            AppLocalization.text(.hotkeyGuidance, language: .en)
+            LocalizedResourceCatalog.text(.hotkeyGuidance, language: .en)
         )
 
-        AppLocalization.configure(language: .zhHans)
+        LocalizedResourceCatalog.configure(language: .zhHans)
         XCTAssertEqual(
             HotkeyGuidancePresentation.message,
-            AppLocalization.text(.hotkeyGuidance, language: .zhHans)
+            LocalizedResourceCatalog.text(.hotkeyGuidance, language: .zhHans)
         )
     }
 
     func testHotkeyBindingCountUsesLocalizedCompactLabel() {
         XCTAssertEqual(
-            AppLocalization.format(
+            LocalizedResourceCatalog.format(
                 .hotkeysBoundCount,
                 arguments: [3],
                 language: .en
@@ -64,7 +64,7 @@ final class AppLocalizationTests: XCTestCase {
             "Bound apps: 3"
         )
         XCTAssertEqual(
-            AppLocalization.format(
+            LocalizedResourceCatalog.format(
                 .hotkeysBoundCount,
                 arguments: [3],
                 language: .zhHans
@@ -75,14 +75,17 @@ final class AppLocalizationTests: XCTestCase {
 
     func testLocalizationStateSupportsConcurrentReadsAndLanguageChanges() {
         let group = DispatchGroup()
-        let queue = DispatchQueue(label: "AppLocalizationTests.concurrent", attributes: .concurrent)
+        let queue = DispatchQueue(
+            label: "LocalizedResourceCatalogTests.concurrent",
+            attributes: .concurrent
+        )
 
         for index in 0..<1_000 {
             group.enter()
             queue.async {
-                AppLocalization.configure(language: index.isMultiple(of: 2) ? .en : .zhHans)
-                _ = AppLocalization.text(.previewStaticFailure)
-                _ = AppLocalization.format(.permissionStatusFormat, arguments: ["A", "B"])
+                LocalizedResourceCatalog.configure(language: index.isMultiple(of: 2) ? .en : .zhHans)
+                _ = LocalizedResourceCatalog.text(.previewStaticFailure)
+                _ = LocalizedResourceCatalog.format(.permissionStatusFormat, arguments: ["A", "B"])
                 group.leave()
             }
         }
@@ -92,7 +95,7 @@ final class AppLocalizationTests: XCTestCase {
 
     func testPermissionStatusFormatUsesLocalizedPunctuation() {
         XCTAssertEqual(
-            AppLocalization.format(
+            LocalizedResourceCatalog.format(
                 .permissionStatusFormat,
                 arguments: ["Accessibility", "Granted"],
                 language: .en
@@ -100,7 +103,7 @@ final class AppLocalizationTests: XCTestCase {
             "Accessibility: Granted"
         )
         XCTAssertEqual(
-            AppLocalization.format(
+            LocalizedResourceCatalog.format(
                 .permissionStatusFormat,
                 arguments: ["辅助功能", "已授权"],
                 language: .zhHans
@@ -131,33 +134,35 @@ final class AppLocalizationTests: XCTestCase {
 
         for (language, values) in expectations {
             for (key, expectedValue) in values {
-                XCTAssertEqual(AppLocalization.text(key, language: language), expectedValue)
+                XCTAssertEqual(LocalizedResourceCatalog.text(key, language: language), expectedValue)
             }
         }
     }
 
     func testAppearanceLabelsAreLocalized() {
-        XCTAssertEqual(AppLocalization.text(.appearanceTitle, language: .en), "Appearance")
-        XCTAssertEqual(AppLocalization.text(.appearanceDark, language: .en), "Dark")
-        XCTAssertEqual(AppLocalization.text(.appearanceTitle, language: .zhHans), "外观")
-        XCTAssertEqual(AppLocalization.text(.appearanceDark, language: .zhHans), "深色")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.appearanceTitle, language: .en), "Appearance")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.appearanceDark, language: .en), "Dark")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.appearanceTitle, language: .zhHans), "外观")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.appearanceDark, language: .zhHans), "深色")
     }
 
     func testFinderExtensionLabelsAreLocalized() {
-        XCTAssertEqual(AppLocalization.text(.tabSettings, language: .en), "Settings")
-        XCTAssertEqual(AppLocalization.text(.tabFinderExtension, language: .en), "Finder Extension")
-        XCTAssertEqual(AppLocalization.text(.finderExtensionEnableTitle, language: .en), "Enable")
-        XCTAssertEqual(AppLocalization.text(.finderExtensionOpenSettings, language: .en), "Open Finder Extensions")
-        XCTAssertEqual(AppLocalization.text(.finderQuickOpenTitle, language: .en), "Quick Actions")
-        XCTAssertEqual(AppLocalization.text(.finderQuickOpenInstalled, language: .en), "Installed")
-        XCTAssertEqual(AppLocalization.text(.finderQuickOpenNotInstalled, language: .en), "Not Installed")
-        XCTAssertEqual(AppLocalization.text(.tabSettings, language: .zhHans), "设置")
-        XCTAssertEqual(AppLocalization.text(.tabFinderExtension, language: .zhHans), "右键扩展")
-        XCTAssertEqual(AppLocalization.text(.finderExtensionEnableTitle, language: .zhHans), "启用")
-        XCTAssertEqual(AppLocalization.text(.finderExtensionOpenSettings, language: .zhHans), "打开 Finder 扩展设置")
-        XCTAssertEqual(AppLocalization.text(.finderQuickOpenTitle, language: .zhHans), "快捷操作")
-        XCTAssertEqual(AppLocalization.text(.finderQuickOpenInstalled, language: .zhHans), "已安装")
-        XCTAssertEqual(AppLocalization.text(.finderQuickOpenNotInstalled, language: .zhHans), "未安装")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.tabSettings, language: .en), "Settings")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.tabFinderExtension, language: .en), "Finder Extension")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.finderExtensionEnableTitle, language: .en), "Enable")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.finderExtensionOpenSettings, language: .en), "Open Finder Extensions")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenTitle, language: .en), "Quick Actions")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenLoading, language: .en), "Checking…")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenInstalled, language: .en), "Installed")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenNotInstalled, language: .en), "Not Installed")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.tabSettings, language: .zhHans), "设置")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.tabFinderExtension, language: .zhHans), "右键扩展")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.finderExtensionEnableTitle, language: .zhHans), "启用")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.finderExtensionOpenSettings, language: .zhHans), "打开 Finder 扩展设置")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenTitle, language: .zhHans), "快捷操作")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenLoading, language: .zhHans), "正在检测…")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenInstalled, language: .zhHans), "已安装")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenNotInstalled, language: .zhHans), "未安装")
     }
 
     func testEverySettingsTabHasAStatusMenuTitle() {
@@ -181,8 +186,8 @@ final class AppLocalizationTests: XCTestCase {
         ]
 
         for (language, requiredFragments) in expectations {
-            let appValues = AppLocalization.values(language: language)
-            let infoPlistValues = AppLocalization.infoPlistValues(language: language)
+            let appValues = LocalizedResourceCatalog.values(language: language)
+            let infoPlistValues = LocalizedResourceCatalog.infoPlistValues(language: language)
             let disclosures = [
                 appValues[AppStringKey.onboardingScreenRecordingPurpose.rawValue, default: ""],
                 appValues[AppStringKey.previewNeedsScreenRecording.rawValue, default: ""],
@@ -207,7 +212,7 @@ final class AppLocalizationTests: XCTestCase {
         ]
 
         for language in AppLanguage.Resolved.allCases {
-            let values = AppLocalization.infoPlistValues(language: language)
+            let values = LocalizedResourceCatalog.infoPlistValues(language: language)
             for key in keys {
                 XCTAssertFalse(values[key, default: ""].isEmpty, "Missing \(key) for \(language.rawValue)")
             }

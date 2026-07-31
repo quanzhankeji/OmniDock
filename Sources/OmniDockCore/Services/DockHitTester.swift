@@ -186,16 +186,23 @@ public final class DockHitTester {
                 dockItems: dockItems,
                 runningApps: runningApps
             ) {
+                let dockItemFrame = appKitFrame(
+                    from: fallback.item.frame,
+                    accessibilityPoint: point,
+                    appKitPoint: appKitPoint,
+                    screens: systemInventory.screens
+                )
+                guard DockItemHitValidationPolicy.accepts(
+                    queryPoint: appKitPoint,
+                    itemFrame: dockItemFrame
+                ) else {
+                    continue
+                }
                 return makeTarget(
                     resolution: fallback.resolution,
                     dockElementTitle: fallback.item.texts.first ?? fallback.resolution.app.localizedName ?? "",
                     hitPoint: appKitPoint,
-                    dockItemFrame: appKitFrame(
-                        from: fallback.item.frame,
-                        accessibilityPoint: point,
-                        appKitPoint: appKitPoint,
-                        screens: systemInventory.screens
-                    )
+                    dockItemFrame: dockItemFrame
                 )
             }
         }
@@ -260,6 +267,7 @@ public final class DockHitTester {
                   let appKitFrame = systemInventory.screens.appKitFrame(
                     fromEventTapFrame: eventTapFrame
                   ),
+                  DockItemHitValidationPolicy.hasPlausibleSize(appKitFrame),
                   let resolution = DockTargetResolver.matchingTarget(
                     for: item.texts,
                     runningApps: runningApps
@@ -289,7 +297,10 @@ public final class DockHitTester {
         runningApps: [DockRunningApplicationCandidate],
         screens: DockScreenInventory
     ) -> DockAppTarget? {
-        let strings = textCandidates(from: element)
+        guard let dockItem = nearestDockItem(from: element) else {
+            return nil
+        }
+        let strings = textCandidates(from: dockItem)
         guard !strings.isEmpty else {
             return nil
         }
@@ -297,17 +308,24 @@ public final class DockHitTester {
         guard let match = DockTargetResolver.matchingTarget(for: strings, runningApps: runningApps) else {
             return nil
         }
+        let dockItemFrame = appKitFrame(
+            from: frame(from: dockItem),
+            accessibilityPoint: accessibilityPoint,
+            appKitPoint: appKitPoint,
+            screens: screens
+        )
+        guard DockItemHitValidationPolicy.accepts(
+            queryPoint: appKitPoint,
+            itemFrame: dockItemFrame
+        ) else {
+            return nil
+        }
 
         return makeTarget(
             resolution: match,
             dockElementTitle: strings.first ?? match.app.localizedName ?? "",
             hitPoint: appKitPoint,
-            dockItemFrame: appKitFrame(
-                from: frame(from: element),
-                accessibilityPoint: accessibilityPoint,
-                appKitPoint: appKitPoint,
-                screens: screens
-            )
+            dockItemFrame: dockItemFrame
         )
     }
 
@@ -383,7 +401,10 @@ public final class DockHitTester {
             return
         }
 
-        if stringAttribute(kAXRoleAttribute, from: element) == "AXDockItem" {
+        if DockItemRoleValidationPolicy.accepts(
+            role: stringAttribute(kAXRoleAttribute, from: element),
+            subrole: stringAttribute(kAXSubroleAttribute, from: element)
+        ) {
             let texts = textCandidates(from: element)
             if !texts.isEmpty {
                 snapshots.append(DockItemSnapshot(
@@ -396,6 +417,35 @@ public final class DockHitTester {
         for child in children(of: element) {
             collectDockItemSnapshots(from: child, depth: depth + 1, snapshots: &snapshots)
         }
+    }
+
+    private func nearestDockItem(from element: AXUIElement) -> AXUIElement? {
+        var candidate: AXUIElement? = element
+        for _ in 0..<8 {
+            guard let current = candidate else {
+                return nil
+            }
+            if DockItemRoleValidationPolicy.accepts(
+                role: stringAttribute(kAXRoleAttribute, from: current),
+                subrole: stringAttribute(kAXSubroleAttribute, from: current)
+            ) {
+                return current
+            }
+            candidate = parent(of: current)
+        }
+        return nil
+    }
+
+    private func parent(of element: AXUIElement) -> AXUIElement? {
+        var rawValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            element,
+            kAXParentAttribute as CFString,
+            &rawValue
+        ) == .success else {
+            return nil
+        }
+        return (rawValue as! AXUIElement?)
     }
 
     private func textCandidates(from element: AXUIElement) -> [String] {
@@ -487,6 +537,44 @@ struct DockTargetResolution: Equatable, Sendable {
 struct DockItemSnapshot: Equatable, Sendable {
     let texts: [String]
     let frame: CGRect?
+}
+
+enum DockItemHitValidationPolicy {
+    private static let hitTolerance: CGFloat = 8
+    private static let minimumDimension: CGFloat = 8
+    private static let maximumDimension: CGFloat = 192
+    private static let maximumAspectRatio: CGFloat = 3
+
+    static func accepts(queryPoint: CGPoint, itemFrame: CGRect?) -> Bool {
+        guard let itemFrame, hasPlausibleSize(itemFrame) else {
+            return false
+        }
+        return itemFrame.insetBy(dx: -hitTolerance, dy: -hitTolerance).contains(queryPoint)
+    }
+
+    static func hasPlausibleSize(_ frame: CGRect) -> Bool {
+        let frame = frame.standardized
+        guard frame.minX.isFinite,
+              frame.minY.isFinite,
+              frame.maxX.isFinite,
+              frame.maxY.isFinite,
+              frame.width >= minimumDimension,
+              frame.height >= minimumDimension,
+              frame.width <= maximumDimension,
+              frame.height <= maximumDimension
+        else {
+            return false
+        }
+
+        let aspectRatio = max(frame.width / frame.height, frame.height / frame.width)
+        return aspectRatio <= maximumAspectRatio
+    }
+}
+
+enum DockItemRoleValidationPolicy {
+    static func accepts(role: String?, subrole: String?) -> Bool {
+        role == "AXDockItem" && subrole == "AXApplicationDockItem"
+    }
 }
 
 enum DockTargetResolver {

@@ -101,6 +101,77 @@ final class FinderMenuTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testFinderQuickActionCatalogDoesNotWaitForApplicationDiscovery() {
+        let providerStarted = expectation(description: "background provider started")
+        let releaseProvider = DispatchSemaphore(value: 0)
+        let probe = FinderQuickActionLoaderProbe()
+        let loader = FinderQuickActionPresentationLoader(
+            applicationURLProvider: { _ in
+                if probe.markFirstLookup() {
+                    providerStarted.fulfill()
+                    _ = releaseProvider.wait(timeout: .now() + 2)
+                }
+                return nil
+            },
+            iconProvider: { _ in NSImage(size: NSSize(width: 26, height: 26)) },
+            fileExistsProvider: { _ in false }
+        )
+        let view = FinderExtensionSettingsView(
+            settings: SettingsStore(
+                defaults: isolatedDefaults(),
+                livePreviewLimitProvider: { 6 }
+            ),
+            quickActionPresentationLoader: loader,
+            isExtensionEnabledInFinder: { true }
+        )
+
+        view.selectSection(.quickActions)
+
+        XCTAssertEqual(view.selectedSection, .quickActions)
+        wait(for: [providerStarted], timeout: 1)
+        XCTAssertTrue(probe.firstLookupIsWaiting)
+        releaseProvider.signal()
+    }
+
+    @MainActor
+    func testFinderQuickActionLoaderRunsWorkspaceLookupsAwayFromMainThread() async {
+        let probe = FinderQuickActionLoaderProbe()
+        let shortcut = FinderLaunchShortcut(
+            displayName: "Sample",
+            bundleURLString: URL(fileURLWithPath: "/Applications/Missing.app").absoluteString,
+            bundleIdentifier: "com.example.sample",
+            isEnabled: false
+        )
+        let installedURL = URL(fileURLWithPath: "/Applications/Sample.app")
+        let loader = FinderQuickActionPresentationLoader(
+            applicationURLProvider: { _ in
+                probe.recordLookupThread()
+                return installedURL
+            },
+            iconProvider: { _ in NSImage(size: NSSize(width: 26, height: 26)) },
+            fileExistsProvider: { _ in false }
+        )
+
+        let presentations = await loader.load(shortcuts: [shortcut])
+
+        XCTAssertEqual(presentations[shortcut.id]?.applicationURL, installedURL)
+        XCTAssertFalse(probe.lookupRanOnMainThread)
+    }
+
+    @MainActor
+    func testFinderQuickActionCatalogUsesBundledBrandArtwork() throws {
+        let shortcut = try XCTUnwrap(
+            FinderLaunchShortcut.defaultShortcuts.first {
+                $0.bundleIdentifier == "com.microsoft.VSCode"
+            }
+        )
+
+        let image = FinderQuickActionBrandIcon.image(for: shortcut)
+
+        XCTAssertTrue(image.representations.contains { $0.pixelsWide >= 128 })
+    }
+
     func testMenuActionRegistryConsumesFrozenContextOnce() {
         let registry = FinderMenuActionRegistry()
         let directory = URL(fileURLWithPath: "/tmp/Documents", isDirectory: true)
@@ -1026,6 +1097,38 @@ final class FinderMenuTests: XCTestCase {
     private func descendantScrollViews(in view: NSView) -> [NSScrollView] {
         view.subviews.flatMap { child in
             (child as? NSScrollView).map { [$0] } ?? descendantScrollViews(in: child)
+        }
+    }
+}
+
+private final class FinderQuickActionLoaderProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var hasStartedFirstLookup = false
+    private var isWaiting = false
+    private var ranOnMainThread = false
+
+    var firstLookupIsWaiting: Bool {
+        lock.withLock { isWaiting }
+    }
+
+    var lookupRanOnMainThread: Bool {
+        lock.withLock { ranOnMainThread }
+    }
+
+    func markFirstLookup() -> Bool {
+        lock.withLock {
+            guard !hasStartedFirstLookup else {
+                return false
+            }
+            hasStartedFirstLookup = true
+            isWaiting = true
+            return true
+        }
+    }
+
+    func recordLookupThread() {
+        lock.withLock {
+            ranOnMainThread = Thread.isMainThread
         }
     }
 }

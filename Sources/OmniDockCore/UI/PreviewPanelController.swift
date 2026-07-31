@@ -51,7 +51,7 @@ public final class PreviewPanelController {
     private weak var stackView: NSStackView?
     private weak var gridView: NSGridView?
     private var gridNeedsInitialTopAlignment = false
-    private var messageField: NSTextField?
+    private var messageField: PreviewMessageField?
     private var transientMessageWorkItem: DispatchWorkItem?
     private var currentTarget: DockAppTarget?
     private var currentWindows: [PreviewWindowInfo] = []
@@ -280,6 +280,7 @@ public final class PreviewPanelController {
 
         if currentWindows.isEmpty {
             messageField?.stringValue = message
+            messageField?.usesOverlay = false
             return
         }
 
@@ -421,7 +422,9 @@ public final class PreviewPanelController {
         root.autoresizingMask = [.width, .height]
 
         if windows.isEmpty {
-            let label = NSTextField(labelWithString: message ?? AppStrings.text(.previewNoWindows))
+            let label = PreviewMessageField(
+                labelWithString: message ?? AppStrings.text(.previewNoWindows)
+            )
             label.alignment = .center
             label.font = .systemFont(ofSize: 13, weight: .medium)
             label.textColor = OmniDockTheme.palette(for: root.effectiveAppearance).primaryText
@@ -501,16 +504,12 @@ public final class PreviewPanelController {
         panel?.contentView = root
     }
 
-    private func makeTransientMessageField(in contentView: NSView) -> NSTextField {
-        let field = NSTextField(labelWithString: "")
+    private func makeTransientMessageField(in contentView: NSView) -> PreviewMessageField {
+        let field = PreviewMessageField(labelWithString: "")
         field.alignment = .center
         field.font = .systemFont(ofSize: 12, weight: .medium)
-        let palette = OmniDockTheme.palette(for: contentView.effectiveAppearance)
-        field.textColor = palette.primaryText
         field.lineBreakMode = .byTruncatingTail
-        field.wantsLayer = true
-        field.layer?.backgroundColor = palette.overlay.cgColor
-        field.layer?.cornerRadius = 6
+        field.usesOverlay = true
         contentView.addSubview(field, positioned: .above, relativeTo: nil)
         return field
     }
@@ -1004,8 +1003,45 @@ public final class PreviewPanelController {
             return
         }
         OmniDockTheme.applyCurrentAppearance(to: panel)
+        messageField?.refreshTheme()
         panel.contentView?.needsDisplay = true
         panel.contentView?.subviews.forEach { $0.needsDisplay = true }
+    }
+}
+
+final class PreviewMessageField: NSTextField {
+    var usesOverlay = false {
+        didSet {
+            wantsLayer = usesOverlay
+            layer?.cornerRadius = usesOverlay ? 6 : 0
+            refreshTheme()
+        }
+    }
+
+    init(labelWithString string: String) {
+        super.init(frame: .zero)
+        stringValue = string
+        isEditable = false
+        isSelectable = false
+        isBezeled = false
+        drawsBackground = false
+        refreshTheme()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        refreshTheme()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshTheme()
+    }
+
+    func refreshTheme() {
+        let palette = OmniDockTheme.palette(for: effectiveAppearance)
+        textColor = palette.primaryText
+        layer?.backgroundColor = usesOverlay ? palette.overlay.cgColor : nil
     }
 }
 
