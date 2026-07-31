@@ -11,6 +11,38 @@ enum AppStringKey: String, CaseIterable {
     case appearanceSystem
     case appearanceLight
     case appearanceDark
+    case updateVersionTitle
+    case updateVersionDetail
+    case updateCurrentVersion
+    case updateNeverChecked
+    case updateChecking
+    case updateCurrentStatus
+    case updateAvailableStatus
+    case updateFailedStatus
+    case updateCheckButton
+    case updateWindowTitle
+    case updatePreparingDownload
+    case updateDownloadProgress
+    case updateInstalling
+    case updateCancel
+    case updateAvailableTitle
+    case updateAvailableDetail
+    case updateReleaseOnlyDetail
+    case updateDownloadAndInstall
+    case updateLater
+    case updateViewRelease
+    case updateCurrentTitle
+    case updateCurrentDetail
+    case updateCheckFailedTitle
+    case updateCheckFailedDetail
+    case updateManualInstallTitle
+    case updateManualInstallDetail
+    case updateInstallFailedTitle
+    case updateDownloadValidationFailed
+    case updateSignatureValidationFailed
+    case updateCompatibilityFailed
+    case updateReplacementFailed
+    case updateOK
 
     case tabSettings
     case tabPreview

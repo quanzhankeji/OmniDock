@@ -10,6 +10,7 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
     private let clipboardHistoryService: ClipboardHistoryService?
     private let clipboardHistoryRegistrationStatus: ClipboardHistoryRegistrationStatus
     private let windowPlacementRegistrationStatus: WindowPlacementRegistrationStatusStore
+    private let applicationUpdateService: ApplicationUpdateService?
     private let presentationCoordinator: ApplicationPresentationCoordinator
     private let onPermissionGateRequired: (PermissionFeature) -> Void
     private let onOpenPermissionOnboarding: () -> Void
@@ -25,6 +26,7 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
         clipboardHistoryService: clipboardHistoryService,
         clipboardHistoryRegistrationStatus: clipboardHistoryRegistrationStatus,
         windowPlacementRegistrationStatus: windowPlacementRegistrationStatus,
+        applicationUpdateService: applicationUpdateService,
         presentationCoordinator: presentationCoordinator,
         onPermissionGateRequired: onPermissionGateRequired,
         onOpenPermissionOnboarding: onOpenPermissionOnboarding
@@ -39,6 +41,7 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
         clipboardHistoryService: ClipboardHistoryService? = nil,
         clipboardHistoryRegistrationStatus: ClipboardHistoryRegistrationStatus? = nil,
         windowPlacementRegistrationStatus: WindowPlacementRegistrationStatusStore? = nil,
+        applicationUpdateService: ApplicationUpdateService? = nil,
         onPermissionGateRequired: @escaping (PermissionFeature) -> Void,
         onOpenPermissionOnboarding: @escaping () -> Void = {}
     ) {
@@ -54,6 +57,7 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
                 ?? ClipboardHistoryRegistrationStatus(),
             windowPlacementRegistrationStatus: windowPlacementRegistrationStatus
                 ?? WindowPlacementRegistrationStatusStore(),
+            applicationUpdateService: applicationUpdateService,
             presentationCoordinator: ApplicationPresentationCoordinator(),
             onPermissionGateRequired: onPermissionGateRequired,
             onOpenPermissionOnboarding: onOpenPermissionOnboarding
@@ -69,6 +73,7 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
         clipboardHistoryService: ClipboardHistoryService? = nil,
         clipboardHistoryRegistrationStatus: ClipboardHistoryRegistrationStatus? = nil,
         windowPlacementRegistrationStatus: WindowPlacementRegistrationStatusStore? = nil,
+        applicationUpdateService: ApplicationUpdateService? = nil,
         presentationCoordinator: ApplicationPresentationCoordinator,
         onPermissionGateRequired: @escaping (PermissionFeature) -> Void,
         onOpenPermissionOnboarding: @escaping () -> Void
@@ -83,6 +88,7 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
             ?? ClipboardHistoryRegistrationStatus()
         self.windowPlacementRegistrationStatus = windowPlacementRegistrationStatus
             ?? WindowPlacementRegistrationStatusStore()
+        self.applicationUpdateService = applicationUpdateService
         self.presentationCoordinator = presentationCoordinator
         self.onPermissionGateRequired = onPermissionGateRequired
         self.onOpenPermissionOnboarding = onOpenPermissionOnboarding

@@ -28,6 +28,8 @@ OmniDock does not include analytics, advertising SDKs, or third-party packages. 
 
 Official releases are available from [GitHub Releases](https://github.com/quanzhankeji/OmniDock/releases/latest). Download `OmniDock-<version>.dmg` for the standard drag-to-Applications installer, or `OmniDock-<version>.zip` for a portable app archive. Both contain the same Universal app for Apple silicon and Intel Macs, signed with Developer ID and notarized by Apple. GitHub also provides ZIP and TAR.GZ archives of the corresponding source code for each release.
 
+OmniDock checks GitHub Releases asynchronously shortly after launch. When a newer signed release is available, OmniDock can download, verify, replace, and restart a writable installation. Apps running from a read-only disk image, App Translocation, or another non-writable location use the DMG-based manual installation flow instead. Updates can also be checked manually from the Settings tab.
+
 To install with Homebrew:
 
 ```bash
@@ -106,6 +108,8 @@ OmniDock runs locally on your Mac. Preferences, shortcut bindings, and optional 
 One-time preview snapshot cache entries expire 45 seconds after capture so hidden-window previews can be shown briefly. If a cached preview is open when its entry expires, OmniDock releases its displayed image references during the next preview validation pass. Preview images are not written to disk. OmniDock does not collect or transmit personal data.
 
 For Finder's New File command, OmniDock temporarily passes only the user-selected destination folder to its containing app and removes the request after it is consumed or expires. It does not scan Finder folders or request broad file-system access.
+
+The update checker sends a standard HTTPS request to GitHub's public Releases API containing no OmniDock settings, clipboard contents, window information, or other user data. Downloaded updates must match GitHub's SHA-256 digest and OmniDock's existing code-signing identity before installation.
 
 See [PRIVACY.md](PRIVACY.md) for the full privacy policy.
 

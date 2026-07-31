@@ -7,6 +7,11 @@ import OmniDockCore
 struct OmniDockMain {
     @MainActor
     static func main() {
+        if UpdateInstallerCommand.runIfRequested(
+            arguments: CommandLine.arguments
+        ) {
+            return
+        }
         let app = NSApplication.shared
         let delegate = AppDelegate()
         app.delegate = delegate

@@ -3,6 +3,7 @@ import AppKit
 enum ApplicationPresentationSurface: Hashable {
     case settings
     case permissionOnboarding
+    case update
 }
 
 @MainActor
@@ -79,5 +80,9 @@ final class ApplicationPresentationCoordinator {
 
     var activeSurfaceCount: Int {
         activeSurfaces.count
+    }
+
+    func isPresenting(_ surface: ApplicationPresentationSurface) -> Bool {
+        activeSurfaces.contains(surface)
     }
 }
