@@ -64,6 +64,7 @@ struct UpdateInstallerManifest: Codable {
     let targetAppURL: URL
     let stagedAppURL: URL
     let cleanupDirectoryURL: URL
+    let readinessFileURL: URL
     let currentProcessIdentifier: Int32
     let expectedVersion: String
     let designatedRequirement: String
@@ -383,19 +384,14 @@ final class UpdatePackageInstaller: @unchecked Sendable {
             throw UpdatePackageError.installationUnavailable
         }
 
-        let helperURL = preparedUpdate.workingDirectory.appendingPathComponent(
-            "OmniDockUpdateHelper"
-        )
-        try fileManager.copyItem(at: executableURL, to: helperURL)
-        try fileManager.setAttributes(
-            [.posixPermissions: 0o755],
-            ofItemAtPath: helperURL.path
-        )
+        let readinessFileURL = preparedUpdate.workingDirectory
+            .appendingPathComponent("helper-ready")
 
         let manifest = UpdateInstallerManifest(
             targetAppURL: currentAppURL,
             stagedAppURL: preparedUpdate.appURL,
             cleanupDirectoryURL: preparedUpdate.workingDirectory,
+            readinessFileURL: readinessFileURL,
             currentProcessIdentifier: ProcessInfo.processInfo.processIdentifier,
             expectedVersion: version.displayValue,
             designatedRequirement: preparedUpdate.designatedRequirement
@@ -411,9 +407,20 @@ final class UpdatePackageInstaller: @unchecked Sendable {
         )
 
         let process = Process()
-        process.executableURL = helperURL
+        // Keep the helper inside the signed app bundle. A copied Mach-O loses
+        // the bundle context required by its Developer ID signature.
+        process.executableURL = executableURL
         process.arguments = ["--omnidock-apply-update", manifestURL.path]
         try process.run()
+        guard waitForHelperReadiness(
+            at: readinessFileURL,
+            process: process
+        ) else {
+            if process.isRunning {
+                process.terminate()
+            }
+            throw UpdatePackageError.installationUnavailable
+        }
         NSApp.terminate(nil)
     }
 
@@ -473,6 +480,23 @@ final class UpdatePackageInstaller: @unchecked Sendable {
         guard actual == expected.lowercased() else {
             throw UpdatePackageError.digestMismatch
         }
+    }
+
+    private func waitForHelperReadiness(
+        at readinessFileURL: URL,
+        process: Process
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline {
+            if fileManager.fileExists(atPath: readinessFileURL.path) {
+                return true
+            }
+            guard process.isRunning else {
+                return false
+            }
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        return false
     }
 }
 
@@ -632,11 +656,20 @@ public enum UpdateInstallerCommand {
                 UpdateInstallerManifest.self,
                 from: data
             )
+            try markReady(manifest.readinessFileURL)
             try apply(manifest)
         } catch {
             NSLog("OmniDock update installation failed: %@", error.localizedDescription)
         }
         return true
+    }
+
+    private static func markReady(_ url: URL) throws {
+        try Data().write(to: url, options: .atomic)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: url.path
+        )
     }
 
     private static func apply(_ manifest: UpdateInstallerManifest) throws {
