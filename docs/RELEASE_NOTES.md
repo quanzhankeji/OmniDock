@@ -1,5 +1,4 @@
-# OmniDock 1.2.2
+# OmniDock 1.2.3
 
-- This maintenance release validates OmniDock's new in-app updater.
-- Add signed, SHA-256-verified downloads with safe automatic replacement and a DMG fallback.
-- Include recent fixes for settings, previews, window controls, and Finder quick actions.
+- Fix automatic updates failing to relaunch OmniDock after the existing app exits.
+- Keep the update helper inside the signed app bundle and wait for it to be ready before replacing the app.
