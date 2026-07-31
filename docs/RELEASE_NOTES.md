@@ -1,5 +1,5 @@
-# OmniDock 1.2.1
+# OmniDock 1.2.2
 
-- Polish settings, clipboard previews, shortcut controls, and window layout menus for more consistent light and dark appearances.
-- Improve Dock preview targeting and prevent stale previews during Space transitions.
-- Make Finder quick-action settings faster and clearer with asynchronous availability checks and bundled app icons.
+- This maintenance release validates OmniDock's new in-app updater.
+- Add signed, SHA-256-verified downloads with safe automatic replacement and a DMG fallback.
+- Include recent fixes for settings, previews, window controls, and Finder quick actions.
