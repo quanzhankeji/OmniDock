@@ -70,6 +70,7 @@
 "finderQuickOpenEnabled" = "启用";
 "finderQuickOpenApplication" = "应用";
 "finderQuickOpenStatus" = "状态";
+"finderQuickOpenLoading" = "正在检测…";
 "finderQuickOpenInstalled" = "已安装";
 "finderQuickOpenNotInstalled" = "未安装";
 "finderQuickOpenFailedTitle" = "无法打开所选项目";

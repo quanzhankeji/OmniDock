@@ -3,6 +3,49 @@ import XCTest
 @testable import OmniDockCore
 
 final class DockTargetResolverTests: XCTestCase {
+    func testDockItemRoleValidationAcceptsOnlyApplicationDockItems() {
+        XCTAssertTrue(DockItemRoleValidationPolicy.accepts(
+            role: "AXDockItem",
+            subrole: "AXApplicationDockItem"
+        ))
+        XCTAssertFalse(DockItemRoleValidationPolicy.accepts(
+            role: "AXDockItem",
+            subrole: "AXMinimizedWindowDockItem"
+        ))
+        XCTAssertFalse(DockItemRoleValidationPolicy.accepts(
+            role: "AXGroup",
+            subrole: "AXApplicationDockItem"
+        ))
+    }
+
+    func testDockItemHitValidationAcceptsFrameCoveringPointer() {
+        XCTAssertTrue(DockItemHitValidationPolicy.accepts(
+            queryPoint: CGPoint(x: 128, y: 36),
+            itemFrame: CGRect(x: 96, y: 4, width: 64, height: 64)
+        ))
+    }
+
+    func testDockItemHitValidationRejectsMissionControlFrameAwayFromPointer() {
+        XCTAssertFalse(DockItemHitValidationPolicy.accepts(
+            queryPoint: CGPoint(x: 128, y: 36),
+            itemFrame: CGRect(x: 48, y: 520, width: 420, height: 280)
+        ))
+    }
+
+    func testDockItemHitValidationRejectsOversizedWindowThumbnail() {
+        XCTAssertFalse(DockItemHitValidationPolicy.accepts(
+            queryPoint: CGPoint(x: 128, y: 36),
+            itemFrame: CGRect(x: 0, y: 0, width: 420, height: 280)
+        ))
+    }
+
+    func testDockItemHitValidationAllowsSmallCoordinateTolerance() {
+        XCTAssertTrue(DockItemHitValidationPolicy.accepts(
+            queryPoint: CGPoint(x: 91, y: 32),
+            itemFrame: CGRect(x: 96, y: 4, width: 64, height: 64)
+        ))
+    }
+
     func testInteractionInventoriesAreSendableValues() {
         requireSendable(DockScreenInventoryItem.self)
         requireSendable(DockScreenInventory.self)

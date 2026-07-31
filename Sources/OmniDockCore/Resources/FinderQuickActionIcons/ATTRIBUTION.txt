@@ -1,0 +1,20 @@
+Finder Quick Action Icon Sources
+
+OmniDock displays the installed application's own icon whenever it is available.
+The images in this directory are fallback artwork for applications that are not
+installed on the current Mac.
+
+CC0 icon collections:
+- Logos: https://github.com/gilbarbara/logos
+- Simple Icons: https://github.com/simple-icons/simple-icons
+
+Official product artwork:
+- CotEditor: https://coteditor.com/
+- HBuilderX: https://www.dcloud.io/hbuilderx.html
+- MarkText: https://www.marktext.cc/
+- Tabby: https://tabby.sh/
+- Typora: https://typora.io/
+
+Product names and logos remain trademarks of their respective owners. Their
+appearance here identifies compatible applications and does not imply
+endorsement.

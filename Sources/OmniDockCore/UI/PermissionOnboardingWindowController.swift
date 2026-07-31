@@ -182,9 +182,7 @@ final class PermissionOnboardingWindowController: NSWindowController, NSWindowDe
     }
 
     private func makeContentView() -> NSView {
-        let root = NSView()
-        root.wantsLayer = true
-        root.layer?.backgroundColor = OmniDockTheme.palette().canvas.cgColor
+        let root = OmniDockWindowBackgroundView()
 
         let scrollView = NSScrollView()
         scrollView.borderType = .noBorder
@@ -278,7 +276,7 @@ final class PermissionOnboardingWindowController: NSWindowController, NSWindowDe
     }
 
     private func refreshLocalizedText() {
-        renderedLanguage = AppLocalization.currentResolvedLanguage
+        renderedLanguage = LocalizedResourceCatalog.currentResolvedLanguage
         titleLabel.stringValue = AppStrings.text(.onboardingTitle)
         subtitleLabel.stringValue = AppStrings.text(.onboardingSubtitle)
         privacyLabel.stringValue = AppStrings.text(.onboardingPrivacyNote)
@@ -289,7 +287,7 @@ final class PermissionOnboardingWindowController: NSWindowController, NSWindowDe
         if let window {
             applyTheme(to: window)
         }
-        if renderedLanguage != AppLocalization.currentResolvedLanguage {
+        if renderedLanguage != LocalizedResourceCatalog.currentResolvedLanguage {
             refreshLocalizedText()
         }
         if let generation = sessionState.visibleGeneration {

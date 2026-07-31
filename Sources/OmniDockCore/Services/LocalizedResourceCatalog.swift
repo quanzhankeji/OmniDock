@@ -72,6 +72,7 @@ enum AppStringKey: String, CaseIterable {
     case finderQuickOpenEnabled
     case finderQuickOpenApplication
     case finderQuickOpenStatus
+    case finderQuickOpenLoading
     case finderQuickOpenInstalled
     case finderQuickOpenNotInstalled
     case finderQuickOpenFailedTitle
@@ -239,7 +240,7 @@ enum AppStringKey: String, CaseIterable {
     case previewWindowContentUnavailable
 }
 
-enum AppLocalization {
+enum LocalizedResourceCatalog {
     static let tableName = "AppStrings"
 
     private final class State: @unchecked Sendable {
@@ -393,11 +394,11 @@ enum AppLocalization {
 
 enum AppStrings {
     static func text(_ key: AppStringKey) -> String {
-        AppLocalization.text(key)
+        LocalizedResourceCatalog.text(key)
     }
 
     static func format(_ key: AppStringKey, _ arguments: CVarArg...) -> String {
-        AppLocalization.format(key, arguments: arguments)
+        LocalizedResourceCatalog.format(key, arguments: arguments)
     }
 
     static func permissionTitle(_ kind: PermissionKind) -> String {

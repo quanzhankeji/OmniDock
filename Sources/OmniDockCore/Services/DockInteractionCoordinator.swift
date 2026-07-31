@@ -142,6 +142,8 @@ public final class DockInteractionCoordinator {
     private var isCommandTabPreviewActive = false
     private var isWindowCycleActive = false
     private var powerStateObserver: NSObjectProtocol?
+    private var activeSpaceObserver: NSObjectProtocol?
+    private var dockHoverSuppressedUntil: Date?
     private let proxyOwnerStore: DockProxyOwnerStore
     private let proxyTargetRouter: DockProxyTargetRouter
 
@@ -212,6 +214,7 @@ public final class DockInteractionCoordinator {
         installHoverTimer()
         installPermissionTimer()
         installPowerStateObserver()
+        installWorkspaceObservers()
     }
 
     public func stop() {
@@ -225,6 +228,11 @@ public final class DockInteractionCoordinator {
             NotificationCenter.default.removeObserver(powerStateObserver)
             self.powerStateObserver = nil
         }
+        if let activeSpaceObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(activeSpaceObserver)
+            self.activeSpaceObserver = nil
+        }
+        dockHoverSuppressedUntil = nil
         resetPreviewContentState()
         captureSessionRegistry.stopAll()
         previewService.clearAllCachedSnapshots()
@@ -394,6 +402,26 @@ public final class DockInteractionCoordinator {
         }
     }
 
+    private func installWorkspaceObservers() {
+        activeSpaceObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.handleWorkspaceTransition()
+            }
+        }
+    }
+
+    private func handleWorkspaceTransition() {
+        dockHoverSuppressedUntil = Date().addingTimeInterval(0.5)
+        hidePreview()
+        hoverTarget = nil
+        hoverBeganAt = nil
+        proxyTargetRouter.removeAll()
+    }
+
     private func handlePermissionTick() {
         let snapshot = permissionService.snapshot()
         guard snapshot != lastPermissionSnapshot else {
@@ -431,6 +459,13 @@ public final class DockInteractionCoordinator {
     }
 
     private func handleHoverTick() {
+        if let dockHoverSuppressedUntil {
+            guard Date() >= dockHoverSuppressedUntil else {
+                hidePreview()
+                return
+            }
+            self.dockHoverSuppressedUntil = nil
+        }
         guard !DockPreviewHoverSuppressionPolicy.shouldSuspend(
             commandTabPreviewIsActive: isCommandTabPreviewActive,
             windowCycleIsActive: isWindowCycleActive

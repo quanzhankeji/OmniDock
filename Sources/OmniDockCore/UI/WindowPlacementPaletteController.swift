@@ -1,121 +1,5 @@
 import AppKit
 
-enum WindowPlacementPaletteGeometry {
-    static let anchorOverlap: CGFloat = 1
-    static let arrowHorizontalInset = WindowPlacementBubbleShape.minimumArrowCenterInset
-    static let preferredArrowCenterX: CGFloat = 30
-
-    static func origin(
-        panelSize: CGSize,
-        anchor: CGRect,
-        visibleFrame: CGRect
-    ) -> CGPoint {
-        let proposedX = anchor.midX - preferredArrowCenterX
-        let proposedY = anchor.minY + anchorOverlap - panelSize.height
-        let maximumX = max(visibleFrame.minX, visibleFrame.maxX - panelSize.width)
-        let maximumY = max(visibleFrame.minY, visibleFrame.maxY - panelSize.height)
-        var x = min(max(proposedX, visibleFrame.minX), maximumX)
-        let arrowX = anchor.midX - x
-        if arrowX < arrowHorizontalInset {
-            x = anchor.midX - arrowHorizontalInset
-        } else if arrowX > panelSize.width - arrowHorizontalInset {
-            x = anchor.midX - (panelSize.width - arrowHorizontalInset)
-        }
-        return CGPoint(
-            x: x,
-            y: min(max(proposedY, visibleFrame.minY), maximumY)
-        )
-    }
-
-    static func arrowCenterX(
-        anchor: CGRect,
-        panelOrigin: CGPoint,
-        panelWidth: CGFloat
-    ) -> CGFloat {
-        min(
-            max(anchor.midX - panelOrigin.x, arrowHorizontalInset),
-            panelWidth - arrowHorizontalInset
-        )
-    }
-}
-
-enum WindowPlacementBubbleShape {
-    static let arrowHeight: CGFloat = 10
-    static let arrowShoulderWidth: CGFloat = 5
-    static let cornerRadius: CGFloat = 8
-    static let minimumArrowCenterInset = cornerRadius + arrowShoulderWidth
-
-    static func path(
-        in bounds: CGRect,
-        arrowCenterX: CGFloat
-    ) -> CGPath {
-        let body = CGRect(
-            x: bounds.minX + 0.5,
-            y: bounds.minY + 0.5,
-            width: max(bounds.width - 1, 0),
-            height: max(bounds.height - arrowHeight - 1, 0)
-        )
-        guard body.width > cornerRadius * 2,
-              body.height > cornerRadius * 2
-        else {
-            return CGPath(rect: body, transform: nil)
-        }
-
-        let radius = min(cornerRadius, min(body.width, body.height) / 2)
-        let minimumCenter = body.minX + radius + arrowShoulderWidth
-        let maximumCenter = body.maxX - radius - arrowShoulderWidth
-        let center = min(max(arrowCenterX, minimumCenter), maximumCenter)
-        let top = body.maxY
-        let tip = bounds.maxY - 0.5
-        let path = CGMutablePath()
-
-        path.move(to: CGPoint(x: body.minX + radius, y: body.minY))
-        path.addLine(to: CGPoint(x: body.maxX - radius, y: body.minY))
-        path.addQuadCurve(
-            to: CGPoint(x: body.maxX, y: body.minY + radius),
-            control: CGPoint(x: body.maxX, y: body.minY)
-        )
-        path.addLine(to: CGPoint(x: body.maxX, y: top - radius))
-        path.addQuadCurve(
-            to: CGPoint(x: body.maxX - radius, y: top),
-            control: CGPoint(x: body.maxX, y: top)
-        )
-        path.addLine(to: CGPoint(x: center + arrowShoulderWidth, y: top))
-        path.addCurve(
-            to: CGPoint(x: center + 5, y: top + 2),
-            control1: CGPoint(x: center + 11, y: top),
-            control2: CGPoint(x: center + 8, y: top + 1)
-        )
-        path.addCurve(
-            to: CGPoint(x: center, y: tip),
-            control1: CGPoint(x: center + 3, y: top + 4),
-            control2: CGPoint(x: center + 2, y: tip)
-        )
-        path.addCurve(
-            to: CGPoint(x: center - 5, y: top + 2),
-            control1: CGPoint(x: center - 2, y: tip),
-            control2: CGPoint(x: center - 3, y: top + 4)
-        )
-        path.addCurve(
-            to: CGPoint(x: center - arrowShoulderWidth, y: top),
-            control1: CGPoint(x: center - 8, y: top + 1),
-            control2: CGPoint(x: center - 11, y: top)
-        )
-        path.addLine(to: CGPoint(x: body.minX + radius, y: top))
-        path.addQuadCurve(
-            to: CGPoint(x: body.minX, y: top - radius),
-            control: CGPoint(x: body.minX, y: top)
-        )
-        path.addLine(to: CGPoint(x: body.minX, y: body.minY + radius))
-        path.addQuadCurve(
-            to: CGPoint(x: body.minX + radius, y: body.minY),
-            control: CGPoint(x: body.minX, y: body.minY)
-        )
-        path.closeSubpath()
-        return path
-    }
-}
-
 struct WindowPlacementDragZoneDescriptor: Equatable {
     let commandID: UUID
     let region: WindowPlacementRegion
@@ -158,6 +42,25 @@ enum WindowPlacementPaletteDismissalPolicy {
 }
 
 @MainActor
+enum WindowPlacementPopoverFactory {
+    static func make(
+        contentView: NSView,
+        contentSize: NSSize
+    ) -> NSPopover {
+        let popover = NSPopover()
+        popover.behavior = .applicationDefined
+        popover.animates = false
+        popover.appearance = OmniDockTheme.appearance.forcedNSAppearance
+            ?? NSApp.effectiveAppearance
+        popover.contentSize = contentSize
+        let viewController = NSViewController()
+        viewController.view = contentView
+        popover.contentViewController = viewController
+        return popover
+    }
+}
+
+@MainActor
 final class WindowPlacementPaletteController: NSObject {
     typealias DeferredAction = @MainActor () -> Void
     typealias DeferredScheduler = @MainActor (@escaping DeferredAction) -> Void
@@ -166,7 +69,7 @@ final class WindowPlacementPaletteController: NSObject {
     var onOpenSettings: (() -> Void)?
 
     private let scheduleDeferred: DeferredScheduler
-    private var panel: NSPanel?
+    private var popover: NSPopover?
     private var anchorShieldPanel: NSPanel?
     private var dragRegionPanels: [CGDirectDisplayID: NSPanel] = [:]
     private var target: WindowPlacementTarget?
@@ -175,6 +78,7 @@ final class WindowPlacementPaletteController: NSObject {
     private var observedProcessIdentifier: pid_t?
     private var anchorEventTapFrame: CGRect?
     private var pendingHoverClose: DispatchWorkItem?
+    private var themeObserver: NSObjectProtocol?
 
     init(
         scheduleDeferred: @escaping DeferredScheduler = { action in
@@ -185,6 +89,21 @@ final class WindowPlacementPaletteController: NSObject {
     ) {
         self.scheduleDeferred = scheduleDeferred
         super.init()
+        themeObserver = NotificationCenter.default.addObserver(
+            forName: OmniDockTheme.changedNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshTheme()
+            }
+        }
+    }
+
+    deinit {
+        if let themeObserver {
+            NotificationCenter.default.removeObserver(themeObserver)
+        }
     }
 
     func show(
@@ -192,15 +111,15 @@ final class WindowPlacementPaletteController: NSObject {
         target: WindowPlacementTarget,
         anchorEventTapFrame: CGRect
     ) {
-        if panel != nil,
+        if popover?.isShown == true,
            self.target?.runtimeIdentifier == target.runtimeIdentifier {
             self.anchorEventTapFrame = anchorEventTapFrame
-            if let panel,
-               let content = panel.contentView as? WindowPlacementBubbleView {
-                position(
-                    panel: panel,
-                    content: content,
-                    anchorEventTapFrame: anchorEventTapFrame
+            let anchor = appKitRect(fromEventTapFrame: anchorEventTapFrame)
+            if let shield = positionAnchorShield(at: anchor) {
+                popover?.show(
+                    relativeTo: shield.bounds,
+                    of: shield,
+                    preferredEdge: .minY
                 )
             }
             cancelPendingHoverClose()
@@ -211,22 +130,31 @@ final class WindowPlacementPaletteController: NSObject {
         self.anchorEventTapFrame = anchorEventTapFrame
         observeTermination(of: target.processIdentifier)
 
-        let panel = makePanel()
         let content = makeContent(commands: commands)
-        panel.contentView = content
         let fittingSize = content.fittingSize
-        let panelSize = CGSize(
+        let contentSize = CGSize(
             width: min(max(fittingSize.width, 220), 320),
-            height: min(max(fittingSize.height, 120), 480)
+            height: min(max(fittingSize.height, 110), 470)
         )
-        panel.setContentSize(panelSize)
-        position(
-            panel: panel,
-            content: content,
-            anchorEventTapFrame: anchorEventTapFrame
+        content.frame.size = contentSize
+
+        let popover = WindowPlacementPopoverFactory.make(
+            contentView: content,
+            contentSize: contentSize
         )
-        self.panel = panel
-        panel.orderFrontRegardless()
+        self.popover = popover
+
+        let anchor = appKitRect(fromEventTapFrame: anchorEventTapFrame)
+        guard let shield = positionAnchorShield(at: anchor) else {
+            hide()
+            return
+        }
+        popover.show(
+            relativeTo: shield.bounds,
+            of: shield,
+            preferredEdge: .minY
+        )
+        refreshTheme()
 
         if let monitor = NSEvent.addGlobalMonitorForEvents(
             matching: [.leftMouseDown, .rightMouseDown],
@@ -259,7 +187,7 @@ final class WindowPlacementPaletteController: NSObject {
     }
 
     func pointerMoved(toEventTapPoint point: CGPoint) {
-        guard let panel else {
+        guard popover?.isShown == true else {
             return
         }
         let appKitPoint = DisplayCoordinateConverter.appKitPoint(
@@ -268,9 +196,9 @@ final class WindowPlacementPaletteController: NSObject {
         let isOverAnchor = anchorEventTapFrame?
             .insetBy(dx: -5, dy: -5)
             .contains(point) == true
-        let isOverPalette = panel.frame
+        let isOverPalette = popoverFrame?
             .insetBy(dx: -3, dy: -3)
-            .contains(appKitPoint)
+            .contains(appKitPoint) == true
         if isOverAnchor || isOverPalette {
             cancelPendingHoverClose()
             return
@@ -339,7 +267,7 @@ final class WindowPlacementPaletteController: NSObject {
     func hideDragRegions() {
         dragRegionPanels.values.forEach { $0.orderOut(nil) }
         dragRegionPanels.removeAll()
-        if panel == nil {
+        if popover?.isShown != true {
             target = nil
             stopObservingTermination()
         }
@@ -354,8 +282,8 @@ final class WindowPlacementPaletteController: NSObject {
 
     private func hidePaletteOnly() {
         cancelPendingHoverClose()
-        panel?.orderOut(nil)
-        panel = nil
+        popover?.close()
+        popover = nil
         anchorShieldPanel?.orderOut(nil)
         anchorShieldPanel = nil
         anchorEventTapFrame = nil
@@ -371,7 +299,7 @@ final class WindowPlacementPaletteController: NSObject {
     private func dismissForOutsideClick(at pointer: CGPoint) {
         guard WindowPlacementPaletteDismissalPolicy.shouldDismiss(
             pointer: pointer,
-            paletteFrame: panel?.frame,
+            paletteFrame: popoverFrame,
             anchorFrame: anchorShieldPanel?.frame
         ) else {
             return
@@ -410,23 +338,6 @@ final class WindowPlacementPaletteController: NSObject {
         observedProcessIdentifier = nil
     }
 
-    private func makePanel() -> NSPanel {
-        let panel = NSPanel(
-            contentRect: .zero,
-            styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
-            backing: .buffered,
-            defer: false
-        )
-        panel.level = .popUpMenu
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = false
-        panel.hidesOnDeactivate = false
-        panel.becomesKeyOnlyIfNeeded = true
-        panel.collectionBehavior = [.transient, .fullScreenAuxiliary]
-        return panel
-    }
-
     private func makeDragRegionPanel() -> NSPanel {
         let panel = NSPanel(
             contentRect: .zero,
@@ -441,6 +352,7 @@ final class WindowPlacementPaletteController: NSObject {
         panel.hasShadow = false
         panel.collectionBehavior = [.transient, .fullScreenAuxiliary]
         panel.contentView = WindowPlacementDragRegionOverlayView()
+        OmniDockTheme.applyCurrentAppearance(to: panel)
         return panel
     }
 
@@ -460,6 +372,9 @@ final class WindowPlacementPaletteController: NSObject {
         panel.collectionBehavior = [.transient, .fullScreenAuxiliary]
 
         let shield = WindowPlacementGreenButtonShieldView()
+        shield.onAppearanceChanged = { [weak self] in
+            self?.refreshTheme()
+        }
         shield.onClick = { [weak self] modifiers in
             guard WindowPlacementGreenButtonPolicy.shouldForwardNativeAction(
                 modifiers: modifiers
@@ -470,27 +385,28 @@ final class WindowPlacementPaletteController: NSObject {
             _ = WindowPlacementAccessibility.pressGreenButton(for: target)
         }
         panel.contentView = shield
+        OmniDockTheme.applyCurrentAppearance(to: panel)
         return panel
     }
 
     private func makeContent(
         commands: [WindowPlacementCommand]
-    ) -> WindowPlacementBubbleView {
-        let visual = WindowPlacementBubbleView()
+    ) -> NSView {
+        let content = NSView()
 
         let stack = NSStackView()
         stack.orientation = .vertical
         stack.alignment = .centerX
         stack.spacing = 1
         let contentInsets = NSEdgeInsets(
-            top: WindowPlacementBubbleShape.arrowHeight + 6,
+            top: 8,
             left: 8,
             bottom: 8,
             right: 8
         )
         stack.edgeInsets = contentInsets
         stack.translatesAutoresizingMaskIntoConstraints = false
-        visual.addSubview(stack)
+        content.addSubview(stack)
 
         for (index, command) in commands.enumerated() {
             let button = WindowPlacementCommandButton(
@@ -535,36 +451,18 @@ final class WindowPlacementPaletteController: NSObject {
         )
 
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: visual.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: visual.trailingAnchor),
-            stack.topAnchor.constraint(equalTo: visual.topAnchor),
-            stack.bottomAnchor.constraint(equalTo: visual.bottomAnchor),
+            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            stack.topAnchor.constraint(equalTo: content.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: content.bottomAnchor),
             stack.widthAnchor.constraint(greaterThanOrEqualToConstant: 220)
         ])
-        return visual
+        content.appearance = OmniDockTheme.appearance.forcedNSAppearance
+        return content
     }
 
-    private func position(
-        panel: NSPanel,
-        content: WindowPlacementBubbleView,
-        anchorEventTapFrame: CGRect
-    ) {
-        let anchor = appKitRect(fromEventTapFrame: anchorEventTapFrame)
-        let panelSize = panel.frame.size
-        let origin = paletteOrigin(
-            panelSize: panelSize,
-            anchor: anchor
-        )
-        panel.setFrameOrigin(origin)
-        content.arrowCenterX = WindowPlacementPaletteGeometry.arrowCenterX(
-            anchor: anchor,
-            panelOrigin: origin,
-            panelWidth: panelSize.width
-        )
-        positionAnchorShield(at: anchor)
-    }
-
-    private func positionAnchorShield(at anchor: CGRect) {
+    @discardableResult
+    private func positionAnchorShield(at anchor: CGRect) -> NSView? {
         let shield = anchorShieldPanel ?? makeAnchorShieldPanel()
         anchorShieldPanel = shield
         shield.setFrame(
@@ -572,6 +470,7 @@ final class WindowPlacementPaletteController: NSObject {
             display: true
         )
         shield.orderFrontRegardless()
+        return shield.contentView
     }
 
     private func addFullWidthRow(
@@ -605,21 +504,6 @@ final class WindowPlacementPaletteController: NSObject {
             .previousDisplay,
             .restore
         ].contains(builtIn)
-    }
-
-    private func paletteOrigin(
-        panelSize: CGSize,
-        anchor: CGRect
-    ) -> CGPoint {
-        let screen = NSScreen.screens.first { $0.frame.intersects(anchor) }
-            ?? NSScreen.main
-        let visible = screen?.visibleFrame
-            ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
-        return WindowPlacementPaletteGeometry.origin(
-            panelSize: panelSize,
-            anchor: anchor,
-            visibleFrame: visible
-        )
     }
 
     private func appKitRect(fromEventTapFrame frame: CGRect) -> CGRect {
@@ -677,6 +561,32 @@ final class WindowPlacementPaletteController: NSObject {
         }
         scheduleDeferred(action)
     }
+
+    private var popoverFrame: CGRect? {
+        guard popover?.isShown == true else {
+            return nil
+        }
+        return popover?.contentViewController?.view.window?.frame
+    }
+
+    private func refreshTheme() {
+        let selectedAppearance = OmniDockTheme.appearance.forcedNSAppearance
+            ?? anchorShieldPanel?.effectiveAppearance
+            ?? NSApp.effectiveAppearance
+        popover?.appearance = selectedAppearance
+        popover?.contentViewController?.view.appearance = selectedAppearance
+        if let window = popover?.contentViewController?.view.window {
+            OmniDockTheme.applyCurrentAppearance(to: window)
+            window.contentView?.needsDisplay = true
+        }
+        if let anchorShieldPanel {
+            OmniDockTheme.applyCurrentAppearance(to: anchorShieldPanel)
+        }
+        for panel in dragRegionPanels.values {
+            OmniDockTheme.applyCurrentAppearance(to: panel)
+            panel.contentView?.needsDisplay = true
+        }
+    }
 }
 
 private final class WindowPlacementDragRegionOverlayView: NSView {
@@ -696,6 +606,7 @@ private final class WindowPlacementDragRegionOverlayView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
+        let palette = OmniDockTheme.palette(for: effectiveAppearance)
         for descriptor in descriptors {
             let frame = localFrame(for: descriptor.region)
                 .insetBy(dx: 2, dy: 2)
@@ -710,17 +621,22 @@ private final class WindowPlacementDragRegionOverlayView: NSView {
                 yRadius: radius
             )
             (isActive
-                ? NSColor.controlAccentColor.withAlphaComponent(0.34)
-                : NSColor.controlBackgroundColor.withAlphaComponent(0.70)
+                ? palette.accent.withAlphaComponent(0.34)
+                : palette.surface.withAlphaComponent(0.70)
             ).setFill()
             (isActive
-                ? NSColor.controlAccentColor
-                : NSColor.systemGray.withAlphaComponent(0.68)
+                ? palette.accent
+                : palette.neutral.withAlphaComponent(0.68)
             ).setStroke()
             path.lineWidth = isActive ? 3 : 1.5
             path.fill()
             path.stroke()
         }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
     }
 
     private func localFrame(
@@ -819,6 +735,11 @@ class WindowPlacementHoverButton: NSButton {
         updateAppearance()
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
     }
@@ -860,21 +781,23 @@ class WindowPlacementHoverButton: NSButton {
 
     private func updateAppearance() {
         let isHighlighted = (isPointerInside || isPressedInside) && isEnabled
+        let palette = OmniDockTheme.palette(for: effectiveAppearance)
         layer?.backgroundColor = isHighlighted
-            ? NSColor.controlAccentColor.cgColor
+            ? palette.accent.cgColor
             : NSColor.clear.cgColor
         commandImageView.contentTintColor = isHighlighted
             ? .white
-            : (isEnabled ? .labelColor : .tertiaryLabelColor)
+            : (isEnabled ? palette.primaryText : palette.tertiaryText)
         commandTitleLabel.stringValue = displayTitle
         commandTitleLabel.textColor = isHighlighted
             ? .white
-            : (isEnabled ? .labelColor : .tertiaryLabelColor)
+            : (isEnabled ? palette.primaryText : palette.tertiaryText)
     }
 }
 
 private final class WindowPlacementGreenButtonShieldView: NSView {
     var onClick: ((NSEvent.ModifierFlags) -> Void)?
+    var onAppearanceChanged: (() -> Void)?
     private var pressedInside = false
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
@@ -894,6 +817,11 @@ private final class WindowPlacementGreenButtonShieldView: NSView {
             return
         }
         onClick?(event.modifierFlags)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        onAppearanceChanged?()
     }
 }
 
@@ -917,53 +845,6 @@ private final class WindowPlacementCommandButton: WindowPlacementHoverButton {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-}
-
-private final class WindowPlacementBubbleView: NSView {
-    var arrowCenterX: CGFloat = 28 {
-        didSet {
-            needsLayout = true
-        }
-    }
-
-    private let backgroundLayer = CAShapeLayer()
-    private let outlineLayer = CAShapeLayer()
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        wantsLayer = true
-        layer?.addSublayer(backgroundLayer)
-        outlineLayer.fillColor = NSColor.clear.cgColor
-        outlineLayer.lineWidth = 1
-        layer?.addSublayer(outlineLayer)
-        updateColors()
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-
-    override func layout() {
-        super.layout()
-        let path = WindowPlacementBubbleShape.path(
-            in: bounds,
-            arrowCenterX: arrowCenterX
-        )
-        backgroundLayer.frame = bounds
-        backgroundLayer.path = path
-        outlineLayer.frame = bounds
-        outlineLayer.path = path
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        updateColors()
-    }
-
-    private func updateColors() {
-        backgroundLayer.fillColor = NSColor.windowBackgroundColor.cgColor
-        outlineLayer.strokeColor = NSColor.separatorColor.cgColor
     }
 }
 

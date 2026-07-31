@@ -27,14 +27,14 @@ final class ClipboardHistoryTests: XCTestCase {
     }
 
     func testClipboardHistoryLabelsAreLocalized() {
-        AppLocalization.configure(language: .en)
+        LocalizedResourceCatalog.configure(language: .en)
         XCTAssertEqual(AppStrings.text(.tabClipboardHistory), "Clipboard History")
         XCTAssertEqual(AppStrings.text(.clipboardEnableTitle), "Enable Clipboard History")
 
-        AppLocalization.configure(language: .zhHans)
+        LocalizedResourceCatalog.configure(language: .zhHans)
         XCTAssertEqual(AppStrings.text(.tabClipboardHistory), "剪贴板历史")
         XCTAssertEqual(AppStrings.text(.clipboardEnableTitle), "启用剪贴板历史")
-        AppLocalization.configure(language: .system)
+        LocalizedResourceCatalog.configure(language: .system)
     }
 
     func testLongClipboardContentUsesACompactSingleLineListSummary() {

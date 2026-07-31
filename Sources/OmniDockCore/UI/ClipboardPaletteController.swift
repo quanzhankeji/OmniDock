@@ -156,8 +156,28 @@ final class ClipboardPaletteController: NSObject, NSSearchFieldDelegate, NSWindo
     private var previewRequestGeneration = 0
     private var pendingPreviewRecordID: UUID?
     private var previewedRecordID: UUID?
+    private var themeObserver: NSObjectProtocol?
 
     private static let hoverPreviewDelay: TimeInterval = 0.4
+
+    override init() {
+        super.init()
+        themeObserver = NotificationCenter.default.addObserver(
+            forName: OmniDockTheme.changedNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshTheme()
+            }
+        }
+    }
+
+    deinit {
+        if let themeObserver {
+            NotificationCenter.default.removeObserver(themeObserver)
+        }
+    }
 
     var isVisible: Bool {
         panel?.isVisible == true
@@ -186,6 +206,7 @@ final class ClipboardPaletteController: NSObject, NSSearchFieldDelegate, NSWindo
     ) {
         let panel = panel ?? makePanel()
         self.panel = panel
+        refreshTheme()
         self.sourceApplication = sourceApplication
         dismissPreview()
         searchField?.stringValue = ""
@@ -572,6 +593,15 @@ final class ClipboardPaletteController: NSObject, NSSearchFieldDelegate, NSWindo
             self.localMouseMonitor = nil
         }
     }
+
+    private func refreshTheme() {
+        if let panel {
+            OmniDockTheme.applyCurrentAppearance(to: panel)
+            panel.contentView?.needsDisplay = true
+        }
+        rowViews.values.forEach { $0.refreshTheme() }
+        detailPanel?.refreshTheme()
+    }
 }
 
 enum ClipboardArchiveSearch {
@@ -750,6 +780,11 @@ final class ClipboardPaletteRowView: NSView {
         onHoverChanged?(false)
     }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateBackground()
+    }
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
     }
@@ -766,6 +801,11 @@ final class ClipboardPaletteRowView: NSView {
         backgroundLayer.backgroundColor = isSelected
             ? OmniDockTheme.palette(for: effectiveAppearance).selection.withAlphaComponent(0.22).cgColor
             : NSColor.clear.cgColor
+    }
+
+    func refreshTheme() {
+        updateBackground()
+        needsDisplay = true
     }
 
     private static func metadata(for record: ClipboardHistoryRecord) -> String {

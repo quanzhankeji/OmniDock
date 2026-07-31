@@ -70,6 +70,7 @@
 "finderQuickOpenEnabled" = "Enabled";
 "finderQuickOpenApplication" = "Application";
 "finderQuickOpenStatus" = "Status";
+"finderQuickOpenLoading" = "Checking…";
 "finderQuickOpenInstalled" = "Installed";
 "finderQuickOpenNotInstalled" = "Not Installed";
 "finderQuickOpenFailedTitle" = "Could Not Open Item";
