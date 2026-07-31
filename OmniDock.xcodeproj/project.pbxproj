@@ -843,7 +843,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Resources/OmniDock-Development.entitlements";
 				CODE_SIGN_STYLE = "Automatic";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = "10";
+				CURRENT_PROJECT_VERSION = "11";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Resources/OmniDock-Info.plist";
@@ -852,7 +852,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = "12.3";
-				MARKETING_VERSION = "1.2.0";
+				MARKETING_VERSION = "1.2.1";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.quanzhankeji.OmniDock";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = "macosx";
@@ -872,7 +872,7 @@
 				CODE_SIGN_ENTITLEMENTS = "Resources/OmniDock-AppStore.entitlements";
 				CODE_SIGN_STYLE = "Automatic";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = "10";
+				CURRENT_PROJECT_VERSION = "11";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Resources/OmniDock-Info.plist";
@@ -881,7 +881,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = "12.3";
-				MARKETING_VERSION = "1.2.0";
+				MARKETING_VERSION = "1.2.1";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.quanzhankeji.OmniDock";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = "macosx";
@@ -901,7 +901,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = "Resources/OmniDockFinderSync.entitlements";
 				CODE_SIGN_STYLE = "Automatic";
-				CURRENT_PROJECT_VERSION = "10";
+				CURRENT_PROJECT_VERSION = "11";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Resources/OmniDockFinderSync-Info.plist";
@@ -911,7 +911,7 @@
 					"@loader_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = "12.3";
-				MARKETING_VERSION = "1.2.0";
+				MARKETING_VERSION = "1.2.1";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.quanzhankeji.OmniDock.FinderSync";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = "macosx";
@@ -927,7 +927,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = "Resources/OmniDockFinderSync.entitlements";
 				CODE_SIGN_STYLE = "Automatic";
-				CURRENT_PROJECT_VERSION = "10";
+				CURRENT_PROJECT_VERSION = "11";
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = "Resources/OmniDockFinderSync-Info.plist";
@@ -937,7 +937,7 @@
 					"@loader_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = "12.3";
-				MARKETING_VERSION = "1.2.0";
+				MARKETING_VERSION = "1.2.1";
 				PRODUCT_BUNDLE_IDENTIFIER = "com.quanzhankeji.OmniDock.FinderSync";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = "macosx";
