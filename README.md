@@ -69,19 +69,27 @@ The explicit Finder extension command remains available as an alias:
 ./script/build_and_run.sh --install-finder-extension
 ```
 
+## Window Previews And App Control
+
+Dock previews show the normal windows that macOS makes available to OmniDock. Preview cards can focus the exact window, close that window, quit its application, or raise it while a file is being dragged. Live previews can be disabled to use static snapshots and reduce resource use. Hidden and minimized windows may use a recent static image or a text-only state when macOS cannot provide a current frame.
+
+Dock click toggling applies only to running applications. A short click brings a background application forward, while a second click on the frontmost visible application hides it. Unlaunched apps, long presses, and Dock icon rearrangement remain under macOS control. Minimize/restore can be selected instead of hide/show.
+
+The optional Command-Tab preview augments the native macOS application switcher without replacing it. The separate Alt-Tab window switcher uses Option-Tab to navigate individual windows with static previews. Per-app hotkeys can launch an app that is not running, bring it forward, or hide it when it is already frontmost.
+
 ## Finder Right-Click Extension
 
 The Finder extension is off by default. Open `OD` > `Settings` > `Finder Extension`, then turn on `Enable`. macOS may open its extension management page; enable OmniDock there to let Finder load the menu.
 
 When enabled, right-clicking an empty area in a Finder Sync-monitored local folder offers **Copy Path**, a configurable **New File** submenu, and commands for showing or hiding hidden files. Text and Markdown are included by default, and additional file types can be added in OmniDock settings. Right-clicking selected items offers **Copy Path**, hidden-file visibility commands, and optional shortcuts for opening the selection with chosen applications. Copied selections place every path on a separate line, and new files use an available `NewFile.<extension>` name without overwriting existing files.
 
-Finder Sync menus are available only in locations that macOS lets third-party Finder Sync extensions monitor. They do not appear in File Provider-managed locations, including Desktop and Documents when those folders are managed by iCloud Drive.
+OmniDock registers the local Desktop, Documents, Downloads, their iCloud Drive counterparts when present, and folders that you explicitly authorize. Finder ultimately decides whether a Finder Sync menu is available in a provider-managed location, so some third-party cloud folders may not expose these commands.
 
 ## Clipboard History
 
 Clipboard History is off by default. Enable it from `OD` > `Settings` > `Clipboard History`. While enabled, OmniDock checks the system pasteboard for changes and stores supported entries locally on this Mac. Press `Command-Shift-C` to search the history, use the arrow keys to select an entry, and press Return to copy it back. Hold Option while confirming to paste into the app that was active before the history panel opened.
 
-Temporary, confidential, and automatically generated pasteboard entries are ignored. The history limit can be set from 1 to 999 entries, and individual entries or the entire history can be deleted from settings.
+Pasteboard entries explicitly marked as temporary, concealed, or automatically generated are ignored. The history limit can be set from 1 to 999 entries, and individual entries or the entire history can be deleted from settings.
 
 ## Window Layout
 

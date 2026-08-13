@@ -2,7 +2,7 @@
 
 Effective date: July 25, 2026
 
-OmniDock is a local macOS utility for Dock window previews, Dock click window toggling, Finder right-click commands, per-app keyboard shortcuts, and optional clipboard history. This policy explains what data the app handles and how it is used.
+OmniDock is a local macOS utility for window previews and switching, app control, Finder right-click commands, optional clipboard history, window layouts, and menu bar organization. This policy explains what data the app handles and how it is used.
 
 ## Data Collection
 
@@ -14,7 +14,7 @@ Shortly after launch, OmniDock makes an asynchronous HTTPS request to GitHub's p
 
 ## Local Data
 
-OmniDock stores settings locally on your Mac, including feature toggles, language and permission-onboarding state, and configured app shortcut bindings. Each shortcut binding stores the selected app's display name, bundle identifier, application URL or path, shortcut key code and modifiers, enabled state, and an internal binding identifier. This data remains on your device and is used only to provide the app's features.
+OmniDock stores settings locally on your Mac, including feature toggles, language and appearance, permission-onboarding state, window-layout configuration, Hidden Bar timing, Finder menu configuration, and configured app shortcut bindings. Each shortcut binding stores the selected app's display name, bundle identifier, application URL or path, shortcut key code and modifiers, enabled state, and an internal binding identifier. This data remains on your device and is used only to provide the app's features.
 
 When OmniDock captures one-time snapshots before hiding an app, eligible preview images are cached only in the app's memory and expire 45 seconds after capture. If a cached preview is open at expiration, its displayed image references are released during the next preview validation pass. Entries are also removed when the corresponding window or app cache is cleared. Preview images are not persisted to disk.
 
@@ -26,11 +26,15 @@ Clipboard History is disabled by default. When the user enables it, OmniDock sto
 
 OmniDock may request the following macOS permissions:
 
-- Accessibility: used to identify Dock items, raise windows, focus windows, close previewed windows when requested, and perform automatic paste only when the user explicitly chooses that clipboard action.
-- Input Monitoring: used to detect Dock icon click gestures.
+- Accessibility: used to identify Dock items; raise, focus, hide, close, move, or resize windows when requested; operate per-app hotkeys; and perform automatic paste only when the user explicitly chooses that clipboard action.
+- Input Monitoring: used to detect Dock icon click gestures, operate the optional Option-Tab window switcher, and recognize pointer gestures used by optional window drag zones. OmniDock does not record or save typed text.
 - Screen Recording: used to generate window thumbnails, including live images and one-time static snapshots.
+- Finder Extension: used to add the enabled OmniDock commands to Finder contextual menus.
+- Folder Access: stores a security-scoped bookmark only for a folder the user explicitly approves, so New File can write to that location without broad file-system access.
 
 These permissions are used locally for OmniDock features. OmniDock does not upload screen contents, keyboard input, window contents, file contents, shortcut bindings, or application usage data.
+
+Hidden Bar uses macOS status-item behavior and does not require an additional privacy permission.
 
 ## Third-Party Services
 
