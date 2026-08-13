@@ -58,6 +58,7 @@ public final class DockClickEventTap {
     private let snapshotService: DockInteractionSnapshotService
     private let actionHandler: @MainActor (DockAppTarget) -> Void
     private let eventPoster: (CGEvent) -> Void
+    private let activityLease = RuntimeActivityLease()
     private let controlLock = NSLock()
     private let lifecycleLock = NSLock()
 
@@ -72,6 +73,7 @@ public final class DockClickEventTap {
     // These values are confined to the event-tap thread.
     private var gestureStateMachine = DockClickGestureStateMachine()
     private var pendingMouseDownEvents: [UInt64: CGEvent] = [:]
+    private var recoveryPolicy = EventTapRecoveryPolicy()
 
     public init(
         settings: SettingsStore,
@@ -113,6 +115,7 @@ public final class DockClickEventTap {
         controlLock.lock()
         defer { controlLock.unlock() }
 
+        activityLease.end()
         guard stopEventTapAndWait() else {
             return false
         }
@@ -160,6 +163,8 @@ public final class DockClickEventTap {
         lifecycleLock.unlock()
         if !didStart {
             _ = stopEventTapAndWait()
+        } else {
+            activityLease.begin(reason: "Monitor Dock click gestures")
         }
         return didStart
     }
@@ -167,6 +172,7 @@ public final class DockClickEventTap {
     public func stop() {
         controlLock.lock()
         _ = stopEventTapAndWait()
+        activityLease.end()
         controlLock.unlock()
     }
 
@@ -224,7 +230,7 @@ public final class DockClickEventTap {
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
             apply(gestureStateMachine.cancelPendingGesture())
-            enableEventTap()
+            scheduleEventTapRecovery()
             return Unmanaged.passUnretained(event)
         case .leftMouseDown:
             return handleMouseDown(event)
@@ -288,6 +294,8 @@ public final class DockClickEventTap {
 
         CFRunLoopAddSource(runLoop, source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
+        recoveryPolicy.reset()
+        recoveryPolicy.didEnable(at: ProcessInfo.processInfo.systemUptime)
         ready.signal()
         if !shouldStopBeforeRunning {
             CFRunLoopRun()
@@ -313,6 +321,7 @@ public final class DockClickEventTap {
         eventThread = nil
         eventThreadStopped = nil
         isStopRequested = false
+        recoveryPolicy.reset()
         lifecycleLock.unlock()
     }
 
@@ -426,11 +435,27 @@ public final class DockClickEventTap {
         eventPoster(event)
     }
 
-    private func enableEventTap() {
-        guard let eventTap else {
+    private func scheduleEventTapRecovery() {
+        let delay = recoveryPolicy.nextDelay(
+            afterFailureAt: ProcessInfo.processInfo.systemUptime
+        )
+        guard let delay else {
+            NSLog("OmniDock Dock event tap recovery exhausted")
             return
         }
-        CGEvent.tapEnable(tap: eventTap, enable: true)
+        DispatchQueue.global(qos: .userInteractive).asyncAfter(
+            deadline: .now() + delay
+        ) { [weak self] in
+            self?.performOnEventThread { [weak self] in
+                guard let self, let eventTap = self.eventTap else {
+                    return
+                }
+                CGEvent.tapEnable(tap: eventTap, enable: true)
+                self.recoveryPolicy.didEnable(
+                    at: ProcessInfo.processInfo.systemUptime
+                )
+            }
+        }
     }
 
     private func unmanagedResult(

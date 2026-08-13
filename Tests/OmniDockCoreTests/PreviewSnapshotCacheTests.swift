@@ -154,6 +154,29 @@ final class PreviewSnapshotCacheTests: XCTestCase {
         XCTAssertEqual(cache.windows(for: 200, now: Date(timeIntervalSince1970: 3)).count, 2)
     }
 
+    func testCacheDropsOldestApplicationsWhenByteLimitIsExceeded() {
+        let cache = PreviewSnapshotCache(limits: PreviewSnapshotCacheLimits(
+            timeToLive: 45,
+            maxWindowsPerApplication: 6,
+            maxTotalWindows: 12,
+            maxTotalBytes: 1_600
+        ))
+
+        cache.store(
+            processIdentifier: 100,
+            windows: [previewWindow(title: "Old", windowID: 1, image: image())],
+            capturedAt: Date(timeIntervalSince1970: 1)
+        )
+        cache.store(
+            processIdentifier: 200,
+            windows: [previewWindow(title: "New", windowID: 2, image: image())],
+            capturedAt: Date(timeIntervalSince1970: 2)
+        )
+
+        XCTAssertTrue(cache.windows(for: 100, now: Date(timeIntervalSince1970: 3)).isEmpty)
+        XCTAssertEqual(cache.windows(for: 200, now: Date(timeIntervalSince1970: 3)).count, 1)
+    }
+
     func testProxyDockIconsShareResolvedApplicationSnapshots() {
         let cache = PreviewSnapshotCache()
         let firstTarget = dockTarget(processIdentifier: 100, identifier: "dock-item:first")

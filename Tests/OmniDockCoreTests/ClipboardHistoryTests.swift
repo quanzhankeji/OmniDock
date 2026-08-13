@@ -21,9 +21,9 @@ final class ClipboardHistoryTests: XCTestCase {
     }
 
     func testSettingsExposeClipboardAndWindowPlacementTabs() {
-        XCTAssertEqual(SettingsTab.allCases.count, 6)
+        XCTAssertEqual(SettingsTab.allCases.count, 7)
         XCTAssertEqual(SettingsTab.allCases[4], .clipboardHistory)
-        XCTAssertEqual(SettingsTab.allCases.last, .windowPlacement)
+        XCTAssertEqual(SettingsTab.allCases.last, .hiddenBar)
     }
 
     func testClipboardHistoryLabelsAreLocalized() {
@@ -450,6 +450,39 @@ final class ClipboardHistoryTests: XCTestCase {
         XCTAssertEqual(reloaded.records().map(\.summary), ["Persisted"])
     }
 
+    func testPersistentStoreUsesPrivateDirectoryAndFilePermissions() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("OmniDockClipboardPermissions-\(UUID().uuidString)", isDirectory: true)
+        let storeURL = directory.appendingPathComponent("Clipboard.sqlite")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = ClipboardHistoryStore(storeURL: storeURL, inMemory: false)
+        store.store(
+            try candidate(text: "Private", capturedAt: Date()),
+            limit: 200,
+            maximumTotalBytes: 1_000_000
+        )
+
+        let directoryAttributes = try FileManager.default.attributesOfItem(atPath: directory.path)
+        XCTAssertEqual(
+            (directoryAttributes[.posixPermissions] as? NSNumber)?.uint16Value,
+            0o700
+        )
+        let storeFiles = try FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        ).filter { $0.lastPathComponent.hasPrefix(storeURL.lastPathComponent) }
+        XCTAssertFalse(storeFiles.isEmpty)
+        for file in storeFiles {
+            let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
+            let permissions = try XCTUnwrap(
+                (attributes[.posixPermissions] as? NSNumber)?.uint16Value
+            )
+            XCTAssertEqual(permissions & 0o022, 0)
+            XCTAssertNotEqual(permissions & 0o600, 0)
+        }
+    }
+
     func testSearchIsCaseAndDiacriticInsensitive() throws {
         let record = try storedRecord(text: "Résumé from Browser")
 
@@ -635,6 +668,31 @@ final class ClipboardHistoryTests: XCTestCase {
             ClipboardPaletteLayout.preferredHistorySize.width
         )
         controller.hide()
+    }
+
+    func testClipboardPaletteShowsBeforeAllRowsAreBuilt() async {
+        let controller = ClipboardPaletteController()
+        let records = paletteRecords(count: 200)
+
+        controller.show(records: records, warning: nil, sourceApplication: nil)
+
+        XCTAssertTrue(controller.isVisible)
+        XCTAssertLessThan(controller.renderedRowCount, records.count)
+        await waitUntil {
+            controller.renderedRowCount == records.count
+        }
+        controller.hide()
+    }
+
+    func testClipboardPaletteStopsQueuedRowBatchesWhenHidden() async {
+        let controller = ClipboardPaletteController()
+        let records = paletteRecords(count: 200)
+
+        controller.show(records: records, warning: nil, sourceApplication: nil)
+        controller.hide()
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertLessThan(controller.renderedRowCount, records.count)
     }
 
     func testWideImageAndLongMetadataCannotExpandDetailPanel() throws {
@@ -835,6 +893,24 @@ final class ClipboardHistoryTests: XCTestCase {
             limit: 200,
             maximumTotalBytes: 1_000_000
         ))
+    }
+
+    private func paletteRecords(count: Int) -> [ClipboardHistoryRecord] {
+        (0..<count).map { index in
+            ClipboardHistoryRecord(
+                id: UUID(),
+                capturedAt: Date(),
+                lastCopiedAt: Date(),
+                sourceApplicationName: "Source \(index)",
+                sourceBundleIdentifier: nil,
+                kind: .text,
+                summary: "Clipboard entry \(index)",
+                searchableText: "Clipboard entry \(index)",
+                copyCount: 1,
+                byteCount: 32,
+                thumbnailData: nil
+            )
+        }
     }
 
     private func candidate(text: String, capturedAt: Date) throws -> ClipboardHistoryCandidate {

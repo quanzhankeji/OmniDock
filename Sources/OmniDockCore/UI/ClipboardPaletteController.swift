@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import ImageIO
 
 enum ClipboardPaletteLayout {
     static let preferredHistorySize = NSSize(width: 450, height: 540)
@@ -154,11 +155,13 @@ final class ClipboardPaletteController: NSObject, NSSearchFieldDelegate, NSWindo
     private var messageWorkItem: DispatchWorkItem?
     private var previewWorkItem: DispatchWorkItem?
     private var previewRequestGeneration = 0
+    private var rowBuildGeneration = 0
     private var pendingPreviewRecordID: UUID?
     private var previewedRecordID: UUID?
     private var themeObserver: NSObjectProtocol?
 
     private static let hoverPreviewDelay: TimeInterval = 0.4
+    private static let rowBatchSize = 12
 
     override init() {
         super.init()
@@ -187,6 +190,10 @@ final class ClipboardPaletteController: NSObject, NSSearchFieldDelegate, NSWindo
         panel?.frame.size
     }
 
+    var renderedRowCount: Int {
+        rowViews.count
+    }
+
     func toggle(
         records: [ClipboardHistoryRecord],
         warning: String?,
@@ -210,7 +217,8 @@ final class ClipboardPaletteController: NSObject, NSSearchFieldDelegate, NSWindo
         self.sourceApplication = sourceApplication
         dismissPreview()
         searchField?.stringValue = ""
-        update(records: records, warning: warning)
+        updateModel(records: records, warning: warning)
+        applySearch()
         position(panel)
         installMouseMonitors()
         panel.makeKeyAndOrderFront(nil)
@@ -218,17 +226,15 @@ final class ClipboardPaletteController: NSObject, NSSearchFieldDelegate, NSWindo
     }
 
     func update(records: [ClipboardHistoryRecord], warning: String?) {
-        self.records = records
-        if let previewedRecordID,
-           !records.contains(where: { $0.id == previewedRecordID }) {
-            dismissPreview()
+        updateModel(records: records, warning: warning)
+        guard isVisible else {
+            return
         }
-        messageLabel?.stringValue = warning ?? ""
-        messageLabel?.isHidden = warning == nil
         applySearch()
     }
 
     func hide() {
+        cancelRowBuilding()
         messageWorkItem?.cancel()
         messageWorkItem = nil
         dismissPreview()
@@ -375,18 +381,49 @@ final class ClipboardPaletteController: NSObject, NSSearchFieldDelegate, NSWindo
         let query = searchField?.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         visibleRecords = ClipboardArchiveSearch.filter(records, query: query)
         selectedIndex = min(max(selectedIndex, 0), max(visibleRecords.count - 1, 0))
-        rebuildRows()
+        rebuildRowsInBatches()
     }
 
-    private func rebuildRows() {
+    private func updateModel(records: [ClipboardHistoryRecord], warning: String?) {
+        self.records = records
+        if let previewedRecordID,
+           !records.contains(where: { $0.id == previewedRecordID }) {
+            dismissPreview()
+        }
+        messageLabel?.stringValue = warning ?? ""
+        messageLabel?.isHidden = warning == nil
+    }
+
+    private func rebuildRowsInBatches() {
         guard let listStack else {
             return
         }
+        rowBuildGeneration += 1
+        let generation = rowBuildGeneration
         listStack.removeAllArrangedSubviews()
         rowViews.removeAll()
         emptyLabel?.isHidden = !visibleRecords.isEmpty
+        guard !visibleRecords.isEmpty else {
+            return
+        }
 
-        for (index, record) in visibleRecords.enumerated() {
+        DispatchQueue.main.async { [weak self] in
+            self?.appendRowBatch(startingAt: 0, generation: generation)
+        }
+    }
+
+    private func appendRowBatch(startingAt startIndex: Int, generation: Int) {
+        guard generation == rowBuildGeneration,
+              isVisible,
+              let listStack,
+              startIndex < visibleRecords.count
+        else {
+            return
+        }
+
+        let endIndex = min(startIndex + Self.rowBatchSize, visibleRecords.count)
+        for index in startIndex..<endIndex {
+            let record = visibleRecords[index]
             let row = ClipboardPaletteRowView(record: record)
             row.isSelected = index == selectedIndex
             row.onChoose = { [weak self] modifiers in
@@ -406,6 +443,17 @@ final class ClipboardPaletteController: NSObject, NSSearchFieldDelegate, NSWindo
             row.widthAnchor.constraint(equalTo: listStack.widthAnchor).isActive = true
             rowViews[record.id] = row
         }
+
+        guard endIndex < visibleRecords.count else {
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            self?.appendRowBatch(startingAt: endIndex, generation: generation)
+        }
+    }
+
+    private func cancelRowBuilding() {
+        rowBuildGeneration += 1
     }
 
     private func handleKeyDown(_ event: NSEvent) -> Bool {
@@ -659,6 +707,21 @@ final class ClipboardPaletteRowView: NSView {
     private let backgroundLayer = CALayer()
     private var hoverTrackingArea: NSTrackingArea?
 
+    private static let relativeDateFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter
+    }()
+    private static let deleteImage = NSImage(
+        systemSymbolName: "trash",
+        accessibilityDescription: nil
+    ) ?? NSImage()
+    private static let thumbnailCache = NSCache<NSUUID, NSImage>()
+    private static let thumbnailDecodeQueue = DispatchQueue(
+        label: "com.quanzhankeji.OmniDock.clipboard-thumbnail-decode",
+        qos: .userInitiated
+    )
+
     init(record: ClipboardHistoryRecord) {
         self.record = record
         super.init(frame: .zero)
@@ -698,9 +761,8 @@ final class ClipboardPaletteRowView: NSView {
         addSubview(labels)
 
         var leadingView: NSView = iconView
-        if let thumbnailData = record.thumbnailData,
-           let image = NSImage(data: thumbnailData) {
-            let thumbnail = NSImageView(image: image)
+        if let thumbnailData = record.thumbnailData {
+            let thumbnail = NSImageView()
             thumbnail.imageScaling = .scaleProportionallyUpOrDown
             thumbnail.wantsLayer = true
             thumbnail.layer?.cornerRadius = 4
@@ -714,13 +776,11 @@ final class ClipboardPaletteRowView: NSView {
                 thumbnail.heightAnchor.constraint(equalToConstant: 46)
             ])
             leadingView = thumbnail
+            loadThumbnail(thumbnailData, into: thumbnail)
         }
 
         let deleteButton = NSButton(
-            image: NSImage(
-                systemSymbolName: "trash",
-                accessibilityDescription: AppStrings.text(.clipboardDelete)
-            ) ?? NSImage(),
+            image: Self.deleteImage,
             target: self,
             action: #selector(deleteRecord(_:))
         )
@@ -809,12 +869,40 @@ final class ClipboardPaletteRowView: NSView {
     }
 
     private static func metadata(for record: ClipboardHistoryRecord) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        let relativeDate = formatter.localizedString(for: record.lastCopiedAt, relativeTo: Date())
+        let relativeDate = relativeDateFormatter.localizedString(
+            for: record.lastCopiedAt,
+            relativeTo: Date()
+        )
         let count = record.copyCount > 1 ? " · ×\(record.copyCount)" : ""
         return "\(ClipboardHistoryDisplayText.sourceName(record.sourceApplicationName))"
             + " · \(relativeDate)\(count)"
+    }
+
+    private func loadThumbnail(_ data: Data, into imageView: NSImageView) {
+        let cacheKey = record.id as NSUUID
+        if let cachedImage = Self.thumbnailCache.object(forKey: cacheKey) {
+            imageView.image = cachedImage
+            return
+        }
+
+        Self.thumbnailDecodeQueue.async { [weak imageView] in
+            guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+                  let cgImage = CGImageSourceCreateImageAtIndex(source, 0, nil)
+            else {
+                return
+            }
+            Task { @MainActor [weak imageView] in
+                guard let imageView else {
+                    return
+                }
+                let image = NSImage(
+                    cgImage: cgImage,
+                    size: NSSize(width: cgImage.width, height: cgImage.height)
+                )
+                Self.thumbnailCache.setObject(image, forKey: cacheKey)
+                imageView.image = image
+            }
+        }
     }
 }
 

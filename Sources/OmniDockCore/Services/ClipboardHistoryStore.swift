@@ -1,5 +1,66 @@
 import CoreData
+import Darwin
 import Foundation
+
+enum ClipboardStoreFileProtection {
+    static func prepareDirectory(
+        _ directory: URL,
+        fileManager: FileManager = .default
+    ) throws {
+        try fileManager.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        try fileManager.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: directory.path
+        )
+        try? (directory as NSURL).setResourceValue(
+            FileProtectionType.complete,
+            forKey: .fileProtectionKey
+        )
+    }
+
+    static func secureStoreFiles(
+        storeURL: URL,
+        fileManager: FileManager = .default
+    ) {
+        let directory = storeURL.deletingLastPathComponent()
+        guard let enumerator = fileManager.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [],
+            errorHandler: nil
+        ) else {
+            return
+        }
+
+        let storePrefix = storeURL.lastPathComponent
+        for case let url as URL in enumerator {
+            let relativePath = url.path.dropFirst(directory.path.count + 1)
+            guard relativePath.hasPrefix(storePrefix) else {
+                continue
+            }
+            let isDirectory = (try? url.resourceValues(
+                forKeys: [.isDirectoryKey]
+            ).isDirectory) == true
+            let permissions = isDirectory ? 0o700 : 0o600
+            try? (url as NSURL).setResourceValue(
+                FileProtectionType.complete,
+                forKey: .fileProtectionKey
+            )
+            try? fileManager.setAttributes(
+                [.posixPermissions: permissions],
+                ofItemAtPath: url.path
+            )
+            url.withUnsafeFileSystemRepresentation { path in
+                guard let path else { return }
+                _ = chmod(path, mode_t(permissions))
+            }
+        }
+    }
+}
 
 protocol ClipboardHistoryPersisting: AnyObject {
     var warning: String? { get }
@@ -37,6 +98,7 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
     private static let entityName = "ClipboardHistoryEntry"
 
     private let context: NSManagedObjectContext
+    private let storeURL: URL?
     private(set) var warning: String?
 
     convenience init() {
@@ -51,6 +113,7 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
         context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
         context.undoManager = nil
         self.context = context
+        self.storeURL = inMemory ? nil : storeURL
 
         do {
             if inMemory {
@@ -60,9 +123,8 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
                     at: nil
                 )
             } else if let storeURL {
-                try FileManager.default.createDirectory(
-                    at: storeURL.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
+                try ClipboardStoreFileProtection.prepareDirectory(
+                    storeURL.deletingLastPathComponent()
                 )
                 try coordinator.addPersistentStore(
                     ofType: NSSQLiteStoreType,
@@ -73,6 +135,7 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
                         NSInferMappingModelAutomaticallyOption: true
                     ]
                 )
+                ClipboardStoreFileProtection.secureStoreFiles(storeURL: storeURL)
             }
         } catch {
             warning = AppStrings.text(.clipboardStorageUnavailable)
@@ -252,6 +315,9 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
         }
         do {
             try context.save()
+            if let storeURL {
+                ClipboardStoreFileProtection.secureStoreFiles(storeURL: storeURL)
+            }
         } catch {
             warning = AppStrings.text(.clipboardStorageUnavailable)
             context.rollback()

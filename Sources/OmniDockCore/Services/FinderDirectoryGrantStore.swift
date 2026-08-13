@@ -12,6 +12,10 @@ final class FinderDirectoryGrantStore {
 
     private let defaults: UserDefaults
     private let observationRootUpdater: ([String]) -> Void
+    private let now: () -> Date
+    private let cacheLock = NSLock()
+    private var cachedUsability: (value: Bool, capturedAt: Date)?
+    private static let usabilityCacheLifetime: TimeInterval = 10
 
     convenience init() {
         let preferencesStore = FinderMenuPreferencesStore()
@@ -25,10 +29,12 @@ final class FinderDirectoryGrantStore {
 
     init(
         defaults: UserDefaults,
-        observationRootUpdater: @escaping ([String]) -> Void = { _ in }
+        observationRootUpdater: @escaping ([String]) -> Void = { _ in },
+        now: @escaping () -> Date = Date.init
     ) {
         self.defaults = defaults
         self.observationRootUpdater = observationRootUpdater
+        self.now = now
     }
 
     func performWithSavedAccess<T>(
@@ -98,6 +104,7 @@ final class FinderDirectoryGrantStore {
     }
 
     func remember(directory: URL) throws {
+        invalidateUsabilityCache()
         let record = try bookmarkRecord(for: directory.standardizedFileURL)
         var records = savedRecords().filter { $0.path != record.path }
         records.append(record)
@@ -105,6 +112,16 @@ final class FinderDirectoryGrantStore {
     }
 
     func hasUsableGrant() -> Bool {
+        let currentDate = now()
+        cacheLock.lock()
+        if let cachedUsability,
+           currentDate.timeIntervalSince(cachedUsability.capturedAt)
+                < Self.usabilityCacheLifetime {
+            cacheLock.unlock()
+            return cachedUsability.value
+        }
+        cacheLock.unlock()
+
         var records = savedRecords()
         var changed = false
         var foundUsableGrant = false
@@ -144,6 +161,9 @@ final class FinderDirectoryGrantStore {
         } else {
             publishObservationRoots(from: records)
         }
+        cacheLock.lock()
+        cachedUsability = (foundUsableGrant, currentDate)
+        cacheLock.unlock()
         return foundUsableGrant
     }
 
@@ -175,11 +195,18 @@ final class FinderDirectoryGrantStore {
     }
 
     private func save(_ records: [BookmarkRecord]) {
+        invalidateUsabilityCache()
         guard let data = try? JSONEncoder().encode(records) else {
             return
         }
         defaults.set(data, forKey: Key.bookmarks)
         publishObservationRoots(from: records)
+    }
+
+    private func invalidateUsabilityCache() {
+        cacheLock.lock()
+        cachedUsability = nil
+        cacheLock.unlock()
     }
 
     private func publishObservationRoots(from records: [BookmarkRecord]) {

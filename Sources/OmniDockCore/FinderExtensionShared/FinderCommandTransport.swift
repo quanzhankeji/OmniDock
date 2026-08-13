@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 enum BlankDocumentFactory {
     static func create(
@@ -65,6 +66,7 @@ struct FinderCommandEnvelope: Codable, Equatable, Identifiable {
 final class FinderCommandMailbox {
     private static let directoryName = "FinderExtensionCommands"
     private static let requestLifetime: TimeInterval = 300
+    private static let maximumRequestBytes = 64 * 1_024
 
     private let directoryProvider: () -> URL?
     private let fileManager: FileManager
@@ -91,7 +93,20 @@ final class FinderCommandMailbox {
         let directory = try requestDirectory()
         removeExpiredRequests(in: directory)
         let data = try JSONEncoder().encode(request)
-        try data.write(to: fileURL(for: request.id, in: directory), options: .withoutOverwriting)
+        guard data.count <= Self.maximumRequestBytes else {
+            throw CocoaError(.fileWriteOutOfSpace)
+        }
+        let url = fileURL(for: request.id, in: directory)
+        try data.write(to: url, options: .withoutOverwriting)
+        do {
+            try fileManager.setAttributes(
+                [.posixPermissions: 0o600],
+                ofItemAtPath: url.path
+            )
+        } catch {
+            try? fileManager.removeItem(at: url)
+            throw error
+        }
     }
 
     func take(id: UUID) -> FinderCommandEnvelope? {
@@ -100,14 +115,11 @@ final class FinderCommandMailbox {
         }
 
         let url = fileURL(for: id, in: directory)
-        guard let data = try? Data(contentsOf: url),
-              let request = try? JSONDecoder().decode(FinderCommandEnvelope.self, from: data)
-        else {
+        guard fileManager.fileExists(atPath: url.path) else {
             return nil
         }
-
-        try? fileManager.removeItem(at: url)
-        guard request.createdAt.addingTimeInterval(Self.requestLifetime) > Date() else {
+        defer { try? fileManager.removeItem(at: url) }
+        guard let request = validatedRequest(at: url, expectedID: id) else {
             return nil
         }
         return request
@@ -126,7 +138,15 @@ final class FinderCommandMailbox {
         }
 
         let directory = root.appendingPathComponent(Self.directoryName, isDirectory: true)
-        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try fileManager.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        try fileManager.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: directory.path
+        )
         return directory
     }
 
@@ -144,14 +164,46 @@ final class FinderCommandMailbox {
         }
 
         for url in contents {
-            guard let data = try? Data(contentsOf: url),
-                  let request = try? JSONDecoder().decode(FinderCommandEnvelope.self, from: data),
-                  request.createdAt.addingTimeInterval(Self.requestLifetime) <= Date()
-            else {
+            guard url.pathExtension == "json" else {
                 continue
             }
-            try? fileManager.removeItem(at: url)
+            let id = UUID(uuidString: url.deletingPathExtension().lastPathComponent)
+            guard let id,
+                  let request = validatedRequest(at: url, expectedID: id),
+                  isFresh(request, now: Date())
+            else {
+                try? fileManager.removeItem(at: url)
+                continue
+            }
         }
+    }
+
+    private func validatedRequest(
+        at url: URL,
+        expectedID: UUID
+    ) -> FinderCommandEnvelope? {
+        guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+              attributes[.type] as? FileAttributeType == .typeRegular,
+              (attributes[.ownerAccountID] as? NSNumber)?.uint32Value == getuid(),
+              let permissions = (attributes[.posixPermissions] as? NSNumber)?.uint16Value,
+              permissions & 0o077 == 0,
+              let byteCount = (attributes[.size] as? NSNumber)?.intValue,
+              byteCount > 0,
+              byteCount <= Self.maximumRequestBytes,
+              let data = try? Data(contentsOf: url),
+              data.count == byteCount,
+              let request = try? JSONDecoder().decode(FinderCommandEnvelope.self, from: data),
+              request.id == expectedID,
+              isFresh(request, now: Date())
+        else {
+            return nil
+        }
+        return request
+    }
+
+    private func isFresh(_ request: FinderCommandEnvelope, now: Date) -> Bool {
+        let age = now.timeIntervalSince(request.createdAt)
+        return age >= -30 && age <= Self.requestLifetime
     }
 }
 

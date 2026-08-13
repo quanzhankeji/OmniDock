@@ -13,6 +13,7 @@ public enum SettingsChange: String, Equatable {
     case hotkeyBindings
     case clipboardHistory
     case windowPlacement
+    case menuBarShelf
     case language
     case appearance
     case permissionState
@@ -25,7 +26,8 @@ public enum SettingsChange: String, Equatable {
         case .preview, .livePreview, .livePreviewLimit, .dockClick, .all:
             return true
         case .commandTabPreview, .windowCycle, .finderExtension, .minimizeDockClick,
-             .hotkeys, .hotkeyBindings, .clipboardHistory, .windowPlacement, .language, .appearance,
+             .hotkeys, .hotkeyBindings, .clipboardHistory, .windowPlacement, .menuBarShelf,
+             .language, .appearance,
              .permissionState:
             return false
         }
@@ -36,7 +38,8 @@ public enum SettingsChange: String, Equatable {
         case .preview, .commandTabPreview, .all:
             return true
         case .windowCycle, .finderExtension, .livePreview, .livePreviewLimit, .dockClick,
-             .minimizeDockClick, .hotkeys, .hotkeyBindings, .clipboardHistory, .windowPlacement, .language,
+             .minimizeDockClick, .hotkeys, .hotkeyBindings, .clipboardHistory, .windowPlacement,
+             .menuBarShelf, .language,
              .appearance, .permissionState:
             return false
         }
@@ -47,7 +50,8 @@ public enum SettingsChange: String, Equatable {
         case .preview, .windowCycle, .all:
             return true
         case .commandTabPreview, .finderExtension, .livePreview, .livePreviewLimit, .dockClick,
-             .minimizeDockClick, .hotkeys, .hotkeyBindings, .clipboardHistory, .windowPlacement, .language,
+             .minimizeDockClick, .hotkeys, .hotkeyBindings, .clipboardHistory, .windowPlacement,
+             .menuBarShelf, .language,
              .appearance, .permissionState:
             return false
         }
@@ -58,7 +62,7 @@ public enum SettingsChange: String, Equatable {
         case .windowCycle, .hotkeys, .hotkeyBindings, .clipboardHistory, .windowPlacement, .all:
             return true
         case .preview, .commandTabPreview, .finderExtension, .livePreview,
-             .livePreviewLimit, .dockClick, .minimizeDockClick, .language,
+             .livePreviewLimit, .dockClick, .minimizeDockClick, .menuBarShelf, .language,
              .appearance, .permissionState:
             return false
         }
@@ -70,7 +74,7 @@ public enum SettingsChange: String, Equatable {
             return true
         case .preview, .commandTabPreview, .windowCycle, .finderExtension, .livePreview,
              .livePreviewLimit, .dockClick, .minimizeDockClick, .hotkeys, .hotkeyBindings,
-             .language, .appearance, .permissionState:
+             .menuBarShelf, .language, .appearance, .permissionState:
             return false
         }
     }
@@ -105,6 +109,9 @@ public final class SettingsStore {
         case clipboardHistoryEnabled = "clipboardHistoryEnabled"
         case clipboardHistoryLimit = "clipboardHistoryLimit"
         case windowPlacementConfiguration = "windowPlacementConfiguration"
+        case menuBarShelfEnabled = "menuBarShelfEnabled"
+        case menuBarShelfAutoHideEnabled = "menuBarShelfAutoHideEnabled"
+        case menuBarShelfAutoHideDelay = "menuBarShelfAutoHideDelay"
         case minimizeOnRepeatedDockClick = "minimizeOnRepeatedDockClick"
         case appLanguage = "appLanguage"
         case appAppearance = "appAppearance"
@@ -188,6 +195,9 @@ public final class SettingsStore {
             Key.hotkeysEnabled.rawValue: true,
             Key.clipboardHistoryEnabled.rawValue: false,
             Key.clipboardHistoryLimit.rawValue: 200,
+            Key.menuBarShelfEnabled.rawValue: false,
+            Key.menuBarShelfAutoHideEnabled.rawValue: true,
+            Key.menuBarShelfAutoHideDelay.rawValue: 10,
             Key.appLanguage.rawValue: AppLanguage.system.rawValue,
             Key.appAppearance.rawValue: AppAppearance.system.rawValue,
             Key.permissionOnboardingCompleted.rawValue: false,
@@ -397,6 +407,29 @@ public final class SettingsStore {
             var configuration = windowPlacementConfiguration
             configuration.isEnabled = newValue
             windowPlacementConfiguration = configuration
+        }
+    }
+
+    public var menuBarShelfEnabled: Bool {
+        get { defaults.bool(forKey: Key.menuBarShelfEnabled.rawValue) }
+        set { set(newValue, for: .menuBarShelfEnabled) }
+    }
+
+    public var menuBarShelfAutoHideEnabled: Bool {
+        get {
+            defaults.object(forKey: Key.menuBarShelfAutoHideEnabled.rawValue) as? Bool ?? true
+        }
+        set { set(newValue, for: .menuBarShelfAutoHideEnabled) }
+    }
+
+    public var menuBarShelfAutoHideDelay: Int {
+        get {
+            MenuBarShelfAutoHidePolicy.normalizedDelay(
+                defaults.integer(forKey: Key.menuBarShelfAutoHideDelay.rawValue)
+            )
+        }
+        set {
+            set(MenuBarShelfAutoHidePolicy.normalizedDelay(newValue), for: .menuBarShelfAutoHideDelay)
         }
     }
 
@@ -655,6 +688,8 @@ public final class SettingsStore {
             return .clipboardHistory
         case .windowPlacementConfiguration:
             return .windowPlacement
+        case .menuBarShelfEnabled, .menuBarShelfAutoHideEnabled, .menuBarShelfAutoHideDelay:
+            return .menuBarShelf
         case .appLanguage:
             return .language
         case .appAppearance:

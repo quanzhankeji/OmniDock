@@ -151,7 +151,9 @@ public final class DockHitTester {
             return nil
         }
 
-        let dockElement = AXUIElementCreateApplication(dockProcessIdentifier)
+        let dockElement = AccessibilityElementFactory.application(
+            processIdentifier: dockProcessIdentifier
+        )
         let candidatePoints = systemInventory.screens.accessibilityCandidatePoints(
             fromAppKitPoint: appKitPoint
         )
@@ -258,7 +260,9 @@ public final class DockHitTester {
             return []
         }
 
-        let dockElement = AXUIElementCreateApplication(dockProcessIdentifier)
+        let dockElement = AccessibilityElementFactory.application(
+            processIdentifier: dockProcessIdentifier
+        )
         let runningApps = systemInventory.applications.dockTargetCandidates
         return dockItemSnapshots(from: dockElement).compactMap { item in
             guard let eventTapFrame = item.frame?.standardized,

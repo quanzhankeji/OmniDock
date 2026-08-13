@@ -45,6 +45,7 @@ final class ClipboardHistoryService {
     private let registrationStatus: ClipboardHistoryRegistrationStatus
     private let hotkeyRegistry: ClipboardHistoryHotkeyRegistering
     private let pasteboard: NSPasteboard
+    private let monitoringActivity = RuntimeActivityLease()
     private let captureQueue = DispatchQueue(
         label: "com.quanzhankeji.OmniDock.clipboard-capture",
         qos: .utility
@@ -219,11 +220,13 @@ final class ClipboardHistoryService {
         timer.tolerance = 0.1
         RunLoop.main.add(timer, forMode: .common)
         monitor = timer
+        monitoringActivity.begin(reason: "Monitor clipboard changes")
     }
 
     private func stopMonitoring() {
         monitor?.invalidate()
         monitor = nil
+        monitoringActivity.end()
         selfWrittenChangeCount = nil
         captureGeneration += 1
     }

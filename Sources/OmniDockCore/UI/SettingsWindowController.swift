@@ -26,6 +26,7 @@ public enum SettingsTab: Int, CaseIterable {
     case finderExtension = 3
     case clipboardHistory = 4
     case windowPlacement = 5
+    case hiddenBar = 6
 
     var titleKey: AppStringKey {
         switch self {
@@ -41,6 +42,8 @@ public enum SettingsTab: Int, CaseIterable {
             return .tabClipboardHistory
         case .windowPlacement:
             return .tabWindowPlacement
+        case .hiddenBar:
+            return .tabHiddenBar
         }
     }
 
@@ -80,8 +83,10 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     private var finderExtensionContentView: NSView?
     private var clipboardHistoryContentView: NSView?
     private var windowPlacementContentView: NSView?
+    private var hiddenBarContentView: NSView?
     private var windowPlacementSettingsView: WindowPlacementSettingsView?
     private var finderExtensionSettingsView: FinderExtensionSettingsView?
+    private var menuBarShelfSettingsView: MenuBarShelfSettingsView?
     private var languagePopupButton: NSPopUpButton?
     private var appearancePopupButton: NSPopUpButton?
     private var updateVersionField: NSTextField?
@@ -238,6 +243,10 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         }
     }
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     public func show(tab: SettingsTab = .settings) {
         presentationCoordinator.present(.settings)
         selectedTab = tab
@@ -313,6 +322,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             scheduleClipboardHistoryReload()
         }
         windowPlacementSettingsView?.reload()
+        menuBarShelfSettingsView?.reload()
         applicationPicker?.refreshLocalization()
     }
 
@@ -794,6 +804,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         finderExtensionContentView = nil
         clipboardHistoryContentView = nil
         windowPlacementContentView = nil
+        hiddenBarContentView = nil
         languagePopupButton = nil
         appearancePopupButton = nil
         previewSwitch = nil
@@ -820,6 +831,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         cancelClipboardHistoryReload()
         dismissClipboardHistoryPreview()
         windowPlacementSettingsView = nil
+        menuBarShelfSettingsView = nil
         hotkeyGuidanceField = nil
         hotkeyHeaderHeightConstraint = nil
         hotkeyBindingCountField = nil
@@ -837,6 +849,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             target: self,
             action: #selector(changeTab(_:))
         )
+        segmentedControl.font = .systemFont(ofSize: 12)
         segmentedControl.selectedSegment = selectedTab.rawValue
         segmentedControl.translatesAutoresizingMaskIntoConstraints = false
         segmentedControl.setContentCompressionResistancePriority(
@@ -1569,7 +1582,8 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             (.hotkeys, hotkeysContentView),
             (.finderExtension, finderExtensionContentView),
             (.clipboardHistory, clipboardHistoryContentView),
-            (.windowPlacement, windowPlacementContentView)
+            (.windowPlacement, windowPlacementContentView),
+            (.hiddenBar, hiddenBarContentView)
         ]
         guard let contentContainer,
               let selectedView = contentView(for: selectedTab) else {
@@ -1627,6 +1641,13 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
                 windowPlacementContentView = makeScrollableTab(settingsView)
             }
             return windowPlacementContentView
+        case .hiddenBar:
+            if hiddenBarContentView == nil {
+                let settingsView = MenuBarShelfSettingsView(settings: settings)
+                menuBarShelfSettingsView = settingsView
+                hiddenBarContentView = makeScrollableTab(settingsView)
+            }
+            return hiddenBarContentView
         }
     }
 

@@ -386,7 +386,9 @@ private final class AccessibilityWindowInventoryEventBackend: WindowInventoryEve
             return
         }
 
-        let applicationElement = AXUIElementCreateApplication(processIdentifier)
+        let applicationElement = AccessibilityElementFactory.application(
+            processIdentifier: processIdentifier
+        )
         var observer: AXObserver?
         guard AXObserverCreate(processIdentifier, windowInventoryAXObserverCallback, &observer) == .success,
               let observer
@@ -676,7 +678,9 @@ private let windowInventoryAXObserverCallback: AXObserverCallback = { _, element
 
 enum AccessibilityPreviewWindowReader {
     static func windows(for processIdentifier: pid_t, appName: String) -> [PreviewWindowInfo] {
-        let applicationElement = AXUIElementCreateApplication(processIdentifier)
+        let applicationElement = AccessibilityElementFactory.application(
+            processIdentifier: processIdentifier
+        )
         var rawValue: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
             applicationElement,

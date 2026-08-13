@@ -50,6 +50,7 @@ enum AppStringKey: String, CaseIterable {
     case tabFinderExtension
     case tabClipboardHistory
     case tabWindowPlacement
+    case tabHiddenBar
     case menuSettings
     case menuHotkeys
     case menuQuit
@@ -85,6 +86,17 @@ enum AppStringKey: String, CaseIterable {
     case settingsLiveWindowCount
     case settingsPrivacyPolicy
     case settingsSupport
+
+    case menuBarShelfEnableTitle
+    case menuBarShelfEnableDetail
+    case menuBarShelfAutoHideTitle
+    case menuBarShelfAutoHideDetail
+    case menuBarShelfSeconds
+    case menuBarShelfHiddenLabel
+    case menuBarShelfShownLabel
+    case menuBarShelfInstruction
+    case menuBarShelfToggleTooltip
+    case menuBarShelfDividerTooltip
 
     case finderExtensionEnableTitle
     case finderExtensionEnableDetail

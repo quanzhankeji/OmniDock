@@ -48,6 +48,7 @@
 "tabFinderExtension" = "Finder Extension";
 "tabClipboardHistory" = "Clipboard History";
 "tabWindowPlacement" = "Window Layout";
+"tabHiddenBar" = "Hidden Bar";
 "menuSettings" = "Settings";
 "menuHotkeys" = "Hotkeys";
 "menuQuit" = "Quit";
@@ -83,6 +84,17 @@
 "settingsLiveWindowCount" = "Live Windows";
 "settingsPrivacyPolicy" = "Privacy Policy";
 "settingsSupport" = "Support";
+
+"menuBarShelfEnableTitle" = "Enable Hidden Bar";
+"menuBarShelfEnableDetail" = "Keep less-used menu bar icons behind an expandable divider.";
+"menuBarShelfAutoHideTitle" = "Automatically Hide";
+"menuBarShelfAutoHideDetail" = "Collapse the hidden section after the selected delay.";
+"menuBarShelfSeconds" = "%d seconds";
+"menuBarShelfHiddenLabel" = "Hidden";
+"menuBarShelfShownLabel" = "Shown";
+"menuBarShelfInstruction" = "In the menu bar, hold Command and drag icons across the divider to arrange them.";
+"menuBarShelfToggleTooltip" = "Show or hide menu bar icons";
+"menuBarShelfDividerTooltip" = "Command-drag menu bar icons across this divider";
 
 "finderExtensionEnableTitle" = "Enable";
 "finderExtensionEnableDetail" = "Show New File and Copy Path in Finder contextual menus.";

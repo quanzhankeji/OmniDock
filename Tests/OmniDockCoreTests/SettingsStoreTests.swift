@@ -18,6 +18,9 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(store.clipboardHistoryEnabled)
         XCTAssertEqual(store.clipboardHistoryLimit, 200)
         XCTAssertFalse(store.windowPlacementEnabled)
+        XCTAssertFalse(store.menuBarShelfEnabled)
+        XCTAssertTrue(store.menuBarShelfAutoHideEnabled)
+        XCTAssertEqual(store.menuBarShelfAutoHideDelay, 10)
         XCTAssertEqual(store.windowPlacementConfiguration.commands.count, BuiltInWindowPlacement.allCases.count)
         XCTAssertEqual(store.appLanguage, .system)
         XCTAssertEqual(store.appAppearance, .system)
@@ -46,6 +49,9 @@ final class SettingsStoreTests: XCTestCase {
         placementConfiguration.isEnabled = true
         placementConfiguration.commands[0].isEnabled = false
         store.windowPlacementConfiguration = placementConfiguration
+        store.menuBarShelfEnabled = true
+        store.menuBarShelfAutoHideEnabled = false
+        store.menuBarShelfAutoHideDelay = 30
         store.appLanguage = .en
         store.appAppearance = .dark
         store.permissionOnboardingCompleted = true
@@ -75,6 +81,9 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(reloaded.clipboardHistoryEnabled)
         XCTAssertEqual(reloaded.clipboardHistoryLimit, 350)
         XCTAssertTrue(reloaded.windowPlacementEnabled)
+        XCTAssertTrue(reloaded.menuBarShelfEnabled)
+        XCTAssertFalse(reloaded.menuBarShelfAutoHideEnabled)
+        XCTAssertEqual(reloaded.menuBarShelfAutoHideDelay, 30)
         XCTAssertFalse(reloaded.windowPlacementConfiguration.commands[0].isEnabled)
         XCTAssertEqual(reloaded.appLanguage, .en)
         XCTAssertEqual(reloaded.appAppearance, .dark)

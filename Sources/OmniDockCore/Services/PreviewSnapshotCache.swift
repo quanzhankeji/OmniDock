@@ -6,11 +6,25 @@ struct PreviewSnapshotCacheLimits: Equatable {
     let timeToLive: TimeInterval
     let maxWindowsPerApplication: Int
     let maxTotalWindows: Int
+    let maxTotalBytes: Int
+
+    init(
+        timeToLive: TimeInterval,
+        maxWindowsPerApplication: Int,
+        maxTotalWindows: Int,
+        maxTotalBytes: Int = 20 * 1_024 * 1_024
+    ) {
+        self.timeToLive = timeToLive
+        self.maxWindowsPerApplication = maxWindowsPerApplication
+        self.maxTotalWindows = maxTotalWindows
+        self.maxTotalBytes = maxTotalBytes
+    }
 
     static let balanced = PreviewSnapshotCacheLimits(
         timeToLive: 45,
         maxWindowsPerApplication: PreviewCapturePolicy.normalVisibleWindowLimit,
-        maxTotalWindows: 24
+        maxTotalWindows: 24,
+        maxTotalBytes: 20 * 1_024 * 1_024
     )
 }
 
@@ -101,8 +115,12 @@ final class PreviewSnapshotCache {
             return age >= 0 && age <= limits.timeToLive
         }
 
-        var total = applications.values.reduce(0) { $0 + $1.windows.count }
-        guard total > limits.maxTotalWindows else {
+        var totalWindows = applications.values.reduce(0) { $0 + $1.windows.count }
+        var totalBytes = applications.values.reduce(0) {
+            $0 + estimatedByteCount(for: $1.windows)
+        }
+        guard totalWindows > limits.maxTotalWindows
+                || totalBytes > limits.maxTotalBytes else {
             return
         }
 
@@ -111,12 +129,29 @@ final class PreviewSnapshotCache {
             .map(\.key)
 
         for processIdentifier in oldestProcessIdentifiers {
-            guard total > limits.maxTotalWindows,
+            guard totalWindows > limits.maxTotalWindows
+                    || totalBytes > limits.maxTotalBytes,
                   let cached = applications.removeValue(forKey: processIdentifier)
             else {
                 break
             }
-            total -= cached.windows.count
+            totalWindows -= cached.windows.count
+            totalBytes -= estimatedByteCount(for: cached.windows)
+        }
+    }
+
+    private func estimatedByteCount(for windows: [PreviewWindowInfo]) -> Int {
+        windows.reduce(0) { total, window in
+            guard let image = window.staticPreviewImage else {
+                return total
+            }
+            let representationBytes = image.representations.reduce(0) { subtotal, representation in
+                let width = max(representation.pixelsWide, Int(image.size.width))
+                let height = max(representation.pixelsHigh, Int(image.size.height))
+                return subtotal + max(0, width * height * 4)
+            }
+            let fallbackBytes = max(0, Int(image.size.width * image.size.height * 4))
+            return total + max(representationBytes, fallbackBytes)
         }
     }
 }

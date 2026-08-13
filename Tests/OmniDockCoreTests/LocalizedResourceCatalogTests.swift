@@ -174,7 +174,8 @@ final class LocalizedResourceCatalogTests: XCTestCase {
                 .tabHotkeys,
                 .tabFinderExtension,
                 .tabClipboardHistory,
-                .tabWindowPlacement
+                .tabWindowPlacement,
+                .tabHiddenBar
             ]
         )
     }

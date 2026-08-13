@@ -78,7 +78,9 @@ public final class WindowControlService {
     public init() {}
 
     public func interactionSummary(for processIdentifier: pid_t) -> WindowInteractionSummary {
-        let appElement = AXUIElementCreateApplication(processIdentifier)
+        let appElement = AccessibilityElementFactory.application(
+            processIdentifier: processIdentifier
+        )
         var normalWindowCount = 0
         var unminimizedNormalWindowCount = 0
         var minimizedNormalWindowCount = 0
@@ -107,7 +109,9 @@ public final class WindowControlService {
     }
 
     func hasNormalWindow(processIdentifier: pid_t) -> Bool {
-        let appElement = AXUIElementCreateApplication(processIdentifier)
+        let appElement = AccessibilityElementFactory.application(
+            processIdentifier: processIdentifier
+        )
         return windows(for: appElement).contains { window in
             WindowFiltering.isNormalAXWindow(
                 role: stringAttribute(kAXRoleAttribute, from: window),
@@ -333,7 +337,9 @@ public final class WindowControlService {
                 return
             }
 
-            let appElement = AXUIElementCreateApplication(processIdentifier)
+            let appElement = AccessibilityElementFactory.application(
+                processIdentifier: processIdentifier
+            )
             self.pressHideMenuItemIfAvailable(
                 appElement: appElement,
                 operationToken: token
@@ -430,7 +436,9 @@ public final class WindowControlService {
         }
 
         let beforeOnscreenCount = onscreenNormalWindowCount(for: processIdentifier)
-        let appElement = AXUIElementCreateApplication(processIdentifier)
+        let appElement = AccessibilityElementFactory.application(
+            processIdentifier: processIdentifier
+        )
         let normalWindows = normalWindows(in: windows(for: appElement))
         for window in normalWindows {
             AXUIElementSetAttributeValue(window, kAXMinimizedAttribute as CFString, kCFBooleanTrue)
@@ -489,7 +497,9 @@ public final class WindowControlService {
             return
         }
 
-        let appElement = AXUIElementCreateApplication(processIdentifier)
+        let appElement = AccessibilityElementFactory.application(
+            processIdentifier: processIdentifier
+        )
         AXUIElementSetAttributeValue(appElement, kAXHiddenAttribute as CFString, kCFBooleanFalse)
         app.unhide()
         let focusCandidates = normalWindowCandidates(in: windows(for: appElement))
@@ -581,7 +591,9 @@ public final class WindowControlService {
                 return
             }
 
-            let appElement = AXUIElementCreateApplication(processIdentifier)
+            let appElement = AccessibilityElementFactory.application(
+                processIdentifier: processIdentifier
+            )
             if self.pressNewWindowMenuItemIfAvailable(
                 appElement: appElement,
                 operationToken: operationToken
@@ -809,7 +821,9 @@ public final class WindowControlService {
         windowID: CGWindowID?
     ) -> PendingWindowClose? {
         _ = operationTracker.begin(.close, for: processIdentifier)
-        let appElement = AXUIElementCreateApplication(processIdentifier)
+        let appElement = AccessibilityElementFactory.application(
+            processIdentifier: processIdentifier
+        )
         let allWindows = windows(for: appElement)
         let normalWindows = normalWindowCandidates(in: allWindows)
         guard let target = strictWindowMatch(in: normalWindows, title: title, windowID: windowID) else {
@@ -875,7 +889,9 @@ public final class WindowControlService {
         for pendingClose: PendingWindowClose,
         attemptsRemaining: Int
     ) -> WindowCloseVerificationDecision {
-        let appElement = AXUIElementCreateApplication(pendingClose.processIdentifier)
+        let appElement = AccessibilityElementFactory.application(
+            processIdentifier: pendingClose.processIdentifier
+        )
         let queryResult = queryWindows(for: appElement)
         guard queryResult.succeeded else {
             return WindowCloseVerificationPolicy.decision(
@@ -941,7 +957,9 @@ public final class WindowControlService {
             return
         }
 
-        let appElement = AXUIElementCreateApplication(processIdentifier)
+        let appElement = AccessibilityElementFactory.application(
+            processIdentifier: processIdentifier
+        )
         let candidates = normalWindowCandidates(in: windows(for: appElement))
         if let target = focusWindowMatch(
             in: candidates,
@@ -1020,7 +1038,9 @@ public final class WindowControlService {
             return
         }
 
-        let appElement = AXUIElementCreateApplication(processIdentifier)
+        let appElement = AccessibilityElementFactory.application(
+            processIdentifier: processIdentifier
+        )
         let candidates = normalWindowCandidates(in: windows(for: appElement))
         if let target = focusWindowMatch(
             in: candidates,

@@ -48,6 +48,7 @@
 "tabFinderExtension" = "右键扩展";
 "tabClipboardHistory" = "剪贴板历史";
 "tabWindowPlacement" = "窗口调整";
+"tabHiddenBar" = "任务栏图标";
 "menuSettings" = "设置";
 "menuHotkeys" = "快捷键";
 "menuQuit" = "退出";
@@ -83,6 +84,17 @@
 "settingsLiveWindowCount" = "实时窗口数";
 "settingsPrivacyPolicy" = "隐私政策";
 "settingsSupport" = "支持";
+
+"menuBarShelfEnableTitle" = "启用任务栏图标整理";
+"menuBarShelfEnableDetail" = "将不常用的菜单栏图标收纳到可展开的分界线后方。";
+"menuBarShelfAutoHideTitle" = "自动隐藏";
+"menuBarShelfAutoHideDetail" = "展开后经过所选时间，自动收起隐藏区域。";
+"menuBarShelfSeconds" = "%d 秒";
+"menuBarShelfHiddenLabel" = "隐藏";
+"menuBarShelfShownLabel" = "显示";
+"menuBarShelfInstruction" = "在菜单栏中按住 Command，拖动图标跨过分界线即可完成整理。";
+"menuBarShelfToggleTooltip" = "显示或隐藏菜单栏图标";
+"menuBarShelfDividerTooltip" = "按住 Command，将菜单栏图标拖过此分界线";
 
 "finderExtensionEnableTitle" = "启用";
 "finderExtensionEnableDetail" = "在 Finder 右键菜单中显示新建文件与复制路径。";

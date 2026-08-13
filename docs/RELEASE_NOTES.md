@@ -1,4 +1,5 @@
-# OmniDock 1.2.3
+# OmniDock 1.2.4
 
-- Fix automatic updates failing to relaunch OmniDock after the existing app exits.
-- Keep the update helper inside the signed app bundle and wait for it to be ready before replacing the app.
+- Add Hidden Bar controls for organizing menu bar icons, with manual reveal and optional automatic hiding.
+- Improve clipboard history loading and thumbnail performance.
+- Reduce idle event polling and strengthen Dock, Finder, preview, and window-management reliability.

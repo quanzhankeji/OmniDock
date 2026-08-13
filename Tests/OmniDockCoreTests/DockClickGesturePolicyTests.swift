@@ -3,6 +3,53 @@ import XCTest
 @testable import OmniDockCore
 
 final class DockClickGesturePolicyTests: XCTestCase {
+    func testAccessibilityQueriesUseABoundedDefaultTimeout() {
+        XCTAssertEqual(AccessibilityElementFactory.messagingTimeout, 0.5)
+    }
+
+    func testEventTapRecoveryUsesFiniteBackoff() {
+        var policy = EventTapRecoveryPolicy()
+        policy.didEnable(at: 0)
+
+        XCTAssertEqual(policy.nextDelay(afterFailureAt: 0.1), 0)
+        XCTAssertEqual(policy.nextDelay(afterFailureAt: 0.2), 0.5)
+        XCTAssertEqual(policy.nextDelay(afterFailureAt: 0.3), 2)
+        XCTAssertNil(policy.nextDelay(afterFailureAt: 0.4))
+    }
+
+    func testEventTapRecoveryResetsAfterAStableRun() {
+        var policy = EventTapRecoveryPolicy()
+        policy.didEnable(at: 0)
+        _ = policy.nextDelay(afterFailureAt: 0.1)
+        _ = policy.nextDelay(afterFailureAt: 0.2)
+        policy.didEnable(at: 0.7)
+
+        XCTAssertEqual(policy.nextDelay(afterFailureAt: 5.8), 0)
+    }
+
+    func testDockHoverTimerAdaptsToActivityAndPowerState() {
+        XCTAssertNil(DockHoverTimerPolicy.interval(
+            previewsEnabled: false,
+            isInteracting: true,
+            isLowPowerModeEnabled: false
+        ))
+        XCTAssertEqual(DockHoverTimerPolicy.interval(
+            previewsEnabled: true,
+            isInteracting: true,
+            isLowPowerModeEnabled: true
+        ), 0.08)
+        XCTAssertEqual(DockHoverTimerPolicy.interval(
+            previewsEnabled: true,
+            isInteracting: false,
+            isLowPowerModeEnabled: false
+        ), 0.25)
+        XCTAssertEqual(DockHoverTimerPolicy.interval(
+            previewsEnabled: true,
+            isInteracting: false,
+            isLowPowerModeEnabled: true
+        ), 0.5)
+    }
+
     func testShortClickIsNotLongPress() {
         XCTAssertFalse(DockClickGesturePolicy.isLongPress(
             elapsed: DockClickGesturePolicy.longPressDuration - 0.01

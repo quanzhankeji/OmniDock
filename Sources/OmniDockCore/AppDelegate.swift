@@ -75,6 +75,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var applicationUpdateService = ApplicationUpdateService(
         presentationCoordinator: presentationCoordinator
     )
+    private lazy var menuBarShelfService = MenuBarShelfService(
+        settings: settings,
+        onOpenSettings: { [weak self] in
+            self?.statusMenuController.show(tab: .hiddenBar)
+        }
+    )
     private lazy var statusMenuController = StatusMenuController(
         settings: settings,
         permissionService: permissionService,
@@ -131,6 +137,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         preparePermissionBackedFeaturesForLaunch()
         applicationMainMenuController.install()
         statusMenuController.install()
+        menuBarShelfService.start()
         finderFileCommandCoordinator.start()
         windowInventory.start()
         coordinator.start()
@@ -151,6 +158,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     public func applicationWillTerminate(_ notification: Notification) {
         NotificationCenter.default.removeObserver(self)
         applicationUpdateService.stop()
+        menuBarShelfService.stop()
         finderFileCommandCoordinator.stop()
         windowPlacementService.stop()
         clipboardHistoryService.stop()

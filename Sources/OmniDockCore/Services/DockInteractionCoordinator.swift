@@ -20,6 +20,22 @@ enum PreviewWindowValidationPolicy {
     static let validationInterval: TimeInterval = 0.25
 }
 
+enum DockHoverTimerPolicy {
+    static func interval(
+        previewsEnabled: Bool,
+        isInteracting: Bool,
+        isLowPowerModeEnabled: Bool
+    ) -> TimeInterval? {
+        guard previewsEnabled else {
+            return nil
+        }
+        if isInteracting {
+            return 0.08
+        }
+        return isLowPowerModeEnabled ? 0.5 : 0.25
+    }
+}
+
 enum PreviewRequestValidationPolicy {
     static func accepts(
         responseGeneration: Int,
@@ -120,6 +136,7 @@ public final class DockInteractionCoordinator {
 
     private var clickEventTap: DockClickEventTap?
     private var hoverTimer: Timer?
+    private var hoverTimerInterval: TimeInterval?
     private var permissionTimer: Timer?
     private var lastPermissionSnapshot: PermissionSnapshot?
     private var hoverTarget: DockAppTarget?
@@ -211,7 +228,7 @@ public final class DockInteractionCoordinator {
         stop()
         lastPermissionSnapshot = permissionService.snapshot()
         synchronizeClickEventTap()
-        installHoverTimer()
+        synchronizeHoverTimer()
         installPermissionTimer()
         installPowerStateObserver()
         installWorkspaceObservers()
@@ -222,6 +239,7 @@ public final class DockInteractionCoordinator {
         clickEventTap = nil
         hoverTimer?.invalidate()
         hoverTimer = nil
+        hoverTimerInterval = nil
         permissionTimer?.invalidate()
         permissionTimer = nil
         if let powerStateObserver {
@@ -241,6 +259,7 @@ public final class DockInteractionCoordinator {
 
     public func refreshForSettingsChange() {
         synchronizeClickEventTap()
+        synchronizeHoverTimer()
         if !settings.showDockPreviews {
             hidePreview()
             previewService.clearAllCachedSnapshots()
@@ -280,6 +299,7 @@ public final class DockInteractionCoordinator {
             hidePreview()
             hoverTarget = nil
             hoverBeganAt = nil
+            synchronizeHoverTimer(isInteracting: false)
         }
     }
 
@@ -293,6 +313,7 @@ public final class DockInteractionCoordinator {
             hidePreview()
             hoverTarget = nil
             hoverBeganAt = nil
+            synchronizeHoverTimer(isInteracting: false)
         }
     }
 
@@ -368,15 +389,31 @@ public final class DockInteractionCoordinator {
         clickEventTap = tap
     }
 
-    private func installHoverTimer() {
-        hoverTimer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { [weak self] _ in
+    private func synchronizeHoverTimer(isInteracting: Bool? = nil) {
+        let desiredInterval = DockHoverTimerPolicy.interval(
+            previewsEnabled: settings.showDockPreviews,
+            isInteracting: isInteracting ?? (hoverTarget != nil || shownTarget != nil),
+            isLowPowerModeEnabled: ProcessInfo.processInfo.isLowPowerModeEnabled
+        )
+        guard desiredInterval != hoverTimerInterval else {
+            return
+        }
+
+        hoverTimer?.invalidate()
+        hoverTimer = nil
+        hoverTimerInterval = desiredInterval
+        guard let desiredInterval else {
+            return
+        }
+
+        let timer = Timer(timeInterval: desiredInterval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.handleHoverTick()
             }
         }
-        if let hoverTimer {
-            RunLoop.main.add(hoverTimer, forMode: .common)
-        }
+        timer.tolerance = min(0.05, desiredInterval * 0.2)
+        RunLoop.main.add(timer, forMode: .common)
+        hoverTimer = timer
     }
 
     private func installPermissionTimer() {
@@ -420,6 +457,7 @@ public final class DockInteractionCoordinator {
         hoverTarget = nil
         hoverBeganAt = nil
         proxyTargetRouter.removeAll()
+        synchronizeHoverTimer(isInteracting: false)
     }
 
     private func handlePermissionTick() {
@@ -432,6 +470,7 @@ public final class DockInteractionCoordinator {
     }
 
     private func handlePowerStateChange() {
+        synchronizeHoverTimer()
         guard shownTarget != nil, let shownSnapshot else {
             return
         }
@@ -497,16 +536,19 @@ public final class DockInteractionCoordinator {
                 return
             }
             handleDockHoverTarget(target)
+            synchronizeHoverTimer(isInteracting: true)
             return
         }
 
         if shouldRetainPreview(at: point) {
+            synchronizeHoverTimer(isInteracting: true)
             return
         }
 
         hidePreview()
         hoverTarget = nil
         hoverBeganAt = nil
+        synchronizeHoverTimer(isInteracting: false)
     }
 
     private func handleDockHoverTarget(_ target: DockAppTarget) {

@@ -823,7 +823,9 @@ private final class SystemCmdTabProcessSwitcherProvider: CmdTabProcessSwitcherPr
             return false
         }
 
-        let root = AXUIElementCreateApplication(dockApplication.processIdentifier)
+        let root = AccessibilityElementFactory.application(
+            processIdentifier: dockApplication.processIdentifier
+        )
         applicationCandidates = runningApplicationCandidates()
         var visited = Set<CFHashCode>()
         var remainingBudget = 400

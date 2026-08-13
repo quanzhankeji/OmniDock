@@ -380,6 +380,51 @@ final class FinderMenuTests: XCTestCase {
         XCTAssertNil(mailbox.take(id: request.id))
     }
 
+    func testCommandMailboxUsesPrivateDirectoryAndFilePermissions() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let mailbox = FinderCommandMailbox(directoryProvider: { root })
+        let request = FinderCommandEnvelope(command: .setHiddenFilesVisible(true))
+
+        try mailbox.enqueue(request)
+
+        let directory = root.appendingPathComponent("FinderExtensionCommands", isDirectory: true)
+        let requestURL = directory
+            .appendingPathComponent(request.id.uuidString)
+            .appendingPathExtension("json")
+        let directoryAttributes = try FileManager.default.attributesOfItem(atPath: directory.path)
+        let requestAttributes = try FileManager.default.attributesOfItem(atPath: requestURL.path)
+        XCTAssertEqual(
+            (directoryAttributes[.posixPermissions] as? NSNumber)?.uint16Value,
+            0o700
+        )
+        XCTAssertEqual(
+            (requestAttributes[.posixPermissions] as? NSNumber)?.uint16Value,
+            0o600
+        )
+    }
+
+    func testCommandMailboxRejectsEnvelopeWhoseIdentifierDoesNotMatchFile() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let mailbox = FinderCommandMailbox(directoryProvider: { root })
+        let expectedID = UUID()
+        let request = FinderCommandEnvelope(command: .setHiddenFilesVisible(true))
+        let directory = root.appendingPathComponent("FinderExtensionCommands", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let requestURL = directory
+            .appendingPathComponent(expectedID.uuidString)
+            .appendingPathExtension("json")
+        try JSONEncoder().encode(request).write(to: requestURL)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: requestURL.path
+        )
+
+        XCTAssertNil(mailbox.take(id: expectedID))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: requestURL.path))
+    }
+
     func testOpenSelectionCommandPreservesEverySelectedPath() throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -988,6 +1033,28 @@ final class FinderMenuTests: XCTestCase {
         publishedPaths = []
         XCTAssertTrue(store.hasUsableGrant())
         XCTAssertEqual(publishedPaths, [directory.standardizedFileURL.path])
+    }
+
+    func testDirectoryGrantUsabilityIsCachedForTenSeconds() throws {
+        let defaults = isolatedDefaults()
+        var currentDate = Date(timeIntervalSince1970: 100)
+        let store = FinderDirectoryGrantStore(
+            defaults: defaults,
+            now: { currentDate }
+        )
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        try store.remember(directory: directory)
+        XCTAssertTrue(store.hasUsableGrant())
+        try FileManager.default.removeItem(at: directory)
+
+        currentDate.addTimeInterval(9)
+        XCTAssertTrue(store.hasUsableGrant())
+        currentDate.addTimeInterval(2)
+        XCTAssertFalse(store.hasUsableGrant())
     }
 
     func testFinderExtensionActivationOnlyNeedsManualSetupWhenFeatureIsOn() {

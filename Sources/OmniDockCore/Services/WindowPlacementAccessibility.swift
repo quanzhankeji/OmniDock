@@ -146,7 +146,10 @@ enum WindowPlacementAccessibility {
             return nil
         }
 
-        let appElement = AXUIElementCreateApplication(application.processIdentifier)
+        let appElement = AccessibilityElementFactory.application(
+            processIdentifier: application.processIdentifier,
+            timeout: 0.3
+        )
         if let focused = elementAttribute(kAXFocusedWindowAttribute, from: appElement),
            let target = target(
                from: focused,
@@ -174,7 +177,7 @@ enum WindowPlacementAccessibility {
     }
 
     static func window(at eventTapPoint: CGPoint) -> WindowPlacementTarget? {
-        let systemWideElement = AXUIElementCreateSystemWide()
+        let systemWideElement = AccessibilityElementFactory.systemWide(timeout: 0.3)
         var rawElement: AXUIElement?
         guard AXUIElementCopyElementAtPosition(
             systemWideElement,

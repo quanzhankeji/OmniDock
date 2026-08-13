@@ -126,6 +126,7 @@ private final class WindowPlacementPointerState: @unchecked Sendable {
 
     private let lock = NSLock()
     private var greenButton: GreenButtonSnapshot?
+    private var lastPointerDispatchAt: TimeInterval = 0
 
     func updateGreenButton(_ snapshot: GreenButtonSnapshot?) {
         lock.lock()
@@ -150,6 +151,214 @@ private final class WindowPlacementPointerState: @unchecked Sendable {
             return nil
         }
         return greenButton
+    }
+
+    func shouldDispatchPointerMove(
+        at timestamp: TimeInterval,
+        minimumInterval: TimeInterval
+    ) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard timestamp - lastPointerDispatchAt >= minimumInterval else {
+            return false
+        }
+        lastPointerDispatchAt = timestamp
+        return true
+    }
+}
+
+private struct WindowPlacementGreenButtonQueryResult: @unchecked Sendable {
+    let target: WindowPlacementTarget
+    let buttonFrame: CGRect
+}
+
+private final class WindowPlacementEventTapThread: @unchecked Sendable {
+    typealias Handler = (CGEventType, CGEvent) -> Unmanaged<CGEvent>?
+
+    private static let startupTimeout: DispatchTimeInterval = .seconds(2)
+
+    private let handler: Handler
+    private let lifecycleLock = NSLock()
+    private var eventTap: CFMachPort?
+    private var runLoop: CFRunLoop?
+    private var thread: Thread?
+    private var stopped: DispatchSemaphore?
+    private var stopRequested = false
+    private var recoveryPolicy = EventTapRecoveryPolicy()
+
+    init(handler: @escaping Handler) {
+        self.handler = handler
+    }
+
+    @discardableResult
+    func start() -> Bool {
+        stop()
+
+        let ready = DispatchSemaphore(value: 0)
+        let stopped = DispatchSemaphore(value: 0)
+        let thread = Thread { [weak self] in
+            self?.run(ready: ready, stopped: stopped)
+        }
+        thread.name = "OmniDock Window Placement Event Tap"
+        thread.qualityOfService = .userInteractive
+
+        lifecycleLock.lock()
+        stopRequested = false
+        self.thread = thread
+        self.stopped = stopped
+        lifecycleLock.unlock()
+        thread.start()
+
+        guard ready.wait(timeout: .now() + Self.startupTimeout) == .success else {
+            stop()
+            return false
+        }
+        lifecycleLock.lock()
+        let didStart = eventTap != nil && runLoop != nil
+        lifecycleLock.unlock()
+        return didStart
+    }
+
+    func stop() {
+        lifecycleLock.lock()
+        stopRequested = true
+        let runLoop = self.runLoop
+        let stopped = self.stopped
+        let thread = self.thread
+        lifecycleLock.unlock()
+
+        if let runLoop {
+            CFRunLoopPerformBlock(runLoop, CFRunLoopMode.commonModes.rawValue) { [weak self] in
+                guard let self else {
+                    return
+                }
+                self.lifecycleLock.lock()
+                let eventTap = self.eventTap
+                self.lifecycleLock.unlock()
+                if let eventTap {
+                    CGEvent.tapEnable(tap: eventTap, enable: false)
+                }
+                CFRunLoopStop(runLoop)
+            }
+            CFRunLoopWakeUp(runLoop)
+        }
+
+        guard thread !== Thread.current else {
+            return
+        }
+        _ = stopped?.wait(timeout: .now() + Self.startupTimeout)
+    }
+
+    fileprivate func process(
+        type: CGEventType,
+        event: CGEvent
+    ) -> Unmanaged<CGEvent>? {
+        let result = handler(type, event)
+        guard type == .tapDisabledByTimeout || type == .tapDisabledByUserInput else {
+            return result
+        }
+        scheduleRecovery()
+        return result
+    }
+
+    private func run(
+        ready: DispatchSemaphore,
+        stopped: DispatchSemaphore
+    ) {
+        let mask = [
+            CGEventType.mouseMoved,
+            .leftMouseDown,
+            .leftMouseDragged,
+            .leftMouseUp
+        ].reduce(CGEventMask(0)) {
+            $0 | (CGEventMask(1) << CGEventMask($1.rawValue))
+        }
+        let userInfo = Unmanaged.passUnretained(self).toOpaque()
+        guard let eventTap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: mask,
+            callback: windowPlacementEventTapCallback,
+            userInfo: userInfo
+        ),
+        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
+        else {
+            ready.signal()
+            clearState()
+            stopped.signal()
+            return
+        }
+
+        let runLoop = CFRunLoopGetCurrent()
+        lifecycleLock.lock()
+        self.eventTap = eventTap
+        self.runLoop = runLoop
+        let shouldRun = !stopRequested
+        recoveryPolicy.reset()
+        recoveryPolicy.didEnable(at: ProcessInfo.processInfo.systemUptime)
+        lifecycleLock.unlock()
+
+        CFRunLoopAddSource(runLoop, source, .commonModes)
+        CGEvent.tapEnable(tap: eventTap, enable: true)
+        ready.signal()
+        if shouldRun {
+            CFRunLoopRun()
+        }
+
+        CFRunLoopRemoveSource(runLoop, source, .commonModes)
+        CGEvent.tapEnable(tap: eventTap, enable: false)
+        CFMachPortInvalidate(eventTap)
+        clearState()
+        stopped.signal()
+    }
+
+    private func scheduleRecovery() {
+        lifecycleLock.lock()
+        let delay = recoveryPolicy.nextDelay(
+            afterFailureAt: ProcessInfo.processInfo.systemUptime
+        )
+        let runLoop = self.runLoop
+        lifecycleLock.unlock()
+        guard let delay, let runLoop else {
+            NSLog("OmniDock window placement event tap recovery exhausted")
+            return
+        }
+
+        DispatchQueue.global(qos: .userInteractive).asyncAfter(
+            deadline: .now() + delay
+        ) { [weak self] in
+            guard let self else {
+                return
+            }
+            CFRunLoopPerformBlock(runLoop, CFRunLoopMode.commonModes.rawValue) {
+                self.lifecycleLock.lock()
+                let eventTap = self.eventTap
+                let shouldEnable = !self.stopRequested
+                self.lifecycleLock.unlock()
+                guard shouldEnable, let eventTap else {
+                    return
+                }
+                CGEvent.tapEnable(tap: eventTap, enable: true)
+                self.lifecycleLock.lock()
+                self.recoveryPolicy.didEnable(
+                    at: ProcessInfo.processInfo.systemUptime
+                )
+                self.lifecycleLock.unlock()
+            }
+            CFRunLoopWakeUp(runLoop)
+        }
+    }
+
+    private func clearState() {
+        lifecycleLock.lock()
+        eventTap = nil
+        runLoop = nil
+        thread = nil
+        stopped = nil
+        stopRequested = false
+        recoveryPolicy.reset()
+        lifecycleLock.unlock()
     }
 }
 
@@ -184,46 +393,34 @@ final class WindowPlacementPointerMonitor {
     }
 
     private let pointerState = WindowPlacementPointerState()
+    private let accessibilityQueue = DispatchQueue(
+        label: "com.quanzhankeji.OmniDock.window-placement-accessibility",
+        qos: .userInteractive
+    )
     private var configuration = WindowPlacementConfiguration.default
-    private var eventTap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
+    private lazy var eventTapThread = WindowPlacementEventTapThread {
+        [weak self] type, event in
+        self?.process(type: type, event: event)
+            ?? Unmanaged.passUnretained(event)
+    }
+    private var isEventTapRunning = false
     private var dragSession: DragSession?
     private var greenButtonRefreshTimer: Timer?
     private var lastGreenButtonRefreshAt: TimeInterval = 0
+    private var isGreenButtonQueryInFlight = false
     private var greenButtonHoverTracker =
         WindowPlacementGreenButtonHoverTracker()
 
     func start(configuration: WindowPlacementConfiguration) {
         self.configuration = configuration
-        guard eventTap == nil else {
+        guard !isEventTapRunning else {
             updateGreenButtonRefresh()
             return
         }
-
-        let mask = [
-            CGEventType.mouseMoved,
-            .leftMouseDown,
-            .leftMouseDragged,
-            .leftMouseUp
-        ].reduce(CGEventMask(0)) {
-            $0 | (CGEventMask(1) << CGEventMask($1.rawValue))
-        }
-        let opaqueSelf = Unmanaged.passUnretained(self).toOpaque()
-        guard let eventTap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .defaultTap,
-            eventsOfInterest: mask,
-            callback: windowPlacementPointerCallback,
-            userInfo: opaqueSelf
-        ) else {
+        isEventTapRunning = eventTapThread.start()
+        guard isEventTapRunning else {
             return
         }
-        self.eventTap = eventTap
-        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
-        runLoopSource = source
-        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-        CGEvent.tapEnable(tap: eventTap, enable: true)
         updateGreenButtonRefresh()
     }
 
@@ -233,14 +430,8 @@ final class WindowPlacementPointerMonitor {
         lastGreenButtonRefreshAt = 0
         greenButtonHoverTracker.leftButton()
         pointerState.updateGreenButton(nil)
-        if let eventTap {
-            CGEvent.tapEnable(tap: eventTap, enable: false)
-        }
-        if let runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
-        }
-        runLoopSource = nil
-        eventTap = nil
+        eventTapThread.stop()
+        isEventTapRunning = false
         onDragCancelled?()
     }
 
@@ -253,6 +444,12 @@ final class WindowPlacementPointerMonitor {
 
         switch type {
         case .mouseMoved:
+            guard pointerState.shouldDispatchPointerMove(
+                at: timestamp,
+                minimumInterval: 0.008
+            ) else {
+                return Unmanaged.passUnretained(event)
+            }
             if let snapshot = pointerState.greenButton(
                 at: point,
                 now: timestamp
@@ -280,20 +477,10 @@ final class WindowPlacementPointerMonitor {
             Task { @MainActor [weak self] in
                 self?.finishDrag()
             }
-        case .tapDisabledByTimeout, .tapDisabledByUserInput:
-            Task { @MainActor [weak self] in
-                self?.reenableEventTap()
-            }
         default:
             break
         }
         return Unmanaged.passUnretained(event)
-    }
-
-    private func reenableEventTap() {
-        if let eventTap {
-            CGEvent.tapEnable(tap: eventTap, enable: true)
-        }
     }
 
     private func handlePointerMoved(at point: CGPoint) {
@@ -338,10 +525,34 @@ final class WindowPlacementPointerMonitor {
         now: TimeInterval = ProcessInfo.processInfo.systemUptime
     ) {
         lastGreenButtonRefreshAt = now
-        guard configuration.showsGreenButtonPalette,
-              let result = WindowPlacementAccessibility
-                .focusedGreenButtonTarget()
-        else {
+        guard configuration.showsGreenButtonPalette else {
+            greenButtonHoverTracker.leftButton()
+            pointerState.updateGreenButton(nil)
+            return
+        }
+        guard !isGreenButtonQueryInFlight else {
+            return
+        }
+        isGreenButtonQueryInFlight = true
+        accessibilityQueue.async { [weak self] in
+            let result = WindowPlacementAccessibility.focusedGreenButtonTarget().map {
+                WindowPlacementGreenButtonQueryResult(
+                    target: $0.target,
+                    buttonFrame: $0.buttonFrame
+                )
+            }
+            DispatchQueue.main.async { [weak self] in
+                self?.finishGreenButtonQuery(result, now: now)
+            }
+        }
+    }
+
+    private func finishGreenButtonQuery(
+        _ result: WindowPlacementGreenButtonQueryResult?,
+        now: TimeInterval
+    ) {
+        isGreenButtonQueryInFlight = false
+        guard configuration.showsGreenButtonPalette, let result else {
             greenButtonHoverTracker.leftButton()
             pointerState.updateGreenButton(nil)
             return
@@ -466,13 +677,13 @@ final class WindowPlacementPointerMonitor {
 
 }
 
-private let windowPlacementPointerCallback: CGEventTapCallBack = {
+private let windowPlacementEventTapCallback: CGEventTapCallBack = {
     _, type, event, userInfo in
     guard let userInfo else {
         return Unmanaged.passUnretained(event)
     }
-    let monitor = Unmanaged<WindowPlacementPointerMonitor>
+    let eventTapThread = Unmanaged<WindowPlacementEventTapThread>
         .fromOpaque(userInfo)
         .takeUnretainedValue()
-    return monitor.process(type: type, event: event)
+    return eventTapThread.process(type: type, event: event)
 }

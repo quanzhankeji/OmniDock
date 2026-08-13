@@ -107,6 +107,10 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
         )
     }
 
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
     public func install() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.title = "OD"

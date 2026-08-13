@@ -5,7 +5,7 @@ MODE="${1:-run}"
 APP_NAME="OmniDock"
 BUNDLE_ID="com.quanzhankeji.OmniDock"
 MIN_SYSTEM_VERSION="12.3"
-MARKETING_VERSION="1.2.3"
+MARKETING_VERSION="1.2.4"
 BUILD_NUMBER="13"
 
 usage() {
@@ -134,6 +134,8 @@ cat >"$INFO_PLIST" <<PLIST
   <string>OmniDock uses Screen Recording permission to create window thumbnails, including live images and one-time static snapshots, above Dock icons.</string>
   <key>NSInputMonitoringUsageDescription</key>
   <string>OmniDock uses input monitoring permission to detect repeated Dock icon clicks.</string>
+  <key>NSSupportsSuddenTermination</key>
+  <false/>
 </dict>
 </plist>
 PLIST
