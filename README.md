@@ -1,6 +1,8 @@
+**English** | [简体中文](README.zh-CN.md)
+
 # OmniDock
 
-OmniDock is a local macOS menu bar utility that makes Dock window switching faster while staying out of the way.
+OmniDock is a local-first macOS utility for faster window switching, app control, Finder workflows, clipboard history, window layouts, and menu bar organization.
 
 ## Features
 
@@ -9,10 +11,15 @@ OmniDock is a local macOS menu bar utility that makes Dock window switching fast
 - Optionally use minimize/restore instead of hide/show for repeated Dock clicks.
 - Click a preview thumbnail to focus that exact window.
 - Drag a file over a preview thumbnail to raise that window and continue dropping the file.
+- Optionally show static previews for the selected app while using the native Command-Tab switcher.
 - Optionally switch between individual windows with Alt-Tab (Option-Tab), using static previews and the same close and quit controls.
 - Assign per-app global shortcuts to launch, bring forward, or hide apps with the same toggle behavior.
-- Optionally add configurable Finder right-click commands for copying paths, creating empty files, and opening selected items with chosen applications.
+- Resize and position the frontmost window with global shortcuts, a green-button layout menu, or configurable drag zones.
+- Optionally add configurable Finder right-click commands for copying paths, creating empty files, showing or hiding hidden files, and opening selected items with chosen applications.
 - Optionally keep a local, searchable clipboard history for text, formatted content, links, images, and files, opened with `Command-Shift-C`.
+- Organize less-used menu bar icons behind an expandable divider, with manual reveal and optional automatic hiding.
+- Choose English, Simplified Chinese, or the system language, with light, dark, or system appearance.
+- Check for official updates and verify their GitHub digest and Developer ID signature before installation.
 - Avoid browser tab navigation shortcuts so those shortcuts stay with the browser.
 
 OmniDock does not include analytics, advertising SDKs, or third-party packages. It uses Apple system frameworks only.
@@ -20,9 +27,10 @@ OmniDock does not include analytics, advertising SDKs, or third-party packages. 
 ## Requirements
 
 - macOS 12.3 or later
-- Accessibility permission for Dock hit testing and window control
-- Input Monitoring permission for Dock click detection and the optional Alt-Tab window switcher
+- Accessibility permission for Dock hit testing, app and window control, per-app hotkeys, and optional window layouts
+- Input Monitoring permission for Dock click detection, the optional Alt-Tab window switcher, and optional window drag zones
 - Screen Recording permission for window thumbnails, including live images and one-time static snapshots
+- Finder extension access and one-time destination-folder access for optional Finder commands
 
 ## Download
 
@@ -65,7 +73,7 @@ The explicit Finder extension command remains available as an alias:
 
 The Finder extension is off by default. Open `OD` > `Settings` > `Finder Extension`, then turn on `Enable`. macOS may open its extension management page; enable OmniDock there to let Finder load the menu.
 
-When enabled, right-clicking an empty area in a Finder Sync-monitored local folder offers **Copy Path** and a configurable **New File** submenu. Text and Markdown are included by default, and additional file types can be added in OmniDock settings. Right-clicking selected items offers **Copy Path** and optional shortcuts for opening the selection with chosen applications. Copied selections place every path on a separate line, and new files use an available `NewFile.<extension>` name without overwriting existing files.
+When enabled, right-clicking an empty area in a Finder Sync-monitored local folder offers **Copy Path**, a configurable **New File** submenu, and commands for showing or hiding hidden files. Text and Markdown are included by default, and additional file types can be added in OmniDock settings. Right-clicking selected items offers **Copy Path**, hidden-file visibility commands, and optional shortcuts for opening the selection with chosen applications. Copied selections place every path on a separate line, and new files use an available `NewFile.<extension>` name without overwriting existing files.
 
 Finder Sync menus are available only in locations that macOS lets third-party Finder Sync extensions monitor. They do not appear in File Provider-managed locations, including Desktop and Documents when those folders are managed by iCloud Drive.
 
@@ -74,6 +82,18 @@ Finder Sync menus are available only in locations that macOS lets third-party Fi
 Clipboard History is off by default. Enable it from `OD` > `Settings` > `Clipboard History`. While enabled, OmniDock checks the system pasteboard for changes and stores supported entries locally on this Mac. Press `Command-Shift-C` to search the history, use the arrow keys to select an entry, and press Return to copy it back. Hold Option while confirming to paste into the app that was active before the history panel opened.
 
 Temporary, confidential, and automatically generated pasteboard entries are ignored. The history limit can be set from 1 to 999 entries, and individual entries or the entire history can be deleted from settings.
+
+## Window Layout
+
+Window Layout is optional. Enable it from `OD` > `Settings` > `Window Layout` to resize and position the frontmost resizable window with global shortcuts, a layout menu shown by hovering over the green window button, or drag zones that apply a layout when the window is released.
+
+Built-in layouts include halves, corners, thirds, two-thirds, maximize, center, restore, and moving a window between displays. Custom layouts can define their own size and position, keyboard shortcut, and drag activation zone. Full-screen windows, system panels, and windows whose apps restrict movement or resizing remain subject to macOS and app behavior.
+
+## Menu Bar Icon Organizer
+
+Enable Hidden Bar from `OD` > `Settings` > `Hidden Bar` to place less-used menu bar icons behind an expandable divider. Hold Command while dragging menu bar icons across the divider to arrange them, then reveal them manually or let OmniDock hide them again after a configurable delay.
+
+This feature needs no additional privacy permission. Some system-controlled menu bar items cannot be moved because macOS owns their placement.
 
 To launch only the staged bundle:
 
