@@ -19,6 +19,16 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Check public repository hygiene
+        run: |
+          forbidden="$({
+            git ls-files -ci --exclude-standard
+            git ls-files | grep -Ei '(^|/)(cert|\.build|build|DerivedData|dist|research|video|\.claude|\.codex|\.private)(/|$)|(^|/)\.env($|\.)|\.(cer|certsigningrequest|csr|dsym|key|keychain-db|mobileprovision|p8|p12|pem|pkg|provisionprofile|xcarchive)$' || true
+          } | /usr/bin/sort -u)"
+          if [[ -n "$forbidden" ]]; then
+            printf 'Forbidden public repository paths:\n%s\n' "$forbidden" >&2
+            exit 1
+          fi
       - name: Test with warnings as errors
         run: swift test -Xswiftc -warnings-as-errors
 

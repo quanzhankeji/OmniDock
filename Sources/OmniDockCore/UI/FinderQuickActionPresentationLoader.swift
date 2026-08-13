@@ -91,7 +91,7 @@ final class FinderQuickActionPresentationLoader {
     }
 }
 
-enum FinderQuickActionBrandIcon {
+enum FinderQuickActionIcon {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var cache: [String: NSImage] = [:]
 
@@ -104,55 +104,24 @@ enum FinderQuickActionBrandIcon {
         }
         lock.unlock()
 
-        let image = shortcut.bundleIdentifier
-            .flatMap(resourceImage(bundleIdentifier:))
-            ?? fallbackImage(for: shortcut)
+        let image: NSImage
+        if shortcut.bundleIdentifier == "com.apple.Terminal",
+           let terminal = NSImage(
+               systemSymbolName: "terminal",
+               accessibilityDescription: shortcut.displayName
+           ) {
+            image = terminal
+        } else {
+            image = NSImage(
+                systemSymbolName: "app",
+                accessibilityDescription: shortcut.displayName
+            ) ?? NSImage(size: NSSize(width: 26, height: 26))
+        }
         image.size = NSSize(width: 26, height: 26)
 
         lock.lock()
         cache[key] = image
         lock.unlock()
         return image
-    }
-
-    private static func resourceImage(bundleIdentifier: String) -> NSImage? {
-        if let image = resourceImage(bundleIdentifier: bundleIdentifier, bundle: .main) {
-            return image
-        }
-
-        #if SWIFT_PACKAGE && !OMNIDOCK_APP_BUNDLE_BUILD
-        return resourceImage(bundleIdentifier: bundleIdentifier, bundle: .module)
-        #else
-        return nil
-        #endif
-    }
-
-    private static func resourceImage(
-        bundleIdentifier: String,
-        bundle: Bundle
-    ) -> NSImage? {
-        let url = bundle.url(
-            forResource: bundleIdentifier,
-            withExtension: "png",
-            subdirectory: "FinderQuickActionIcons"
-        ) ?? bundle.url(
-            forResource: bundleIdentifier,
-            withExtension: "png"
-        )
-        return url.flatMap(NSImage.init(contentsOf:))
-    }
-
-    private static func fallbackImage(for shortcut: FinderLaunchShortcut) -> NSImage {
-        if shortcut.bundleIdentifier == "com.apple.Terminal",
-           let terminal = NSImage(
-               systemSymbolName: "terminal",
-               accessibilityDescription: shortcut.displayName
-           ) {
-            return terminal
-        }
-        return NSImage(
-            systemSymbolName: "app",
-            accessibilityDescription: shortcut.displayName
-        ) ?? NSImage(size: NSSize(width: 26, height: 26))
     }
 }

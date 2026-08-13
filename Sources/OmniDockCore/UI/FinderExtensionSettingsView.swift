@@ -553,7 +553,7 @@ final class FinderExtensionSettingsView: NSView {
         enabled.translatesAutoresizingMaskIntoConstraints = false
 
         let iconView = NSImageView()
-        iconView.image = presentation?.icon ?? FinderQuickActionBrandIcon.image(for: shortcut)
+        iconView.image = presentation?.icon ?? FinderQuickActionIcon.image(for: shortcut)
         iconView.imageScaling = .scaleProportionallyUpOrDown
         iconView.alphaValue = metadataIsReady && !isAvailable ? 0.55 : 1
         iconView.translatesAutoresizingMaskIntoConstraints = false

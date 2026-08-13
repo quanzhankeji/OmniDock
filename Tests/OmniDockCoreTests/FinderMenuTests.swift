@@ -160,16 +160,16 @@ final class FinderMenuTests: XCTestCase {
     }
 
     @MainActor
-    func testFinderQuickActionCatalogUsesBundledBrandArtwork() throws {
+    func testFinderQuickActionCatalogUsesNeutralFallbackIcon() throws {
         let shortcut = try XCTUnwrap(
             FinderLaunchShortcut.defaultShortcuts.first {
                 $0.bundleIdentifier == "com.microsoft.VSCode"
             }
         )
 
-        let image = FinderQuickActionBrandIcon.image(for: shortcut)
+        let image = FinderQuickActionIcon.image(for: shortcut)
 
-        XCTAssertTrue(image.representations.contains { $0.pixelsWide >= 128 })
+        XCTAssertEqual(image.size, NSSize(width: 26, height: 26))
     }
 
     func testMenuActionRegistryConsumesFrozenContextOnce() {

@@ -35,10 +35,10 @@ For a separately licensed Developer ID release, use `--license-mode eula --binar
 
 The script refuses a dirty worktree and builds a Universal 2 direct-distribution app with the Finder Sync extension embedded. The main app remains unsandboxed for cross-application controls, while the extension remains sandboxed and both signatures use the same App Group. It validates both dSYMs, signs the nested extension and app with the hardened runtime and secure timestamps, submits the app for notarization, staples the accepted ticket, and verifies Gatekeeper assessment. It then creates, signs, notarizes, and staples a DMG.
 
-Each release is split into two output directories:
+Each release is split into public and private output locations:
 
-- `public/` contains only `OmniDock-<version>.dmg` and `OmniDock-<version>.zip`. These are the binary assets uploaded to GitHub Releases.
-- `private/` contains the app and Finder extension dSYMs in one archive, the release manifest, and SHA-256 records. Retain these for diagnostics and release traceability; do not upload them as public Release assets.
+- `dist/release/<version>-<build>/public/` contains only `OmniDock-<version>.dmg` and `OmniDock-<version>.zip`. These are the binary assets uploaded to GitHub Releases.
+- `.private/releases/<version>-<build>/` contains the app and Finder extension dSYMs in one archive, the release manifest, and SHA-256 records. This ignored directory is created with owner-only permissions. Retain these files for diagnostics and release traceability; do not upload them as public Release assets. Set `OMNIDOCK_PRIVATE_RELEASE_DIR` to keep the records in another private location.
 
 GitHub automatically adds source ZIP and TAR.GZ archives for the release tag. They do not need to be generated or uploaded by the release script.
 

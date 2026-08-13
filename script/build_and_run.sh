@@ -78,12 +78,6 @@ for LOCALIZATION_DIR in "$ROOT_DIR"/Sources/OmniDockCore/Resources/*.lproj; do
   rm -rf "$APP_RESOURCES/$LOCALIZATION_NAME"
   /usr/bin/ditto "$LOCALIZATION_DIR" "$APP_RESOURCES/$LOCALIZATION_NAME"
 done
-QUICK_ACTION_ICON_SOURCE="$ROOT_DIR/Sources/OmniDockCore/Resources/FinderQuickActionIcons"
-if [[ -d "$QUICK_ACTION_ICON_SOURCE" ]]; then
-  rm -rf "$APP_RESOURCES/FinderQuickActionIcons"
-  /usr/bin/ditto "$QUICK_ACTION_ICON_SOURCE" "$APP_RESOURCES/FinderQuickActionIcons"
-fi
-
 cat >"$INFO_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -153,8 +147,6 @@ verify_bundle_resources() {
     "$resources/en.lproj/InfoPlist.strings"
     "$resources/zh-Hans.lproj/AppStrings.strings"
     "$resources/zh-Hans.lproj/InfoPlist.strings"
-    "$resources/FinderQuickActionIcons/ATTRIBUTION.txt"
-    "$resources/FinderQuickActionIcons/com.microsoft.VSCode.png"
   )
 
   for required_file in "${required_files[@]}"; do

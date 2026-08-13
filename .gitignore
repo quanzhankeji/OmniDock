@@ -15,10 +15,13 @@
 # Local editor and workspace state
 .vscode/
 .idea/
+/.claude/
+/.codex/
 *.swp
 
 # Local-only project notes and rules
 *.local.md
+/.private/
 
 # Xcode generated or user-specific files
 *.xcuserdata/
@@ -38,10 +41,15 @@
 *.p8
 *.p12
 *.cer
-
+*.certSigningRequest
+*.csr
+*.key
+*.keychain-db
+*.pem
 *.mobileprovision
 *.provisionprofile
 ExportOptions.plist
+/cert/
 
 # Logs
 *.log

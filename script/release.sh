@@ -20,6 +20,7 @@ BINARY_LICENSE_PATH="${OMNIDOCK_BINARY_LICENSE:-}"
 BINARY_LICENSE_SHA256=""
 BUNDLED_LICENSE_NAME=""
 OUTPUT_ROOT="${OMNIDOCK_RELEASE_DIR:-$ROOT_DIR/dist/release}"
+PRIVATE_OUTPUT_ROOT="${OMNIDOCK_PRIVATE_RELEASE_DIR:-$ROOT_DIR/.private/releases}"
 WORK_DIR=""
 LAST_SUBMISSION_ID=""
 RELEASE_SUCCEEDED=0
@@ -56,6 +57,7 @@ Environment equivalents:
   OMNIDOCK_SIGN_IDENTITY
   OMNIDOCK_BINARY_LICENSE
   OMNIDOCK_RELEASE_DIR
+  OMNIDOCK_PRIVATE_RELEASE_DIR
 
 The script signs and notarizes locally produced artifacts. It does not create
 Git commits, push source, upload to GitHub, or publish a release.
@@ -293,9 +295,11 @@ PUBLIC_ARTIFACT_BASE="$APP_NAME-$VERSION"
 PRIVATE_ARTIFACT_BASE="$APP_NAME-$VERSION-build-$BUILD_NUMBER"
 RELEASE_DIR="$OUTPUT_ROOT/$VERSION-$BUILD_NUMBER"
 PUBLIC_RELEASE_DIR="$RELEASE_DIR/public"
-PRIVATE_RELEASE_DIR="$RELEASE_DIR/private"
+PRIVATE_RELEASE_DIR="$PRIVATE_OUTPUT_ROOT/$VERSION-$BUILD_NUMBER"
 [[ ! -e "$RELEASE_DIR" ]] \
   || die "release output already exists: $RELEASE_DIR"
+[[ ! -e "$PRIVATE_RELEASE_DIR" ]] \
+  || die "private release output already exists: $PRIVATE_RELEASE_DIR"
 
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/omnidock-release.XXXXXX")"
 APP_BUNDLE="$WORK_DIR/$APP_NAME.app"
@@ -869,12 +873,15 @@ fi
     "$(basename "$MANIFEST_PATH")" >"$(basename "$CHECKSUM_PATH")"
 )
 
-mkdir -p "$PUBLIC_RELEASE_DIR" "$PRIVATE_RELEASE_DIR"
+mkdir -p "$PUBLIC_RELEASE_DIR"
+/usr/bin/install -d -m 700 "$PRIVATE_OUTPUT_ROOT"
+/usr/bin/install -d -m 700 "$PRIVATE_RELEASE_DIR"
 /usr/bin/ditto "$APP_ZIP" "$PUBLIC_RELEASE_DIR/$(basename "$APP_ZIP")"
 /usr/bin/ditto "$DMG_PATH" "$PUBLIC_RELEASE_DIR/$(basename "$DMG_PATH")"
 /usr/bin/ditto "$DSYM_ZIP" "$PRIVATE_RELEASE_DIR/$(basename "$DSYM_ZIP")"
 /usr/bin/ditto "$MANIFEST_PATH" "$PRIVATE_RELEASE_DIR/$(basename "$MANIFEST_PATH")"
 /usr/bin/ditto "$CHECKSUM_PATH" "$PRIVATE_RELEASE_DIR/$(basename "$CHECKSUM_PATH")"
+/bin/chmod 600 "$PRIVATE_RELEASE_DIR"/*
 
 RELEASE_SUCCEEDED=1
 log "Release artifacts are ready in $RELEASE_DIR"
@@ -882,7 +889,7 @@ echo "  Public GitHub assets:"
 for artifact in "$PUBLIC_RELEASE_DIR"/*; do
   echo "    $(basename "$artifact")"
 done
-echo "  Private release records:"
+echo "  Private release records ($PRIVATE_RELEASE_DIR):"
 for artifact in "$PRIVATE_RELEASE_DIR"/*; do
   echo "    $(basename "$artifact")"
 done
