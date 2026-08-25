@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 enum FinderExtensionSettingsSection: CaseIterable {
     case documentTypes
     case quickActions
+    case quickCommands
 
     var title: String {
         switch self {
@@ -11,6 +12,8 @@ enum FinderExtensionSettingsSection: CaseIterable {
             AppStrings.text(.finderDocumentTypesTitle)
         case .quickActions:
             AppStrings.text(.finderQuickOpenTitle)
+        case .quickCommands:
+            AppStrings.text(.finderQuickCommandsTitle)
         }
     }
 
@@ -20,6 +23,8 @@ enum FinderExtensionSettingsSection: CaseIterable {
             AppStrings.text(.finderDocumentTypesDetail)
         case .quickActions:
             AppStrings.text(.finderQuickOpenDetail)
+        case .quickCommands:
+            AppStrings.text(.finderQuickCommandsDetail)
         }
     }
 
@@ -29,6 +34,8 @@ enum FinderExtensionSettingsSection: CaseIterable {
             "doc.badge.plus"
         case .quickActions:
             "bolt"
+        case .quickCommands:
+            "command"
         }
     }
 }
@@ -51,6 +58,9 @@ final class FinderExtensionSettingsView: NSView {
     private let isExtensionEnabledInFinder: () -> Bool
     private let masterSwitch = FinderSettingsSwitch()
     private let groupingSwitch = FinderSettingsSwitch()
+    private let copyPathCommandSwitch = FinderSettingsSwitch()
+    private let showHiddenFilesCommandSwitch = FinderSettingsSwitch()
+    private let hideHiddenFilesCommandSwitch = FinderSettingsSwitch()
     private let setupView = NSStackView()
     private let navigationStack = NSStackView()
     private let detailStack = NSStackView()
@@ -90,6 +100,9 @@ final class FinderExtensionSettingsView: NSView {
     func reload() {
         masterSwitch.state = settings.finderExtensionEnabled ? .on : .off
         groupingSwitch.state = settings.finderLaunchShortcutsGrouped ? .on : .off
+        copyPathCommandSwitch.state = settings.finderCopyPathCommand ? .on : .off
+        showHiddenFilesCommandSwitch.state = settings.finderShowHiddenFilesCommand ? .on : .off
+        hideHiddenFilesCommandSwitch.state = settings.finderHideHiddenFilesCommand ? .on : .off
         setupView.isHidden = !FinderExtensionActivation.requiresManualActivation(
             isFeatureEnabled: settings.finderExtensionEnabled,
             isExtensionEnabledInFinder: isExtensionEnabledInFinder()
@@ -113,6 +126,7 @@ final class FinderExtensionSettingsView: NSView {
         let header = NSStackView()
         header.orientation = .vertical
         header.alignment = .width
+        header.distribution = .fill
         header.spacing = 8
         header.setContentHuggingPriority(.required, for: .vertical)
         header.setContentCompressionResistancePriority(.required, for: .vertical)
@@ -121,6 +135,12 @@ final class FinderExtensionSettingsView: NSView {
 
         masterSwitch.target = self
         masterSwitch.action = #selector(toggleExtension(_:))
+        copyPathCommandSwitch.target = self
+        copyPathCommandSwitch.action = #selector(toggleCopyPathCommand(_:))
+        showHiddenFilesCommandSwitch.target = self
+        showHiddenFilesCommandSwitch.action = #selector(toggleShowHiddenFilesCommand(_:))
+        hideHiddenFilesCommandSwitch.target = self
+        hideHiddenFilesCommandSwitch.action = #selector(toggleHideHiddenFilesCommand(_:))
         header.addArrangedSubview(makeSettingRow(
             title: AppStrings.text(.finderExtensionEnableTitle),
             detail: AppStrings.text(.finderExtensionEnableDetail),
@@ -222,7 +242,12 @@ final class FinderExtensionSettingsView: NSView {
             navigationStack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             navigationStack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             navigationStack.topAnchor.constraint(equalTo: container.topAnchor),
-            navigationStack.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor)
+            // Pin both edges to give the navigation column a definite height
+            // driven by its content. A one-sided "lessThanOrEqualTo" here left
+            // the column's height under-determined, so AppKit could collapse it
+            // to zero on a focus-driven layout pass, making the section buttons
+            // disappear after the settings window regained key status.
+            navigationStack.bottomAnchor.constraint(equalTo: container.bottomAnchor)
         ])
         return container
     }
@@ -324,6 +349,10 @@ final class FinderExtensionSettingsView: NSView {
             guard renderedQuickActions != settings.finderLaunchShortcuts else {
                 return
             }
+        case .quickCommands:
+            // The quick-command rows are persistent controls whose state is
+            // refreshed in reload(); there is no dynamic list to rebuild.
+            return
         }
         rebuildDetail(force: true)
     }
@@ -338,6 +367,7 @@ final class FinderExtensionSettingsView: NSView {
         addButton.title = selectedSection == .documentTypes
             ? AppStrings.text(.finderDocumentTypeAdd)
             : AppStrings.text(.finderQuickOpenAdd)
+        addButton.isHidden = selectedSection == .quickCommands
         detailStack.arrangedSubviews[1].isHidden = selectedSection != .quickActions
 
         itemRows.removeAllArrangedSubviews()
@@ -351,6 +381,8 @@ final class FinderExtensionSettingsView: NSView {
         case .quickActions:
             renderedQuickActions = settings.finderLaunchShortcuts
             rebuildQuickActions()
+        case .quickCommands:
+            rebuildQuickCommands()
         }
     }
 
@@ -498,6 +530,24 @@ final class FinderExtensionSettingsView: NSView {
             ))
         }
         scheduleQuickActionPresentationLoad(for: actions)
+    }
+
+    private func rebuildQuickCommands() {
+        itemRows.addArrangedSubview(makeSettingRow(
+            title: AppStrings.text(.finderQuickCommandCopyPathTitle),
+            detail: AppStrings.text(.finderQuickCommandCopyPathDetail),
+            control: copyPathCommandSwitch
+        ))
+        itemRows.addArrangedSubview(makeSettingRow(
+            title: AppStrings.text(.finderQuickCommandShowHiddenTitle),
+            detail: AppStrings.text(.finderQuickCommandShowHiddenDetail),
+            control: showHiddenFilesCommandSwitch
+        ))
+        itemRows.addArrangedSubview(makeSettingRow(
+            title: AppStrings.text(.finderQuickCommandHideHiddenTitle),
+            detail: AppStrings.text(.finderQuickCommandHideHiddenDetail),
+            control: hideHiddenFilesCommandSwitch
+        ))
     }
 
     private func makeQuickActionHeader() -> NSView {
@@ -670,8 +720,14 @@ final class FinderExtensionSettingsView: NSView {
         detailField.font = .systemFont(ofSize: 12)
         detailField.textColor = .secondaryLabelColor
         detailField.lineBreakMode = .byTruncatingTail
+        detailField.setContentCompressionResistancePriority(
+            .defaultLow,
+            for: .horizontal
+        )
         labels.addArrangedSubview(titleField)
         labels.addArrangedSubview(detailField)
+        labels.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        control.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         labels.translatesAutoresizingMaskIntoConstraints = false
         control.translatesAutoresizingMaskIntoConstraints = false
@@ -720,6 +776,18 @@ final class FinderExtensionSettingsView: NSView {
         settings.finderLaunchShortcutsGrouped = sender.state == .on
     }
 
+    @objc private func toggleCopyPathCommand(_ sender: NSSwitch) {
+        settings.finderCopyPathCommand = sender.state == .on
+    }
+
+    @objc private func toggleShowHiddenFilesCommand(_ sender: NSSwitch) {
+        settings.finderShowHiddenFilesCommand = sender.state == .on
+    }
+
+    @objc private func toggleHideHiddenFilesCommand(_ sender: NSSwitch) {
+        settings.finderHideHiddenFilesCommand = sender.state == .on
+    }
+
     @objc private func toggleDocumentType(_ sender: NSButton) {
         guard let rawValue = sender.identifier?.rawValue,
               let id = UUID(uuidString: rawValue)
@@ -761,6 +829,8 @@ final class FinderExtensionSettingsView: NSView {
             onAddDocumentType?()
         case .quickActions:
             onAddQuickAction?()
+        case .quickCommands:
+            break
         }
     }
 
@@ -775,6 +845,8 @@ final class FinderExtensionSettingsView: NSView {
             onRemoveDocumentType?(id)
         case .quickActions:
             onRemoveQuickAction?(id)
+        case .quickCommands:
+            break
         }
     }
 }

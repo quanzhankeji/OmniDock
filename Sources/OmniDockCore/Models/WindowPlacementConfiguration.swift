@@ -340,6 +340,8 @@ struct WindowPlacementConfiguration: Codable, Equatable {
     var isEnabled: Bool
     var showsGreenButtonPalette: Bool
     var observesWindowDragging: Bool
+    var allowsEscapeToCancelDrag: Bool
+    var showsSizeOnDrag: Bool
     var commands: [WindowPlacementCommand]
 
     init(
@@ -347,13 +349,59 @@ struct WindowPlacementConfiguration: Codable, Equatable {
         isEnabled: Bool = false,
         showsGreenButtonPalette: Bool = true,
         observesWindowDragging: Bool = true,
+        allowsEscapeToCancelDrag: Bool = true,
+        showsSizeOnDrag: Bool = false,
         commands: [WindowPlacementCommand] = BuiltInWindowPlacement.allCases.map(WindowPlacementCommand.builtIn)
     ) {
         self.schemaVersion = schemaVersion
         self.isEnabled = isEnabled
         self.showsGreenButtonPalette = showsGreenButtonPalette
         self.observesWindowDragging = observesWindowDragging
+        self.allowsEscapeToCancelDrag = allowsEscapeToCancelDrag
+        self.showsSizeOnDrag = showsSizeOnDrag
         self.commands = commands
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion
+        case isEnabled
+        case showsGreenButtonPalette
+        case observesWindowDragging
+        case allowsEscapeToCancelDrag
+        case showsSizeOnDrag
+        case commands
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try container.decodeIfPresent(
+            Int.self,
+            forKey: .schemaVersion
+        ) ?? Self.currentSchemaVersion
+        isEnabled = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .isEnabled
+        ) ?? false
+        showsGreenButtonPalette = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .showsGreenButtonPalette
+        ) ?? true
+        observesWindowDragging = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .observesWindowDragging
+        ) ?? true
+        allowsEscapeToCancelDrag = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .allowsEscapeToCancelDrag
+        ) ?? true
+        showsSizeOnDrag = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .showsSizeOnDrag
+        ) ?? false
+        commands = try container.decodeIfPresent(
+            [WindowPlacementCommand].self,
+            forKey: .commands
+        ) ?? BuiltInWindowPlacement.allCases.map(WindowPlacementCommand.builtIn)
     }
 
     static let `default` = WindowPlacementConfiguration()

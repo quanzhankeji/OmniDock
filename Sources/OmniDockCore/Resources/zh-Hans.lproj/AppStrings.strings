@@ -97,7 +97,7 @@
 "menuBarShelfDividerTooltip" = "按住 Command，将菜单栏图标拖过此分界线";
 
 "finderExtensionEnableTitle" = "启用";
-"finderExtensionEnableDetail" = "在 Finder 右键菜单中显示新建文件与复制路径。";
+"finderExtensionEnableDetail" = "扩展 Finder 右键菜单能力；iCloud 同步文件夹暂不支持此功能。";
 "finderExtensionSetupRequired" = "请在 macOS 的 Finder 扩展中开启 OmniDock 后使用这些菜单项。";
 "finderExtensionOpenSettings" = "打开 Finder 扩展设置";
 "finderExtensionCreateFailedTitle" = "无法新建文件";
@@ -120,6 +120,14 @@
 "finderQuickOpenFailedTitle" = "无法打开所选项目";
 "finderQuickOpenFailedDetail" = "无法使用“%@”打开所选项目。%@";
 "finderQuickOpenApplicationMissing" = "该应用已经不可用。";
+"finderQuickCommandsTitle" = "快捷指令";
+"finderQuickCommandsDetail" = "选择要在 Finder 右键菜单中显示的快捷命令。";
+"finderQuickCommandCopyPathTitle" = "复制路径";
+"finderQuickCommandCopyPathDetail" = "在右键菜单中显示“复制路径”。";
+"finderQuickCommandShowHiddenTitle" = "显示所有文件";
+"finderQuickCommandShowHiddenDetail" = "在右键菜单中显示“显示所有文件”。";
+"finderQuickCommandHideHiddenTitle" = "隐藏所有文件";
+"finderQuickCommandHideHiddenDetail" = "在右键菜单中显示“隐藏所有文件”。";
 "finderDocumentTypesTitle" = "新建文件类型";
 "finderDocumentTypesDetail" = "选择在 Finder 新建文件菜单中显示的空白文档类型。";
 "finderDocumentTypeAdd" = "添加文件类型";
@@ -163,6 +171,8 @@
 
 "hotkeysEnableTitle" = "启用快捷键";
 "hotkeysEnableDetail" = "使用全局快捷键快速隐藏或唤起应用。";
+"hotkeyHideOnRepeatedTriggerTitle" = "重复触发时隐藏窗口";
+"hotkeyHideOnRepeatedTriggerDetail" = "应用已在前台时，再次按下快捷键将隐藏其窗口。";
 "hotkeysChooseApp" = "选择应用";
 "hotkeysBoundCount" = "已绑定应用：%d";
 "hotkeysEmpty" = "还没有选择应用。";
@@ -186,8 +196,8 @@
 "clipboardEnableTitle" = "启用剪贴板历史";
 "clipboardEnableDetail" = "在本机保存并搜索复制过的文本、图片、链接和文件。";
 "clipboardShortcutTitle" = "键盘快捷键";
-"clipboardShortcutDetail" = "按下 ⌘⇧C 打开或关闭剪贴板历史。";
-"clipboardShortcutConflict" = "Command-Shift-C 已被 macOS、其它应用或 OmniDock 应用快捷键占用。";
+"clipboardShortcutDetail" = "按下下方快捷键打开或关闭剪贴板历史。";
+"clipboardShortcutConflict" = "该快捷键已被 macOS、其它应用或 OmniDock 应用快捷键占用。";
 "clipboardLimitTitle" = "历史数量";
 "clipboardLimitDetail" = "保留最近 1 到 999 条剪贴板记录。";
 "clipboardPrivacyNote" = "剪贴板历史只保存在本机；临时、保密和自动生成的剪贴板内容不会被保存。";
@@ -210,11 +220,15 @@
 "clipboardPreviewFiles" = "文件";
 
 "windowPlacementEnableTitle" = "启用窗口调整";
-"windowPlacementEnableDetail" = "通过快捷键、绿色按钮菜单或拖拽区域调整桌面最前方窗口。";
-"windowPlacementGreenButtonTitle" = "绿色按钮布局菜单";
-"windowPlacementGreenButtonDetail" = "将鼠标停在窗口绿色按钮上即可选择布局，同时保留按钮原本的点击功能。";
+"windowPlacementEnableDetail" = "通过快捷键、绿色按钮或拖拽区域调整桌面最前方窗口。";
+"windowPlacementGreenButtonTitle" = "绿色按钮最大化";
+"windowPlacementGreenButtonDetail" = "点击窗口绿色按钮在最大化与还原之间切换，替代进入全屏。";
 "windowPlacementDragTitle" = "拖拽调整";
 "windowPlacementDragDetail" = "将正在移动的窗口拖入指定屏幕区域并松开，即可应用布局。";
+"windowPlacementEscapeCancelTitle" = "按 Esc 取消本次调整";
+"windowPlacementEscapeCancelDetail" = "移动窗口时按 Esc 隐藏触发区域，本次松手不再应用窗口布局。";
+"windowPlacementShowSizeOnDragTitle" = "显示窗口大小";
+"windowPlacementShowSizeOnDragDetail" = "从窗口边缘或四角缩放时显示当前大小；鼠标快速移动时暂时隐藏。";
 "windowPlacementCommands" = "窗口布局";
 "windowPlacementAdd" = "新增布局";
 "windowPlacementRemove" = "移除";

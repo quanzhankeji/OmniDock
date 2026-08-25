@@ -122,6 +122,14 @@ enum AppStringKey: String, CaseIterable {
     case finderQuickOpenFailedTitle
     case finderQuickOpenFailedDetail
     case finderQuickOpenApplicationMissing
+    case finderQuickCommandsTitle
+    case finderQuickCommandsDetail
+    case finderQuickCommandCopyPathTitle
+    case finderQuickCommandCopyPathDetail
+    case finderQuickCommandShowHiddenTitle
+    case finderQuickCommandShowHiddenDetail
+    case finderQuickCommandHideHiddenTitle
+    case finderQuickCommandHideHiddenDetail
     case finderDocumentTypesTitle
     case finderDocumentTypesDetail
     case finderDocumentTypeAdd
@@ -165,6 +173,8 @@ enum AppStringKey: String, CaseIterable {
 
     case hotkeysEnableTitle
     case hotkeysEnableDetail
+    case hotkeyHideOnRepeatedTriggerTitle
+    case hotkeyHideOnRepeatedTriggerDetail
     case hotkeysChooseApp
     case hotkeysBoundCount
     case hotkeysEmpty
@@ -217,6 +227,10 @@ enum AppStringKey: String, CaseIterable {
     case windowPlacementGreenButtonDetail
     case windowPlacementDragTitle
     case windowPlacementDragDetail
+    case windowPlacementEscapeCancelTitle
+    case windowPlacementEscapeCancelDetail
+    case windowPlacementShowSizeOnDragTitle
+    case windowPlacementShowSizeOnDragDetail
     case windowPlacementCommands
     case windowPlacementAdd
     case windowPlacementRemove

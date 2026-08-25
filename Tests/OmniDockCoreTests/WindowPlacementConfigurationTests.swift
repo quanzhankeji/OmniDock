@@ -629,6 +629,170 @@ final class WindowPlacementConfigurationTests: XCTestCase {
         )
     }
 
+    func testSizeOnDragDefaultsToDisabled() {
+        XCTAssertFalse(WindowPlacementConfiguration.default.showsSizeOnDrag)
+        XCTAssertFalse(
+            WindowPlacementConfiguration(isEnabled: true).showsSizeOnDrag
+        )
+    }
+
+    func testLegacyConfigurationDecodesWithSizeOnDragDisabled() throws {
+        let data = try JSONSerialization.data(
+            withJSONObject: [
+                "isEnabled": true,
+                "observesWindowDragging": false
+            ]
+        )
+        let decoded = try JSONDecoder().decode(
+            WindowPlacementConfiguration.self,
+            from: data
+        )
+
+        XCTAssertTrue(decoded.isEnabled)
+        XCTAssertFalse(decoded.observesWindowDragging)
+        XCTAssertTrue(decoded.allowsEscapeToCancelDrag)
+        XCTAssertFalse(decoded.showsSizeOnDrag)
+        XCTAssertEqual(
+            decoded.schemaVersion,
+            WindowPlacementConfiguration.currentSchemaVersion
+        )
+        XCTAssertEqual(
+            Set(decoded.commands.compactMap(\.builtIn)),
+            Set(BuiltInWindowPlacement.allCases)
+        )
+    }
+
+    func testSizeOnDragRoundTripsThroughCodable() throws {
+        var configuration = WindowPlacementConfiguration.default
+        configuration.isEnabled = true
+        configuration.showsSizeOnDrag = true
+
+        let decoded = try JSONDecoder().decode(
+            WindowPlacementConfiguration.self,
+            from: JSONEncoder().encode(configuration)
+        )
+
+        XCTAssertTrue(decoded.showsSizeOnDrag)
+        XCTAssertEqual(decoded, configuration)
+    }
+
+    func testEscapeCancellationDefaultsToEnabledAndRoundTrips() throws {
+        XCTAssertTrue(WindowPlacementConfiguration.default.allowsEscapeToCancelDrag)
+
+        var configuration = WindowPlacementConfiguration.default
+        configuration.allowsEscapeToCancelDrag = false
+        let decoded = try JSONDecoder().decode(
+            WindowPlacementConfiguration.self,
+            from: JSONEncoder().encode(configuration)
+        )
+
+        XCTAssertFalse(decoded.allowsEscapeToCancelDrag)
+        XCTAssertEqual(decoded, configuration)
+    }
+
+    func testEscapeCancellationRequiresPresentedMoveRegions() {
+        XCTAssertTrue(WindowPlacementEscapeCancellationPolicy.isAvailable(
+            isEnabled: true,
+            interaction: .moving,
+            hasPresentedDragRegions: true
+        ))
+        XCTAssertFalse(WindowPlacementEscapeCancellationPolicy.isAvailable(
+            isEnabled: false,
+            interaction: .moving,
+            hasPresentedDragRegions: true
+        ))
+        XCTAssertFalse(WindowPlacementEscapeCancellationPolicy.isAvailable(
+            isEnabled: true,
+            interaction: .pending,
+            hasPresentedDragRegions: true
+        ))
+        XCTAssertFalse(WindowPlacementEscapeCancellationPolicy.isAvailable(
+            isEnabled: true,
+            interaction: .resizing,
+            hasPresentedDragRegions: true
+        ))
+        XCTAssertFalse(WindowPlacementEscapeCancellationPolicy.isAvailable(
+            isEnabled: true,
+            interaction: .moving,
+            hasPresentedDragRegions: false
+        ))
+    }
+
+    func testSizeHUDTracksOnlyResizeDragsThatBeginAtWindowEdges() {
+        let frame = CGRect(x: 100, y: 100, width: 600, height: 400)
+
+        XCTAssertTrue(WindowPlacementSizeHUDPolicy.beginsNearResizeEdge(
+            at: CGPoint(x: frame.minX, y: frame.midY),
+            windowFrame: frame
+        ))
+        XCTAssertTrue(WindowPlacementSizeHUDPolicy.beginsNearResizeEdge(
+            at: CGPoint(x: frame.maxX + 4, y: frame.maxY + 4),
+            windowFrame: frame
+        ))
+        XCTAssertFalse(WindowPlacementSizeHUDPolicy.beginsNearResizeEdge(
+            at: CGPoint(x: frame.midX, y: frame.midY),
+            windowFrame: frame
+        ))
+        XCTAssertFalse(WindowPlacementSizeHUDPolicy.beginsNearResizeEdge(
+            at: CGPoint(x: frame.maxX + 30, y: frame.midY),
+            windowFrame: frame
+        ))
+
+        XCTAssertTrue(WindowPlacementSizeHUDPolicy.shouldTrack(
+            isEnabled: true,
+            interaction: .resizing,
+            beganNearResizeEdge: true
+        ))
+        XCTAssertFalse(WindowPlacementSizeHUDPolicy.shouldTrack(
+            isEnabled: true,
+            interaction: .moving,
+            beganNearResizeEdge: true
+        ))
+        XCTAssertFalse(WindowPlacementSizeHUDPolicy.shouldTrack(
+            isEnabled: true,
+            interaction: .resizing,
+            beganNearResizeEdge: false
+        ))
+    }
+
+    func testSizeHUDHidesOnlyForSustainedRapidPointerMotion() {
+        XCTAssertTrue(WindowPlacementSizeHUDPolicy.isRapidPointerMotion(
+            from: .zero,
+            to: CGPoint(x: 30, y: 0),
+            elapsed: 0.01
+        ))
+        XCTAssertFalse(WindowPlacementSizeHUDPolicy.isRapidPointerMotion(
+            from: .zero,
+            to: CGPoint(x: 2, y: 0),
+            elapsed: 0.02
+        ))
+        XCTAssertFalse(WindowPlacementSizeHUDPolicy.isRapidPointerMotion(
+            from: .zero,
+            to: CGPoint(x: 300, y: 0),
+            elapsed: 0.3
+        ))
+        XCTAssertFalse(WindowPlacementSizeHUDPolicy.isRapidPointerMotion(
+            from: .zero,
+            to: CGPoint(x: 300, y: 0),
+            elapsed: 0
+        ))
+    }
+
+    func testWindowPlacementSizeFormatterRoundsAndJoinsDimensions() {
+        XCTAssertEqual(
+            WindowPlacementSizeFormatter.text(
+                for: CGSize(width: 1080, height: 720)
+            ),
+            "1080×720"
+        )
+        XCTAssertEqual(
+            WindowPlacementSizeFormatter.text(
+                for: CGSize(width: 1439.6, height: 899.2)
+            ),
+            "1440×899"
+        )
+    }
+
     func testGeometryCentersAndMapsAcrossDisplays() {
         let center = WindowPlacementCommand(
             behavior: .center
@@ -783,6 +947,20 @@ final class WindowPlacementConfigurationTests: XCTestCase {
             LocalizedResourceCatalog.text(.windowPlacementLeftHalf, language: .zhHans),
             "左侧"
         )
+        XCTAssertEqual(
+            LocalizedResourceCatalog.text(
+                .windowPlacementEscapeCancelTitle,
+                language: .en
+            ),
+            "Cancel Drag Layout with Esc"
+        )
+        XCTAssertEqual(
+            LocalizedResourceCatalog.text(
+                .windowPlacementEscapeCancelTitle,
+                language: .zhHans
+            ),
+            "按 Esc 取消本次调整"
+        )
     }
 
     func testGreenButtonShieldNeverReservesTheNativeButtonAction() {
@@ -831,38 +1009,6 @@ final class WindowPlacementConfigurationTests: XCTestCase {
                 buttonFrame: frame,
                 expiresAt: 10,
                 now: 11
-            )
-        )
-    }
-
-    func testGreenButtonHoverCanTriggerAgainAfterPointerLeaves() {
-        var tracker = WindowPlacementGreenButtonHoverTracker()
-        let target = WindowPlacementRuntimeIdentifier(
-            processIdentifier: 42,
-            windowID: 7,
-            fallbackElementHash: 0
-        )
-        let frame = CGRect(x: 20, y: 30, width: 14, height: 14)
-
-        XCTAssertTrue(
-            tracker.entered(
-                targetIdentifier: target,
-                buttonFrame: frame
-            )
-        )
-        XCTAssertFalse(
-            tracker.entered(
-                targetIdentifier: target,
-                buttonFrame: frame
-            )
-        )
-
-        tracker.leftButton()
-
-        XCTAssertTrue(
-            tracker.entered(
-                targetIdentifier: target,
-                buttonFrame: frame
             )
         )
     }

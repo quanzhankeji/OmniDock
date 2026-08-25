@@ -4,6 +4,7 @@ import XCTest
 
 final class DockTargetResolverTests: XCTestCase {
     func testDockItemRoleValidationAcceptsOnlyApplicationDockItems() {
+        XCTAssertTrue(DockItemRoleValidationPolicy.isDockItem(role: "AXDockItem"))
         XCTAssertTrue(DockItemRoleValidationPolicy.accepts(
             role: "AXDockItem",
             subrole: "AXApplicationDockItem"
@@ -16,6 +17,21 @@ final class DockTargetResolverTests: XCTestCase {
             role: "AXGroup",
             subrole: "AXApplicationDockItem"
         ))
+        XCTAssertFalse(DockItemRoleValidationPolicy.isDockItem(role: "AXGroup"))
+    }
+
+    func testNonPreviewableDockHitCannotLeakPreviousTarget() {
+        let previousTarget = DockAppTarget(
+            processIdentifier: 101,
+            bundleIdentifier: "com.example.SampleEditor",
+            localizedName: "Sample Editor",
+            dockElementTitle: "Sample Editor",
+            hitPoint: .zero
+        )
+
+        XCTAssertEqual(DockHoverHitResult.previewableTarget(previousTarget).target, previousTarget)
+        XCTAssertNil(DockHoverHitResult.nonPreviewableDockItem.target)
+        XCTAssertNil(DockHoverHitResult.none.target)
     }
 
     func testDockItemHitValidationAcceptsFrameCoveringPointer() {

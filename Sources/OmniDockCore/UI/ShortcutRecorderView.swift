@@ -28,8 +28,9 @@ final class ShortcutRecorderView: NSControl {
     }
 
     private let label = NSTextField(labelWithString: "")
-    private var isRecording = false
+    private(set) var isRecording = false
     private var transientMessage: String?
+    private var pointerDownMonitor: Any?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -38,6 +39,12 @@ final class ShortcutRecorderView: NSControl {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        if let pointerDownMonitor {
+            NSEvent.removeMonitor(pointerDownMonitor)
+        }
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -125,11 +132,13 @@ final class ShortcutRecorderView: NSControl {
         updateDisplay()
         updateAppearance()
         window?.makeFirstResponder(self)
+        startMonitoringPointerDown()
     }
 
     private func cancelRecording() {
         isRecording = false
         transientMessage = nil
+        stopMonitoringPointerDown()
         updateDisplay()
         updateAppearance()
         if window?.firstResponder === self {
@@ -140,12 +149,47 @@ final class ShortcutRecorderView: NSControl {
     private func finishRecording(with shortcut: RecordedShortcut?) {
         isRecording = false
         transientMessage = nil
+        stopMonitoringPointerDown()
         recordedShortcut = shortcut
         updateDisplay()
         updateAppearance()
         onChange?(shortcut)
         if window?.firstResponder === self {
             window?.makeFirstResponder(nil)
+        }
+    }
+
+    private func startMonitoringPointerDown() {
+        guard pointerDownMonitor == nil else {
+            return
+        }
+        pointerDownMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        ) { [weak self] event in
+            self?.handlePointerDownDuringRecording(event)
+            return event
+        }
+    }
+
+    private func stopMonitoringPointerDown() {
+        guard let pointerDownMonitor else {
+            return
+        }
+        NSEvent.removeMonitor(pointerDownMonitor)
+        self.pointerDownMonitor = nil
+    }
+
+    func handlePointerDownDuringRecording(_ event: NSEvent) {
+        guard isRecording else {
+            return
+        }
+        guard let window, event.windowNumber == window.windowNumber else {
+            cancelRecording()
+            return
+        }
+        let point = convert(event.locationInWindow, from: nil)
+        if !bounds.contains(point) {
+            cancelRecording()
         }
     }
 

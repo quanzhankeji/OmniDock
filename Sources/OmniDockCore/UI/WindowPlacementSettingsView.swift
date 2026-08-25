@@ -11,6 +11,8 @@ final class WindowPlacementSettingsView: NSView {
     private let masterSwitch = WindowPlacementFirstClickSwitch()
     private let greenButtonSwitch = WindowPlacementFirstClickSwitch()
     private let dragSwitch = WindowPlacementFirstClickSwitch()
+    private let escapeCancelSwitch = WindowPlacementFirstClickSwitch()
+    private let sizeOnDragSwitch = WindowPlacementFirstClickSwitch()
     private let commandRows = NSStackView()
     private let editor = NSStackView()
     private let nameField = NSTextField()
@@ -41,8 +43,14 @@ final class WindowPlacementSettingsView: NSView {
         masterSwitch.state = configuration.isEnabled ? .on : .off
         greenButtonSwitch.state = configuration.showsGreenButtonPalette ? .on : .off
         dragSwitch.state = configuration.observesWindowDragging ? .on : .off
+        escapeCancelSwitch.state = configuration.allowsEscapeToCancelDrag ? .on : .off
+        sizeOnDragSwitch.state = configuration.showsSizeOnDrag ? .on : .off
         greenButtonSwitch.isEnabled = configuration.isEnabled
         dragSwitch.isEnabled = configuration.isEnabled
+        escapeCancelSwitch.isEnabled = configuration.isEnabled
+            && configuration.observesWindowDragging
+        sizeOnDragSwitch.isEnabled = configuration.isEnabled
+            && configuration.observesWindowDragging
         registrationWarningField.stringValue = registrationStatus.warning ?? ""
         registrationWarningField.isHidden = registrationStatus.warning == nil
 
@@ -86,6 +94,24 @@ final class WindowPlacementSettingsView: NSView {
             title: AppStrings.text(.windowPlacementDragTitle),
             detail: AppStrings.text(.windowPlacementDragDetail),
             control: dragSwitch
+        ))
+
+        escapeCancelSwitch.target = self
+        escapeCancelSwitch.action = #selector(toggleEscapeCancel(_:))
+        root.addArrangedSubview(makeSettingRow(
+            title: AppStrings.text(.windowPlacementEscapeCancelTitle),
+            detail: AppStrings.text(.windowPlacementEscapeCancelDetail),
+            control: escapeCancelSwitch,
+            indentation: 24
+        ))
+
+        sizeOnDragSwitch.target = self
+        sizeOnDragSwitch.action = #selector(toggleSizeOnDrag(_:))
+        root.addArrangedSubview(makeSettingRow(
+            title: AppStrings.text(.windowPlacementShowSizeOnDragTitle),
+            detail: AppStrings.text(.windowPlacementShowSizeOnDragDetail),
+            control: sizeOnDragSwitch,
+            indentation: 24
         ))
 
         registrationWarningField.font = .systemFont(ofSize: 12)
@@ -411,6 +437,18 @@ final class WindowPlacementSettingsView: NSView {
         settings.windowPlacementConfiguration = configuration
     }
 
+    @objc private func toggleEscapeCancel(_ sender: NSSwitch) {
+        var configuration = settings.windowPlacementConfiguration
+        configuration.allowsEscapeToCancelDrag = sender.state == .on
+        settings.windowPlacementConfiguration = configuration
+    }
+
+    @objc private func toggleSizeOnDrag(_ sender: NSSwitch) {
+        var configuration = settings.windowPlacementConfiguration
+        configuration.showsSizeOnDrag = sender.state == .on
+        settings.windowPlacementConfiguration = configuration
+    }
+
     @objc private func addCommand(_ sender: NSButton) {
         var configuration = settings.windowPlacementConfiguration
         let command = WindowPlacementCommand.custom(
@@ -479,12 +517,19 @@ final class WindowPlacementSettingsView: NSView {
     private func makeSettingRow(
         title: String,
         detail: String,
-        control: NSView
+        control: NSView,
+        indentation: CGFloat = 0
     ) -> NSView {
         let row = NSStackView()
         row.orientation = .horizontal
         row.alignment = .centerY
         row.spacing = 12
+        row.edgeInsets = NSEdgeInsets(
+            top: 0,
+            left: indentation,
+            bottom: 0,
+            right: 0
+        )
         let labels = NSStackView()
         labels.orientation = .vertical
         labels.alignment = .leading

@@ -135,6 +135,19 @@ struct DockHitTestInventoryItem: Equatable {
     let eventTapFrame: CGRect
 }
 
+enum DockHoverHitResult: Equatable {
+    case previewableTarget(DockAppTarget)
+    case nonPreviewableDockItem
+    case none
+
+    var target: DockAppTarget? {
+        guard case let .previewableTarget(target) = self else {
+            return nil
+        }
+        return target
+    }
+}
+
 public final class DockHitTester {
     private let permissionService: PermissionService
 
@@ -143,12 +156,16 @@ public final class DockHitTester {
     }
 
     public func target(at appKitPoint: CGPoint) -> DockAppTarget? {
+        hoverHitResult(at: appKitPoint).target
+    }
+
+    func hoverHitResult(at appKitPoint: CGPoint) -> DockHoverHitResult {
         precondition(Thread.isMainThread, "Dock hit testing must capture AppKit state on the main thread")
         let systemInventory = captureSystemInventory()
         guard systemInventory.hasAccessibilityPermission,
               let dockProcessIdentifier = systemInventory.dockProcessIdentifier
         else {
-            return nil
+            return .none
         }
 
         let dockElement = AccessibilityElementFactory.application(
@@ -158,6 +175,7 @@ public final class DockHitTester {
             fromAppKitPoint: appKitPoint
         )
         let runningApps = systemInventory.applications.dockTargetCandidates
+        var foundNonPreviewableDockItem = false
 
         for point in candidatePoints {
             var hitElement: AXUIElement?
@@ -170,26 +188,27 @@ public final class DockHitTester {
             guard error == .success, let hitElement else {
                 continue
             }
-            if let target = target(
+            switch hoverHitResult(
                 from: hitElement,
                 appKitPoint: appKitPoint,
                 accessibilityPoint: point,
                 runningApps: runningApps,
                 screens: systemInventory.screens
             ) {
-                return target
+            case let .previewableTarget(target):
+                return .previewableTarget(target)
+            case .nonPreviewableDockItem:
+                foundNonPreviewableDockItem = true
+            case .none:
+                break
             }
         }
 
         let dockItems = dockItemSnapshots(from: dockElement)
         for point in candidatePoints {
-            if let fallback = DockTargetResolver.fallbackApplication(
-                at: point,
-                dockItems: dockItems,
-                runningApps: runningApps
-            ) {
+            for item in dockItems where item.frame?.contains(point) == true {
                 let dockItemFrame = appKitFrame(
-                    from: fallback.item.frame,
+                    from: item.frame,
                     accessibilityPoint: point,
                     appKitPoint: appKitPoint,
                     screens: systemInventory.screens
@@ -200,16 +219,25 @@ public final class DockHitTester {
                 ) else {
                     continue
                 }
-                return makeTarget(
-                    resolution: fallback.resolution,
-                    dockElementTitle: fallback.item.texts.first ?? fallback.resolution.app.localizedName ?? "",
-                    hitPoint: appKitPoint,
-                    dockItemFrame: dockItemFrame
+                guard let resolution = DockTargetResolver.matchingTarget(
+                    for: item.texts,
+                    runningApps: runningApps
+                ) else {
+                    foundNonPreviewableDockItem = true
+                    continue
+                }
+                return .previewableTarget(
+                    makeTarget(
+                        resolution: resolution,
+                        dockElementTitle: item.texts.first ?? resolution.app.localizedName ?? "",
+                        hitPoint: appKitPoint,
+                        dockItemFrame: dockItemFrame
+                    )
                 )
             }
         }
 
-        return nil
+        return foundNonPreviewableDockItem ? .nonPreviewableDockItem : .none
     }
 
     func captureSystemInventory() -> DockInteractionSystemInventory {
@@ -294,23 +322,15 @@ public final class DockHitTester {
         }
     }
 
-    private func target(
+    private func hoverHitResult(
         from element: AXUIElement,
         appKitPoint: CGPoint,
         accessibilityPoint: CGPoint,
         runningApps: [DockRunningApplicationCandidate],
         screens: DockScreenInventory
-    ) -> DockAppTarget? {
+    ) -> DockHoverHitResult {
         guard let dockItem = nearestDockItem(from: element) else {
-            return nil
-        }
-        let strings = textCandidates(from: dockItem)
-        guard !strings.isEmpty else {
-            return nil
-        }
-
-        guard let match = DockTargetResolver.matchingTarget(for: strings, runningApps: runningApps) else {
-            return nil
+            return .none
         }
         let dockItemFrame = appKitFrame(
             from: frame(from: dockItem),
@@ -322,14 +342,28 @@ public final class DockHitTester {
             queryPoint: appKitPoint,
             itemFrame: dockItemFrame
         ) else {
-            return nil
+            return .none
         }
 
-        return makeTarget(
-            resolution: match,
-            dockElementTitle: strings.first ?? match.app.localizedName ?? "",
-            hitPoint: appKitPoint,
-            dockItemFrame: dockItemFrame
+        guard DockItemRoleValidationPolicy.accepts(
+            role: stringAttribute(kAXRoleAttribute, from: dockItem),
+            subrole: stringAttribute(kAXSubroleAttribute, from: dockItem)
+        ) else {
+            return .nonPreviewableDockItem
+        }
+
+        let strings = textCandidates(from: dockItem)
+        guard let match = DockTargetResolver.matchingTarget(for: strings, runningApps: runningApps) else {
+            return .nonPreviewableDockItem
+        }
+
+        return .previewableTarget(
+            makeTarget(
+                resolution: match,
+                dockElementTitle: strings.first ?? match.app.localizedName ?? "",
+                hitPoint: appKitPoint,
+                dockItemFrame: dockItemFrame
+            )
         )
     }
 
@@ -429,9 +463,8 @@ public final class DockHitTester {
             guard let current = candidate else {
                 return nil
             }
-            if DockItemRoleValidationPolicy.accepts(
-                role: stringAttribute(kAXRoleAttribute, from: current),
-                subrole: stringAttribute(kAXSubroleAttribute, from: current)
+            if DockItemRoleValidationPolicy.isDockItem(
+                role: stringAttribute(kAXRoleAttribute, from: current)
             ) {
                 return current
             }
@@ -576,8 +609,12 @@ enum DockItemHitValidationPolicy {
 }
 
 enum DockItemRoleValidationPolicy {
+    static func isDockItem(role: String?) -> Bool {
+        role == "AXDockItem"
+    }
+
     static func accepts(role: String?, subrole: String?) -> Bool {
-        role == "AXDockItem" && subrole == "AXApplicationDockItem"
+        isDockItem(role: role) && subrole == "AXApplicationDockItem"
     }
 }
 

@@ -9,12 +9,93 @@ final class AppHotkeyBindingTests: XCTestCase {
         XCTAssertTrue(ShortcutRecorderView().acceptsFirstMouse(for: nil))
     }
 
+    @MainActor
+    func testShortcutRecorderCancelsOutsideClickWithoutChangingExistingShortcut() throws {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 180),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let recorder = ShortcutRecorderView(frame: NSRect(x: 20, y: 20, width: 180, height: 32))
+        recorder.translatesAutoresizingMaskIntoConstraints = true
+        window.contentView?.addSubview(recorder)
+        let original = RecordedShortcut(
+            keyCode: kVK_ANSI_N,
+            modifierFlags: flags([.command, .option])
+        )
+        recorder.recordedShortcut = original
+        var receivedChanges: [RecordedShortcut?] = []
+        recorder.onChange = { receivedChanges.append($0) }
+
+        recorder.mouseDown(with: try pointerEvent(
+            at: NSPoint(x: 40, y: 30),
+            in: window
+        ))
+        XCTAssertTrue(recorder.isRecording)
+
+        recorder.handlePointerDownDuringRecording(try pointerEvent(
+            at: NSPoint(x: 260, y: 120),
+            in: window
+        ))
+
+        XCTAssertFalse(recorder.isRecording)
+        XCTAssertEqual(recorder.recordedShortcut, original)
+        XCTAssertTrue(receivedChanges.isEmpty)
+    }
+
+    @MainActor
+    func testShortcutRecorderKeepsEmptyValueWhenOutsideClickCancels() throws {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 180),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        let recorder = ShortcutRecorderView(frame: NSRect(x: 20, y: 20, width: 180, height: 32))
+        recorder.translatesAutoresizingMaskIntoConstraints = true
+        window.contentView?.addSubview(recorder)
+
+        recorder.mouseDown(with: try pointerEvent(
+            at: NSPoint(x: 40, y: 30),
+            in: window
+        ))
+        recorder.handlePointerDownDuringRecording(try pointerEvent(
+            at: NSPoint(x: 40, y: 30),
+            in: window
+        ))
+        XCTAssertTrue(recorder.isRecording)
+
+        recorder.handlePointerDownDuringRecording(try pointerEvent(
+            at: NSPoint(x: 260, y: 120),
+            in: window
+        ))
+
+        XCTAssertFalse(recorder.isRecording)
+        XCTAssertNil(recorder.recordedShortcut)
+    }
+
     func testRecordedShortcutDecodesExistingStoredShape() throws {
         let data = Data(#"{"keyCode":45,"modifierFlags":1048576}"#.utf8)
         let shortcut = try JSONDecoder().decode(RecordedShortcut.self, from: data)
 
         XCTAssertEqual(shortcut.keyCode, 45)
         XCTAssertEqual(shortcut.modifierFlags, 1_048_576)
+    }
+
+    @MainActor
+    private func pointerEvent(at point: NSPoint, in window: NSWindow) throws -> NSEvent {
+        try XCTUnwrap(NSEvent.mouseEvent(
+            with: .leftMouseDown,
+            location: point,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 1,
+            clickCount: 1,
+            pressure: 1
+        ))
     }
 
     func testAppHotkeyBindingDecodesExistingAssignmentShape() throws {
@@ -449,6 +530,19 @@ final class AppHotkeyBindingTests: XCTestCase {
                 unminimizedNormalWindowCount: 1
             ),
             .hideApplication
+        )
+    }
+
+    func testHotkeyBringsForwardTopmostAppWhenHideOnRepeatedTriggerDisabled() {
+        XCTAssertEqual(
+            AppHotkeyDecisionResolver.decision(
+                isRunning: true,
+                isTopmost: true,
+                isHidden: false,
+                unminimizedNormalWindowCount: 1,
+                hideOnRepeatedTrigger: false
+            ),
+            .bringApplicationToFront
         )
     }
 

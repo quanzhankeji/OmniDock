@@ -101,14 +101,17 @@ enum FinderMenuCatalog {
             guard context.currentDirectory != nil else {
                 return []
             }
-            var entries: [FinderMenuEntry] = [.action(.copyCurrentDirectoryPath)]
+            var entries: [FinderMenuEntry] = []
+            if preferences.showsCopyPathCommand {
+                entries.append(.action(.copyCurrentDirectoryPath))
+            }
             let enabledPresets = preferences.documentPresets.filter(\.isEnabled)
             if !enabledPresets.isEmpty {
                 entries.append(.documentSubmenu(
                     enabledPresets.map(FinderMenuAction.createDocument)
                 ))
             }
-            entries.append(contentsOf: hiddenFileEntries)
+            entries.append(contentsOf: hiddenFileEntries(for: preferences))
             return entries
         case .selection:
             guard !context.selectedURLs.isEmpty else {
@@ -127,21 +130,32 @@ enum FinderMenuCatalog {
                 }
                 .map(FinderMenuAction.openSelection)
 
-            var entries: [FinderMenuEntry] = [.action(.copySelectedPaths)]
+            var entries: [FinderMenuEntry] = []
+            if preferences.showsCopyPathCommand {
+                entries.append(.action(.copySelectedPaths))
+            }
             if preferences.groupsLaunchShortcuts, !applicationActions.isEmpty {
                 entries.append(.applicationSubmenu(applicationActions))
             } else {
                 entries.append(contentsOf: applicationActions.map(FinderMenuEntry.action))
             }
-            entries.append(contentsOf: hiddenFileEntries)
+            entries.append(contentsOf: hiddenFileEntries(for: preferences))
             return entries
         }
     }
 
-    private static let hiddenFileEntries: [FinderMenuEntry] = [
-        .action(.showHiddenFiles),
-        .action(.hideHiddenFiles)
-    ]
+    private static func hiddenFileEntries(
+        for preferences: FinderMenuPreferences
+    ) -> [FinderMenuEntry] {
+        var entries: [FinderMenuEntry] = []
+        if preferences.showsShowHiddenFilesCommand {
+            entries.append(.action(.showHiddenFiles))
+        }
+        if preferences.showsHideHiddenFilesCommand {
+            entries.append(.action(.hideHiddenFiles))
+        }
+        return entries
+    }
 }
 
 enum FinderMenuLabels {

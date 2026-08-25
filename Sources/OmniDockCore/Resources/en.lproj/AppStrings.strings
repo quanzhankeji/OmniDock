@@ -97,7 +97,7 @@
 "menuBarShelfDividerTooltip" = "Command-drag menu bar icons across this divider";
 
 "finderExtensionEnableTitle" = "Enable";
-"finderExtensionEnableDetail" = "Show New File and Copy Path in Finder contextual menus.";
+"finderExtensionEnableDetail" = "Extend Finder contextual menus with additional commands. This feature is unavailable in iCloud-synced folders.";
 "finderExtensionSetupRequired" = "Turn on OmniDock in macOS Finder Extensions to add these menu items.";
 "finderExtensionOpenSettings" = "Open Finder Extensions";
 "finderExtensionCreateFailedTitle" = "Could Not Create File";
@@ -120,6 +120,14 @@
 "finderQuickOpenFailedTitle" = "Could Not Open Item";
 "finderQuickOpenFailedDetail" = "OmniDock could not open the selected item with “%@”. %@";
 "finderQuickOpenApplicationMissing" = "The application is no longer available.";
+"finderQuickCommandsTitle" = "Quick Commands";
+"finderQuickCommandsDetail" = "Choose which commands appear in Finder contextual menus.";
+"finderQuickCommandCopyPathTitle" = "Copy Path";
+"finderQuickCommandCopyPathDetail" = "Show the Copy Path command in contextual menus.";
+"finderQuickCommandShowHiddenTitle" = "Show All Files";
+"finderQuickCommandShowHiddenDetail" = "Show the Show All Files command in contextual menus.";
+"finderQuickCommandHideHiddenTitle" = "Hide Hidden Files";
+"finderQuickCommandHideHiddenDetail" = "Show the Hide Hidden Files command in contextual menus.";
 "finderDocumentTypesTitle" = "New File Types";
 "finderDocumentTypesDetail" = "Choose which blank document types appear in Finder.";
 "finderDocumentTypeAdd" = "Add File Type";
@@ -163,6 +171,8 @@
 
 "hotkeysEnableTitle" = "Enable Hotkeys";
 "hotkeysEnableDetail" = "Use global hotkeys to quickly hide or show apps.";
+"hotkeyHideOnRepeatedTriggerTitle" = "Hide on Repeated Trigger";
+"hotkeyHideOnRepeatedTriggerDetail" = "When an app is already in front, pressing its hotkey again hides its windows.";
 "hotkeysChooseApp" = "Choose App";
 "hotkeysBoundCount" = "Bound apps: %d";
 "hotkeysEmpty" = "No apps selected yet.";
@@ -186,8 +196,8 @@
 "clipboardEnableTitle" = "Enable Clipboard History";
 "clipboardEnableDetail" = "Keep a searchable history of copied text, images, links, and files on this Mac.";
 "clipboardShortcutTitle" = "Keyboard Shortcut";
-"clipboardShortcutDetail" = "Press ⌘⇧C to open or close Clipboard History.";
-"clipboardShortcutConflict" = "Command-Shift-C is already used by macOS, another app, or an OmniDock app hotkey.";
+"clipboardShortcutDetail" = "Press the shortcut below to open or close Clipboard History.";
+"clipboardShortcutConflict" = "This shortcut is already used by macOS, another app, or an OmniDock app hotkey.";
 "clipboardLimitTitle" = "History Limit";
 "clipboardLimitDetail" = "Keep between 1 and 999 recent clipboard entries.";
 "clipboardPrivacyNote" = "Clipboard history stays on this Mac. Temporary, confidential, and automatically generated pasteboard content is not saved.";
@@ -210,11 +220,15 @@
 "clipboardPreviewFiles" = "Files";
 
 "windowPlacementEnableTitle" = "Enable Window Layout";
-"windowPlacementEnableDetail" = "Resize and position the frontmost window with shortcuts, the green-button menu, or drag zones.";
-"windowPlacementGreenButtonTitle" = "Green Button Layout Menu";
-"windowPlacementGreenButtonDetail" = "Hover over a window's green button to choose a layout without replacing the button's own action.";
+"windowPlacementEnableDetail" = "Resize and position the frontmost window with shortcuts, the green button, or drag zones.";
+"windowPlacementGreenButtonTitle" = "Green Button Maximize";
+"windowPlacementGreenButtonDetail" = "Click a window's green button to toggle maximize and restore instead of entering Full Screen.";
 "windowPlacementDragTitle" = "Drag to Layout";
 "windowPlacementDragDetail" = "Release a moved window inside a configured screen zone to apply its layout.";
+"windowPlacementEscapeCancelTitle" = "Cancel Drag Layout with Esc";
+"windowPlacementEscapeCancelDetail" = "Press Esc while moving a window to hide the activation zones and skip layout for that drag.";
+"windowPlacementShowSizeOnDragTitle" = "Show Window Size";
+"windowPlacementShowSizeOnDragDetail" = "Show the current size while resizing from a window edge or corner; hide it during rapid pointer movement.";
 "windowPlacementCommands" = "Layouts";
 "windowPlacementAdd" = "Add Layout";
 "windowPlacementRemove" = "Remove";

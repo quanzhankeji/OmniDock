@@ -3,7 +3,7 @@ import Carbon.HIToolbox
 import CoreGraphics
 
 enum ClipboardHistoryShortcut {
-    static let recorded = RecordedShortcut(
+    static let defaultShortcut = RecordedShortcut(
         keyCode: kVK_ANSI_C,
         modifierFlags: NSEvent.ModifierFlags([.command, .shift]).rawValue
     )
@@ -27,7 +27,7 @@ final class ClipboardHistoryRegistrationStatus {
 @MainActor
 protocol ClipboardHistoryHotkeyRegistering: AnyObject {
     var onTrigger: (() -> Void)? { get set }
-    func register() -> OSStatus?
+    func register(_ shortcut: RecordedShortcut) -> OSStatus?
     func unregister()
     func stop()
 }
@@ -55,7 +55,7 @@ final class ClipboardHistoryService {
     private var selfWrittenChangeCount: Int?
     private var captureGeneration = 0
     private var isStarted = false
-    private var isHotkeyRegistered = false
+    private var registeredShortcut: RecordedShortcut?
     private var records: [ClipboardHistoryRecord]
     private var recordsRevision: UInt64 = 0
 
@@ -121,7 +121,7 @@ final class ClipboardHistoryService {
         NotificationCenter.default.removeObserver(self)
         stopMonitoring()
         hotkeyRegistry.stop()
-        isHotkeyRegistered = false
+        registeredShortcut = nil
         panelController.hide()
     }
 
@@ -180,19 +180,20 @@ final class ClipboardHistoryService {
             return
         }
 
-        guard !settings.appHotkeyBindings.contains(where: {
-            $0.isEnabled && $0.recordedShortcut == ClipboardHistoryShortcut.recorded
-        }),
-        !settings.windowPlacementConfiguration.commands.contains(where: {
-            $0.isEnabled && $0.shortcut == ClipboardHistoryShortcut.recorded
-        }) else {
+        let shortcut = settings.clipboardHistoryShortcut
+        // Defensive guard: the recorder already enforces this, but a corrupted
+        // stored value must never leave us with a modifier-free global hotkey.
+        if let reason = ShortcutRecorderValidation.minimumModifierRejectionReason(
+            for: shortcut
+        ) {
             settings.clipboardHistoryEnabled = false
-            registrationStatus.setWarning(AppStrings.text(.clipboardShortcutConflict))
+            registrationStatus.setWarning(reason)
             return
         }
 
-        if !isHotkeyRegistered {
-            if let status = hotkeyRegistry.register() {
+        if registeredShortcut != shortcut {
+            unregisterHotkeyIfNeeded()
+            if let status = hotkeyRegistry.register(shortcut) {
                 let warning = status == eventHotKeyExistsErr
                     ? AppStrings.text(.clipboardShortcutConflict)
                     : AppStrings.text(.hotkeyRegistrationFailed)
@@ -200,7 +201,7 @@ final class ClipboardHistoryService {
                 registrationStatus.setWarning(warning)
                 return
             }
-            isHotkeyRegistered = true
+            registeredShortcut = shortcut
         }
 
         registrationStatus.setWarning(nil)
@@ -232,11 +233,11 @@ final class ClipboardHistoryService {
     }
 
     private func unregisterHotkeyIfNeeded() {
-        guard isHotkeyRegistered else {
+        guard registeredShortcut != nil else {
             return
         }
         hotkeyRegistry.unregister()
-        isHotkeyRegistered = false
+        registeredShortcut = nil
     }
 
     private func pollPasteboard() {
@@ -387,7 +388,7 @@ private final class ClipboardHistoryHotkeyRegistry: ClipboardHistoryHotkeyRegist
     private var eventHandlerReference: EventHandlerRef?
     private var hotkeyReference: EventHotKeyRef?
 
-    func register() -> OSStatus? {
+    func register(_ shortcut: RecordedShortcut) -> OSStatus? {
         if hotkeyReference != nil {
             return nil
         }
@@ -398,10 +399,8 @@ private final class ClipboardHistoryHotkeyRegistry: ClipboardHistoryHotkeyRegist
         let hotkeyID = EventHotKeyID(signature: clipboardHistoryHotkeySignature, id: 1)
         var reference: EventHotKeyRef?
         let status = RegisterEventHotKey(
-            UInt32(ClipboardHistoryShortcut.recorded.keyCode),
-            CarbonHotkeyRegistry.carbonModifierFlags(
-                for: ClipboardHistoryShortcut.recorded.modifierFlags
-            ),
+            UInt32(shortcut.keyCode),
+            CarbonHotkeyRegistry.carbonModifierFlags(for: shortcut.modifierFlags),
             hotkeyID,
             GetApplicationEventTarget(),
             OptionBits(kEventHotKeyExclusive),

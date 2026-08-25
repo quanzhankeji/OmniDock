@@ -83,7 +83,7 @@ The Finder extension is off by default. Open `OD` > `Settings` > `Finder Extensi
 
 When enabled, right-clicking an empty area in a Finder Sync-monitored local folder offers **Copy Path**, a configurable **New File** submenu, and commands for showing or hiding hidden files. Text and Markdown are included by default, and additional file types can be added in OmniDock settings. Right-clicking selected items offers **Copy Path**, hidden-file visibility commands, and optional shortcuts for opening the selection with chosen applications. Copied selections place every path on a separate line, and new files use an available `NewFile.<extension>` name without overwriting existing files.
 
-OmniDock registers the local Desktop, Documents, Downloads, their iCloud Drive counterparts when present, and folders that you explicitly authorize. Finder ultimately decides whether a Finder Sync menu is available in a provider-managed location, so some third-party cloud folders may not expose these commands.
+OmniDock registers the local Desktop, Documents, Downloads, and other local folders that you explicitly authorize. Finder right-click extensions are currently unavailable in iCloud-synced folders, and some third-party cloud locations may not expose these commands either.
 
 ## Clipboard History
 

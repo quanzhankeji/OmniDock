@@ -10,7 +10,7 @@ enum HotkeyGuidancePresentation {
     }
 
     static func headerHeight(hotkeysEnabled: Bool) -> CGFloat {
-        hotkeysEnabled ? 86 : 50
+        hotkeysEnabled ? 150 : 50
     }
 }
 

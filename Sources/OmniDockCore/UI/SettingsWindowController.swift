@@ -103,10 +103,13 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     private var dockClickSwitch: NSSwitch?
     private var minimizeDockClickSwitch: NSSwitch?
     private var hotkeysEnabledSwitch: NSSwitch?
+    private var hotkeyHideOnRepeatedTriggerSwitch: NSSwitch?
+    private var hotkeyHideOnRepeatedTriggerRow: NSView?
     private var clipboardHistorySwitch: NSSwitch?
     private var clipboardHistoryLimitField: NSTextField?
     private var clipboardHistoryLimitStepper: NSStepper?
     private var clipboardHistoryWarningField: NSTextField?
+    private var clipboardShortcutRecorder: ShortcutRecorderView?
     private var clipboardHistorySearchField: NSSearchField?
     private var clipboardHistoryListController: ClipboardHistoryListController?
     private var clipboardHistoryDetailPanel: ClipboardInspectorPanel?
@@ -304,6 +307,8 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         minimizeDockClickSwitch?.state = settings.minimizeWindowsOnDockClickInsteadOfHide ? .on : .off
         minimizeDockClickSwitch?.isEnabled = settings.toggleAppVisibilityOnDockClick
         hotkeysEnabledSwitch?.state = settings.hotkeysEnabled ? .on : .off
+        hotkeyHideOnRepeatedTriggerSwitch?.state = settings.hotkeyHideOnRepeatedTrigger ? .on : .off
+        hotkeyHideOnRepeatedTriggerSwitch?.isEnabled = settings.hotkeysEnabled
         clipboardHistorySwitch?.state = settings.clipboardHistoryEnabled ? .on : .off
         refreshClipboardHistoryLimitControls()
         refreshClipboardHistoryStatus()
@@ -641,7 +646,12 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         } else {
             settings.hotkeysEnabled = false
         }
+        hotkeyHideOnRepeatedTriggerSwitch?.isEnabled = settings.hotkeysEnabled
         refreshHotkeyGuidanceVisibility()
+    }
+
+    @objc private func toggleHotkeyHideOnRepeatedTrigger(_ sender: NSSwitch) {
+        settings.hotkeyHideOnRepeatedTrigger = sender.state == .on
     }
 
     private func canEnable(_ feature: PermissionFeature, sender: NSSwitch) -> Bool {
@@ -818,11 +828,14 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         dockClickSwitch = nil
         minimizeDockClickSwitch = nil
         hotkeysEnabledSwitch = nil
+        hotkeyHideOnRepeatedTriggerSwitch = nil
+        hotkeyHideOnRepeatedTriggerRow = nil
         finderExtensionSettingsView = nil
         clipboardHistorySwitch = nil
         clipboardHistoryLimitField = nil
         clipboardHistoryLimitStepper = nil
         clipboardHistoryWarningField = nil
+        clipboardShortcutRecorder = nil
         clipboardHistorySearchField = nil
         clipboardHistoryListController = nil
         clipboardHistoryAppliedRevision = nil
@@ -1110,6 +1123,19 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         )
         enabledRow.translatesAutoresizingMaskIntoConstraints = false
 
+        let hideOnRepeatedTriggerSwitch = NSSwitch()
+        hideOnRepeatedTriggerSwitch.target = self
+        hideOnRepeatedTriggerSwitch.action = #selector(toggleHotkeyHideOnRepeatedTrigger(_:))
+        self.hotkeyHideOnRepeatedTriggerSwitch = hideOnRepeatedTriggerSwitch
+
+        let hideOnRepeatedTriggerRow = makeIndentedSettingRow(
+            title: AppStrings.text(.hotkeyHideOnRepeatedTriggerTitle),
+            detail: AppStrings.text(.hotkeyHideOnRepeatedTriggerDetail),
+            control: hideOnRepeatedTriggerSwitch
+        )
+        hideOnRepeatedTriggerRow.translatesAutoresizingMaskIntoConstraints = false
+        self.hotkeyHideOnRepeatedTriggerRow = hideOnRepeatedTriggerRow
+
         let guidanceField = NSTextField(
             wrappingLabelWithString: HotkeyGuidancePresentation.message
         )
@@ -1128,6 +1154,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         addButton.bezelStyle = .rounded
         addButton.translatesAutoresizingMaskIntoConstraints = false
         toolbar.addSubview(enabledRow)
+        toolbar.addSubview(hideOnRepeatedTriggerRow)
         toolbar.addSubview(guidanceField)
         toolbar.addSubview(addButton)
         stack.addArrangedSubview(toolbar)
@@ -1188,9 +1215,12 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             enabledRow.leadingAnchor.constraint(equalTo: toolbar.leadingAnchor),
             enabledRow.topAnchor.constraint(equalTo: toolbar.topAnchor),
             enabledRow.trailingAnchor.constraint(lessThanOrEqualTo: addButton.leadingAnchor, constant: -16),
+            hideOnRepeatedTriggerRow.leadingAnchor.constraint(equalTo: toolbar.leadingAnchor),
+            hideOnRepeatedTriggerRow.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor),
+            hideOnRepeatedTriggerRow.topAnchor.constraint(equalTo: enabledRow.bottomAnchor, constant: 6),
             guidanceField.leadingAnchor.constraint(equalTo: enabledRow.leadingAnchor),
             guidanceField.trailingAnchor.constraint(lessThanOrEqualTo: addButton.leadingAnchor, constant: -16),
-            guidanceField.topAnchor.constraint(equalTo: enabledRow.bottomAnchor, constant: 4),
+            guidanceField.topAnchor.constraint(equalTo: hideOnRepeatedTriggerRow.bottomAnchor, constant: 4),
             addButton.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor),
             addButton.centerYAnchor.constraint(equalTo: enabledRow.centerYAnchor),
 
@@ -1229,15 +1259,19 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             control: enabledSwitch
         ))
 
-        let shortcutLabel = NSTextField(labelWithString: "⌘⇧C")
-        shortcutLabel.font = .monospacedSystemFont(ofSize: 15, weight: .semibold)
-        shortcutLabel.alignment = .center
-        shortcutLabel.translatesAutoresizingMaskIntoConstraints = false
-        shortcutLabel.widthAnchor.constraint(equalToConstant: 72).isActive = true
+        let recorder = ShortcutRecorderView(frame: .zero)
+        recorder.translatesAutoresizingMaskIntoConstraints = false
+        recorder.widthAnchor.constraint(equalToConstant: 160).isActive = true
+        recorder.heightAnchor.constraint(equalToConstant: 28).isActive = true
+        recorder.recordedShortcut = settings.clipboardHistoryShortcut
+        recorder.onChange = { [weak self] shortcut in
+            self?.applyClipboardHistoryShortcut(shortcut, recorder: recorder)
+        }
+        clipboardShortcutRecorder = recorder
         settingsStack.addArrangedSubview(makeSettingRow(
             title: AppStrings.text(.clipboardShortcutTitle),
             detail: AppStrings.text(.clipboardShortcutDetail),
-            control: shortcutLabel
+            control: recorder
         ))
 
         let warning = NSTextField(wrappingLabelWithString: "")
@@ -1892,7 +1926,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             existingBindings: settings.appHotkeyBindings,
             excluding: binding.id,
             reservedShortcuts: settings.clipboardHistoryEnabled
-                ? [ClipboardHistoryShortcut.recorded]
+                ? [settings.clipboardHistoryShortcut]
                 : []
         ) {
             updated.updateRecordedShortcut(nil)
@@ -1903,6 +1937,32 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             hotkeyRegistrationStatus.clearWarning(for: binding.id)
         }
         settings.upsertAppHotkeyBinding(updated)
+    }
+
+    private func applyClipboardHistoryShortcut(
+        _ shortcut: RecordedShortcut?,
+        recorder: ShortcutRecorderView
+    ) {
+        guard let shortcut else {
+            // Deleting the recorded shortcut reverts to the default.
+            settings.clipboardHistoryShortcut = ClipboardHistoryShortcut.defaultShortcut
+            recorder.recordedShortcut = settings.clipboardHistoryShortcut
+            clipboardHistoryRegistrationStatus.setWarning(nil)
+            return
+        }
+
+        if let reason = ShortcutRecorderValidation.clipboardShortcutRejectionReason(
+            for: shortcut,
+            settings: settings
+        ) {
+            clipboardHistoryRegistrationStatus.setWarning(reason)
+            recorder.recordedShortcut = settings.clipboardHistoryShortcut
+            return
+        }
+
+        clipboardHistoryRegistrationStatus.setWarning(nil)
+        settings.clipboardHistoryShortcut = shortcut
+        recorder.recordedShortcut = shortcut
     }
 
     private func warning(for binding: AppHotkeyBinding) -> String? {
@@ -1917,7 +1977,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
                 return ShortcutRecorderValidation.rejectionReason(
                     for: shortcut,
                     reservedShortcuts: settings.clipboardHistoryEnabled
-                        ? [ClipboardHistoryShortcut.recorded]
+                        ? [settings.clipboardHistoryShortcut]
                         : []
                 )
             }
@@ -1926,6 +1986,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     private func refreshHotkeyGuidanceVisibility() {
         let isVisible = HotkeyGuidancePresentation.isVisible(hotkeysEnabled: settings.hotkeysEnabled)
         hotkeyGuidanceField?.isHidden = !isVisible
+        hotkeyHideOnRepeatedTriggerRow?.isHidden = !isVisible
         hotkeyHeaderHeightConstraint?.constant = HotkeyGuidancePresentation.headerHeight(
             hotkeysEnabled: settings.hotkeysEnabled
         )

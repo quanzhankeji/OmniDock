@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import CoreGraphics
 
 enum WindowPlacementGreenButtonPolicy {
@@ -11,6 +12,8 @@ enum WindowPlacementGreenButtonPolicy {
         true
     }
 
+    // The green-button snapshot is reused for click interception: a press is
+    // only consumed when the pointer is inside a fresh snapshot of the button.
     static func shouldSuppressNativeHover(
         point: CGPoint,
         buttonFrame: CGRect?,
@@ -19,30 +22,6 @@ enum WindowPlacementGreenButtonPolicy {
     ) -> Bool {
         (expiresAt ?? -.infinity) >= now
             && buttonFrame?.insetBy(dx: -3, dy: -3).contains(point) == true
-    }
-}
-
-struct WindowPlacementGreenButtonHoverTracker {
-    private var targetIdentifier: WindowPlacementRuntimeIdentifier?
-    private var buttonFrame: CGRect?
-
-    mutating func entered(
-        targetIdentifier: WindowPlacementRuntimeIdentifier,
-        buttonFrame: CGRect
-    ) -> Bool {
-        guard self.targetIdentifier != targetIdentifier
-                || self.buttonFrame != buttonFrame
-        else {
-            return false
-        }
-        self.targetIdentifier = targetIdentifier
-        self.buttonFrame = buttonFrame
-        return true
-    }
-
-    mutating func leftButton() {
-        targetIdentifier = nil
-        buttonFrame = nil
     }
 }
 
@@ -117,6 +96,62 @@ enum WindowPlacementDragPolicy {
     }
 }
 
+enum WindowPlacementEscapeCancellationPolicy {
+    static func isAvailable(
+        isEnabled: Bool,
+        interaction: WindowPlacementDragPolicy.Interaction,
+        hasPresentedDragRegions: Bool
+    ) -> Bool {
+        isEnabled
+            && interaction == .moving
+            && hasPresentedDragRegions
+    }
+}
+
+enum WindowPlacementSizeHUDPolicy {
+    static let refreshInterval: TimeInterval = 1.0 / 30.0
+    static let rapidMotionRevealDelay: TimeInterval = 0.14
+    private static let resizeEdgeTolerance: CGFloat = 14
+    private static let rapidPointerSpeed: CGFloat = 900
+
+    static func beginsNearResizeEdge(
+        at point: CGPoint,
+        windowFrame: CGRect
+    ) -> Bool {
+        let outerFrame = windowFrame.insetBy(
+            dx: -resizeEdgeTolerance,
+            dy: -resizeEdgeTolerance
+        )
+        let innerFrame = windowFrame.insetBy(
+            dx: resizeEdgeTolerance,
+            dy: resizeEdgeTolerance
+        )
+        return outerFrame.contains(point) && !innerFrame.contains(point)
+    }
+
+    static func shouldTrack(
+        isEnabled: Bool,
+        interaction: WindowPlacementDragPolicy.Interaction,
+        beganNearResizeEdge: Bool
+    ) -> Bool {
+        isEnabled
+            && interaction == .resizing
+            && beganNearResizeEdge
+    }
+
+    static func isRapidPointerMotion(
+        from start: CGPoint,
+        to end: CGPoint,
+        elapsed: TimeInterval
+    ) -> Bool {
+        guard elapsed > 0, elapsed <= 0.25 else {
+            return false
+        }
+        return hypot(end.x - start.x, end.y - start.y) / elapsed
+            >= rapidPointerSpeed
+    }
+}
+
 private final class WindowPlacementPointerState: @unchecked Sendable {
     struct GreenButtonSnapshot {
         let target: WindowPlacementTarget
@@ -126,6 +161,9 @@ private final class WindowPlacementPointerState: @unchecked Sendable {
 
     private let lock = NSLock()
     private var greenButton: GreenButtonSnapshot?
+    private var greenButtonPress: GreenButtonSnapshot?
+    private var dragCancellationAvailable = false
+    private var dragCancellationPending = false
     private var lastPointerDispatchAt: TimeInterval = 0
 
     func updateGreenButton(_ snapshot: GreenButtonSnapshot?) {
@@ -151,6 +189,69 @@ private final class WindowPlacementPointerState: @unchecked Sendable {
             return nil
         }
         return greenButton
+    }
+
+    func beginGreenButtonPress(_ snapshot: GreenButtonSnapshot) {
+        lock.lock()
+        greenButtonPress = snapshot
+        lock.unlock()
+    }
+
+    func hasGreenButtonPress() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return greenButtonPress != nil
+    }
+
+    func cancelGreenButtonPress() {
+        lock.lock()
+        greenButtonPress = nil
+        lock.unlock()
+    }
+
+    func setDragCancellationAvailable(_ isAvailable: Bool) {
+        lock.lock()
+        if !dragCancellationPending {
+            dragCancellationAvailable = isAvailable
+        }
+        lock.unlock()
+    }
+
+    func requestDragCancellation() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard dragCancellationAvailable, !dragCancellationPending else {
+            return false
+        }
+        dragCancellationAvailable = false
+        dragCancellationPending = true
+        return true
+    }
+
+    func isDragCancellationPending() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return dragCancellationPending
+    }
+
+    func resetDragCancellation() {
+        lock.lock()
+        dragCancellationAvailable = false
+        dragCancellationPending = false
+        lock.unlock()
+    }
+
+    /// Ends a green-button press. Returns the pressed snapshot when the release
+    /// happened inside the button frame (a real click); otherwise returns nil
+    /// (drag-away cancels the click) after clearing the press.
+    func finishGreenButtonPress(at point: CGPoint) -> GreenButtonSnapshot? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let press = greenButtonPress else {
+            return nil
+        }
+        greenButtonPress = nil
+        return press.frame.insetBy(dx: -3, dy: -3).contains(point) ? press : nil
     }
 
     func shouldDispatchPointerMove(
@@ -269,7 +370,8 @@ private final class WindowPlacementEventTapThread: @unchecked Sendable {
             CGEventType.mouseMoved,
             .leftMouseDown,
             .leftMouseDragged,
-            .leftMouseUp
+            .leftMouseUp,
+            .keyDown
         ].reduce(CGEventMask(0)) {
             $0 | (CGEventMask(1) << CGEventMask($1.rawValue))
         }
@@ -364,8 +466,7 @@ private final class WindowPlacementEventTapThread: @unchecked Sendable {
 
 @MainActor
 final class WindowPlacementPointerMonitor {
-    var onGreenButtonHover: ((WindowPlacementTarget, CGRect) -> Void)?
-    var onPointerMoved: ((CGPoint) -> Void)?
+    var onGreenButtonClicked: ((WindowPlacementTarget) -> Void)?
     var onDragBegan: ((
         WindowPlacementTarget,
         [WindowPlacementScreen]
@@ -381,15 +482,22 @@ final class WindowPlacementPointerMonitor {
         WindowPlacementCommand,
         WindowPlacementScreen
     ) -> Void)?
+    var onDragSizeChanged: ((CGSize, CGPoint) -> Void)?
+    var onDragSizeHidden: (() -> Void)?
 
     private struct DragSession {
+        let id = UUID()
         let target: WindowPlacementTarget
         let originalFrame: CGRect
+        let beganNearResizeEdge: Bool
         var interaction: WindowPlacementDragPolicy.Interaction = .pending
         var hasPresentedDragRegions = false
         var activeCommand: WindowPlacementCommand?
         var activeScreen: WindowPlacementScreen?
         var lastInspectionAt: TimeInterval = 0
+        var lastPointerPoint: CGPoint
+        var lastPointerTimestamp: TimeInterval
+        var isSizeHUDVisible = false
     }
 
     private let pointerState = WindowPlacementPointerState()
@@ -408,11 +516,13 @@ final class WindowPlacementPointerMonitor {
     private var greenButtonRefreshTimer: Timer?
     private var lastGreenButtonRefreshAt: TimeInterval = 0
     private var isGreenButtonQueryInFlight = false
-    private var greenButtonHoverTracker =
-        WindowPlacementGreenButtonHoverTracker()
+    private var sizeHUDRevealWorkItem: DispatchWorkItem?
 
     func start(configuration: WindowPlacementConfiguration) {
         self.configuration = configuration
+        if !configuration.allowsEscapeToCancelDrag {
+            pointerState.setDragCancellationAvailable(false)
+        }
         guard !isEventTapRunning else {
             updateGreenButtonRefresh()
             return
@@ -426,9 +536,11 @@ final class WindowPlacementPointerMonitor {
 
     func stop() {
         stopGreenButtonRefresh()
+        cancelSizeHUDReveal()
         dragSession = nil
         lastGreenButtonRefreshAt = 0
-        greenButtonHoverTracker.leftButton()
+        pointerState.cancelGreenButtonPress()
+        pointerState.resetDragCancellation()
         pointerState.updateGreenButton(nil)
         eventTapThread.stop()
         isEventTapRunning = false
@@ -450,33 +562,53 @@ final class WindowPlacementPointerMonitor {
             ) else {
                 return Unmanaged.passUnretained(event)
             }
-            if let snapshot = pointerState.greenButton(
-                at: point,
-                now: timestamp
-            ) {
-                Task { @MainActor [weak self] in
-                    self?.handleProtectedGreenButtonHover(
-                        snapshot,
-                        at: point
-                    )
-                }
-                return nil
-            }
             Task { @MainActor [weak self] in
                 self?.handlePointerMoved(at: point)
             }
         case .leftMouseDown:
+            // Replace the native green-button action with our own toggle:
+            // consume the press so the system never sees the click.
+            if let snapshot = pointerState.greenButton(
+                at: point,
+                now: timestamp
+            ) {
+                pointerState.beginGreenButtonPress(snapshot)
+                return nil
+            }
             Task { @MainActor [weak self] in
-                self?.beginDragCandidate(at: point)
+                self?.beginDragCandidate(at: point, timestamp: timestamp)
             }
         case .leftMouseDragged:
+            if pointerState.hasGreenButtonPress() {
+                return nil
+            }
+            if pointerState.isDragCancellationPending() {
+                return Unmanaged.passUnretained(event)
+            }
             Task { @MainActor [weak self] in
                 self?.updateDrag(at: point, timestamp: timestamp)
             }
         case .leftMouseUp:
+            if let snapshot = pointerState.finishGreenButtonPress(at: point) {
+                Task { @MainActor [weak self] in
+                    self?.onGreenButtonClicked?(snapshot.target)
+                }
+                return nil
+            }
             Task { @MainActor [weak self] in
                 self?.finishDrag()
             }
+        case .keyDown:
+            let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+            guard keyCode == Int64(kVK_Escape),
+                  pointerState.requestDragCancellation()
+            else {
+                break
+            }
+            Task { @MainActor [weak self] in
+                self?.cancelDragFromEscape()
+            }
+            return nil
         default:
             break
         }
@@ -484,8 +616,6 @@ final class WindowPlacementPointerMonitor {
     }
 
     private func handlePointerMoved(at point: CGPoint) {
-        greenButtonHoverTracker.leftButton()
-        onPointerMoved?(point)
         let now = ProcessInfo.processInfo.systemUptime
         if configuration.showsGreenButtonPalette,
            now - lastGreenButtonRefreshAt >= 0.15 {
@@ -526,7 +656,6 @@ final class WindowPlacementPointerMonitor {
     ) {
         lastGreenButtonRefreshAt = now
         guard configuration.showsGreenButtonPalette else {
-            greenButtonHoverTracker.leftButton()
             pointerState.updateGreenButton(nil)
             return
         }
@@ -553,7 +682,6 @@ final class WindowPlacementPointerMonitor {
     ) {
         isGreenButtonQueryInFlight = false
         guard configuration.showsGreenButtonPalette, let result else {
-            greenButtonHoverTracker.leftButton()
             pointerState.updateGreenButton(nil)
             return
         }
@@ -564,34 +692,15 @@ final class WindowPlacementPointerMonitor {
                 + WindowPlacementGreenButtonPolicy.snapshotLifetime
         )
         pointerState.updateGreenButton(snapshot)
-
-        let pointer = DisplayCoordinateConverter.eventTapPoint(
-            fromAppKitPoint: NSEvent.mouseLocation
-        )
-        if WindowPlacementGreenButtonPolicy.shouldSuppressNativeHover(
-            point: pointer,
-            buttonFrame: result.buttonFrame,
-            expiresAt: snapshot.expiresAt,
-            now: now
-        ) {
-            handleProtectedGreenButtonHover(snapshot, at: pointer)
-        }
     }
 
-    private func handleProtectedGreenButtonHover(
-        _ snapshot: WindowPlacementPointerState.GreenButtonSnapshot,
-        at point: CGPoint
+    private func beginDragCandidate(
+        at point: CGPoint,
+        timestamp: TimeInterval
     ) {
-        onPointerMoved?(point)
-        if greenButtonHoverTracker.entered(
-            targetIdentifier: snapshot.target.runtimeIdentifier,
-            buttonFrame: snapshot.frame
-        ) {
-            onGreenButtonHover?(snapshot.target, snapshot.frame)
-        }
-    }
-
-    private func beginDragCandidate(at point: CGPoint) {
+        cancelSizeHUDReveal()
+        pointerState.resetDragCancellation()
+        onDragSizeHidden?()
         guard configuration.observesWindowDragging,
               let target = WindowPlacementAccessibility.window(at: point)
         else {
@@ -600,14 +709,47 @@ final class WindowPlacementPointerMonitor {
         }
         dragSession = DragSession(
             target: target,
-            originalFrame: target.frame
+            originalFrame: target.frame,
+            beganNearResizeEdge: WindowPlacementSizeHUDPolicy.beginsNearResizeEdge(
+                at: point,
+                windowFrame: target.frame
+            ),
+            lastPointerPoint: point,
+            lastPointerTimestamp: timestamp
         )
     }
 
     private func updateDrag(at point: CGPoint, timestamp: TimeInterval) {
-        guard var session = dragSession,
-              timestamp - session.lastInspectionAt >= 0.05
-        else {
+        guard var session = dragSession else {
+            return
+        }
+
+        let isRapidPointerMotion = WindowPlacementSizeHUDPolicy.isRapidPointerMotion(
+            from: session.lastPointerPoint,
+            to: point,
+            elapsed: timestamp - session.lastPointerTimestamp
+        )
+        session.lastPointerPoint = point
+        session.lastPointerTimestamp = timestamp
+
+        if WindowPlacementSizeHUDPolicy.shouldTrack(
+            isEnabled: configuration.showsSizeOnDrag,
+            interaction: session.interaction,
+            beganNearResizeEdge: session.beganNearResizeEdge
+        ) {
+            if isRapidPointerMotion {
+                hideSizeHUD(in: &session)
+                dragSession = session
+                scheduleSizeHUDReveal(for: session.id)
+                return
+            }
+        }
+
+        let inspectionInterval = session.interaction == .resizing
+            ? WindowPlacementSizeHUDPolicy.refreshInterval
+            : 0.05
+        guard timestamp - session.lastInspectionAt >= inspectionInterval else {
+            dragSession = session
             return
         }
         session.lastInspectionAt = timestamp
@@ -615,6 +757,8 @@ final class WindowPlacementPointerMonitor {
             of: session.target
         ) else {
             dragSession = nil
+            cancelSizeHUDReveal()
+            pointerState.resetDragCancellation()
             onDragCancelled?()
             return
         }
@@ -624,7 +768,37 @@ final class WindowPlacementPointerMonitor {
             initialFrame: session.originalFrame,
             currentFrame: currentFrame
         )
+
+        if session.interaction == .resizing {
+            pointerState.setDragCancellationAvailable(false)
+            guard WindowPlacementSizeHUDPolicy.shouldTrack(
+                isEnabled: configuration.showsSizeOnDrag,
+                interaction: session.interaction,
+                beganNearResizeEdge: session.beganNearResizeEdge
+            ) else {
+                hideSizeHUD(in: &session)
+                cancelSizeHUDReveal()
+                dragSession = session
+                return
+            }
+
+            if isRapidPointerMotion {
+                hideSizeHUD(in: &session)
+                dragSession = session
+                scheduleSizeHUDReveal(for: session.id)
+            } else {
+                cancelSizeHUDReveal()
+                session.isSizeHUDVisible = true
+                dragSession = session
+                onDragSizeChanged?(currentFrame.size, point)
+            }
+            return
+        }
+
+        hideSizeHUD(in: &session)
+        cancelSizeHUDReveal()
         guard session.interaction == .moving else {
+            pointerState.setDragCancellationAvailable(false)
             dragSession = session
             return
         }
@@ -634,6 +808,13 @@ final class WindowPlacementPointerMonitor {
             session.hasPresentedDragRegions = true
             onDragBegan?(session.target, screens)
         }
+        pointerState.setDragCancellationAvailable(
+            WindowPlacementEscapeCancellationPolicy.isAvailable(
+                isEnabled: configuration.allowsEscapeToCancelDrag,
+                interaction: session.interaction,
+                hasPresentedDragRegions: session.hasPresentedDragRegions
+            )
+        )
         let screen = WindowPlacementScreens.screen(
             containing: point,
             in: screens
@@ -661,6 +842,14 @@ final class WindowPlacementPointerMonitor {
     }
 
     private func finishDrag() {
+        cancelSizeHUDReveal()
+        if pointerState.isDragCancellationPending() {
+            dragSession = nil
+            pointerState.resetDragCancellation()
+            onDragCancelled?()
+            return
+        }
+        pointerState.resetDragCancellation()
         guard let session = dragSession else {
             return
         }
@@ -673,6 +862,71 @@ final class WindowPlacementPointerMonitor {
             return
         }
         onDragCompleted?(session.target, command, screen)
+    }
+
+    private func cancelDragFromEscape() {
+        guard let session = dragSession,
+              WindowPlacementEscapeCancellationPolicy.isAvailable(
+                  isEnabled: configuration.allowsEscapeToCancelDrag,
+                  interaction: session.interaction,
+                  hasPresentedDragRegions: session.hasPresentedDragRegions
+              )
+        else {
+            pointerState.resetDragCancellation()
+            return
+        }
+        dragSession = nil
+        cancelSizeHUDReveal()
+        pointerState.resetDragCancellation()
+        onDragCancelled?()
+    }
+
+    private func hideSizeHUD(in session: inout DragSession) {
+        guard session.isSizeHUDVisible else {
+            return
+        }
+        session.isSizeHUDVisible = false
+        onDragSizeHidden?()
+    }
+
+    private func scheduleSizeHUDReveal(for sessionID: UUID) {
+        sizeHUDRevealWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.revealSizeHUD(for: sessionID)
+            }
+        }
+        sizeHUDRevealWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + WindowPlacementSizeHUDPolicy.rapidMotionRevealDelay,
+            execute: workItem
+        )
+    }
+
+    private func revealSizeHUD(for sessionID: UUID) {
+        sizeHUDRevealWorkItem = nil
+        guard var session = dragSession,
+              session.id == sessionID,
+              WindowPlacementSizeHUDPolicy.shouldTrack(
+                  isEnabled: configuration.showsSizeOnDrag,
+                  interaction: session.interaction,
+                  beganNearResizeEdge: session.beganNearResizeEdge
+              ),
+              let currentFrame = WindowPlacementAccessibility.currentFrame(
+                  of: session.target
+              )
+        else {
+            return
+        }
+        session.lastInspectionAt = ProcessInfo.processInfo.systemUptime
+        session.isSizeHUDVisible = true
+        dragSession = session
+        onDragSizeChanged?(currentFrame.size, session.lastPointerPoint)
+    }
+
+    private func cancelSizeHUDReveal() {
+        sizeHUDRevealWorkItem?.cancel()
+        sizeHUDRevealWorkItem = nil
     }
 
 }

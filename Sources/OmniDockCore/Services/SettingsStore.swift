@@ -100,14 +100,19 @@ public final class SettingsStore {
         case finderLaunchShortcutsGrouped = "finderLaunchShortcutsGrouped"
         case finderLaunchShortcuts = "finderLaunchShortcuts"
         case finderDocumentPresets = "finderDocumentPresets"
+        case finderExtensionCopyPathCommand = "finderExtensionCopyPathCommand"
+        case finderExtensionShowHiddenFilesCommand = "finderExtensionShowHiddenFilesCommand"
+        case finderExtensionHideHiddenFilesCommand = "finderExtensionHideHiddenFilesCommand"
         case liveDockPreviewsEnabled = "liveDockPreviewsEnabled"
         case livePreviewWindowLimit = "livePreviewWindowLimit"
         case toggleAppVisibilityOnDockClick = "toggleAppVisibilityOnDockClick"
         case minimizeWindowsOnDockClickInsteadOfHide = "minimizeWindowsOnDockClickInsteadOfHide"
         case hotkeysEnabled = "hotkeysEnabled"
+        case hotkeyHideOnRepeatedTrigger = "hotkeyHideOnRepeatedTrigger"
         case hotkeyAssignments = "hotkeyAssignments"
         case clipboardHistoryEnabled = "clipboardHistoryEnabled"
         case clipboardHistoryLimit = "clipboardHistoryLimit"
+        case clipboardHistoryShortcut = "clipboardHistoryShortcut"
         case windowPlacementConfiguration = "windowPlacementConfiguration"
         case menuBarShelfEnabled = "menuBarShelfEnabled"
         case menuBarShelfAutoHideEnabled = "menuBarShelfAutoHideEnabled"
@@ -134,6 +139,7 @@ public final class SettingsStore {
     private var cachedWindowPlacementConfiguration: WindowPlacementConfiguration?
     private var cachedFinderLaunchShortcuts: [FinderLaunchShortcut]?
     private var cachedFinderDocumentPresets: [FinderDocumentPreset]?
+    private var cachedClipboardHistoryShortcut: RecordedShortcut?
 
     private func cachedValue<T>(_ keyPath: ReferenceWritableKeyPath<SettingsStore, T?>, compute: () -> T) -> T {
         cacheLock.lock()
@@ -190,9 +196,13 @@ public final class SettingsStore {
             Key.windowCycleEnabled.rawValue: false,
             Key.finderExtensionEnabled.rawValue: false,
             Key.finderLaunchShortcutsGrouped.rawValue: true,
+            Key.finderExtensionCopyPathCommand.rawValue: true,
+            Key.finderExtensionShowHiddenFilesCommand.rawValue: true,
+            Key.finderExtensionHideHiddenFilesCommand.rawValue: true,
             Key.liveDockPreviewsEnabled.rawValue: true,
             Key.livePreviewWindowLimit.rawValue: min(6, max(0, livePreviewLimitProvider())),
             Key.hotkeysEnabled.rawValue: true,
+            Key.hotkeyHideOnRepeatedTrigger.rawValue: true,
             Key.clipboardHistoryEnabled.rawValue: false,
             Key.clipboardHistoryLimit.rawValue: 200,
             Key.menuBarShelfEnabled.rawValue: false,
@@ -243,6 +253,39 @@ public final class SettingsStore {
         }
         set {
             defaults.set(newValue, forKey: Key.finderLaunchShortcutsGrouped.rawValue)
+            syncFinderExtensionSettings()
+            postChange(.finderExtension)
+        }
+    }
+
+    public var finderCopyPathCommand: Bool {
+        get {
+            defaults.object(forKey: Key.finderExtensionCopyPathCommand.rawValue) as? Bool ?? true
+        }
+        set {
+            defaults.set(newValue, forKey: Key.finderExtensionCopyPathCommand.rawValue)
+            syncFinderExtensionSettings()
+            postChange(.finderExtension)
+        }
+    }
+
+    public var finderShowHiddenFilesCommand: Bool {
+        get {
+            defaults.object(forKey: Key.finderExtensionShowHiddenFilesCommand.rawValue) as? Bool ?? true
+        }
+        set {
+            defaults.set(newValue, forKey: Key.finderExtensionShowHiddenFilesCommand.rawValue)
+            syncFinderExtensionSettings()
+            postChange(.finderExtension)
+        }
+    }
+
+    public var finderHideHiddenFilesCommand: Bool {
+        get {
+            defaults.object(forKey: Key.finderExtensionHideHiddenFilesCommand.rawValue) as? Bool ?? true
+        }
+        set {
+            defaults.set(newValue, forKey: Key.finderExtensionHideHiddenFilesCommand.rawValue)
             syncFinderExtensionSettings()
             postChange(.finderExtension)
         }
@@ -360,6 +403,16 @@ public final class SettingsStore {
         set { set(newValue, for: .hotkeysEnabled) }
     }
 
+    public var hotkeyHideOnRepeatedTrigger: Bool {
+        get {
+            guard let value = defaults.object(forKey: Key.hotkeyHideOnRepeatedTrigger.rawValue) as? Bool else {
+                return true
+            }
+            return value
+        }
+        set { set(newValue, for: .hotkeyHideOnRepeatedTrigger) }
+    }
+
     public var clipboardHistoryEnabled: Bool {
         get { defaults.bool(forKey: Key.clipboardHistoryEnabled.rawValue) }
         set { set(newValue, for: .clipboardHistoryEnabled) }
@@ -372,6 +425,30 @@ public final class SettingsStore {
         }
         set {
             set(min(max(newValue, 1), 999), for: .clipboardHistoryLimit)
+        }
+    }
+
+    public var clipboardHistoryShortcut: RecordedShortcut {
+        get {
+            cachedValue(\.cachedClipboardHistoryShortcut) {
+                decoded(
+                    RecordedShortcut.self,
+                    from: defaults.data(forKey: Key.clipboardHistoryShortcut.rawValue)
+                ) ?? ClipboardHistoryShortcut.defaultShortcut
+            }
+        }
+        set {
+            if let data = encoded(newValue) {
+                defaults.set(data, forKey: Key.clipboardHistoryShortcut.rawValue)
+                updateCache(\.cachedClipboardHistoryShortcut, to: newValue)
+            } else {
+                defaults.removeObject(forKey: Key.clipboardHistoryShortcut.rawValue)
+                updateCache(
+                    \.cachedClipboardHistoryShortcut,
+                    to: ClipboardHistoryShortcut.defaultShortcut
+                )
+            }
+            postChange(.clipboardHistory)
         }
     }
 
@@ -670,7 +747,9 @@ public final class SettingsStore {
             return .windowCycle
         case .finderExtensionEnabled:
             return .finderExtension
-        case .finderLaunchShortcutsGrouped, .finderLaunchShortcuts, .finderDocumentPresets:
+        case .finderLaunchShortcutsGrouped, .finderLaunchShortcuts, .finderDocumentPresets,
+             .finderExtensionCopyPathCommand, .finderExtensionShowHiddenFilesCommand,
+             .finderExtensionHideHiddenFilesCommand:
             return .finderExtension
         case .liveDockPreviewsEnabled:
             return .livePreview
@@ -680,11 +759,11 @@ public final class SettingsStore {
             return .dockClick
         case .minimizeWindowsOnDockClickInsteadOfHide, .minimizeOnRepeatedDockClick:
             return .minimizeDockClick
-        case .hotkeysEnabled:
+        case .hotkeysEnabled, .hotkeyHideOnRepeatedTrigger:
             return .hotkeys
         case .hotkeyAssignments:
             return .hotkeyBindings
-        case .clipboardHistoryEnabled, .clipboardHistoryLimit:
+        case .clipboardHistoryEnabled, .clipboardHistoryLimit, .clipboardHistoryShortcut:
             return .clipboardHistory
         case .windowPlacementConfiguration:
             return .windowPlacement
@@ -714,6 +793,9 @@ public final class SettingsStore {
             groupsLaunchShortcuts: finderLaunchShortcutsGrouped,
             launchShortcuts: finderLaunchShortcuts,
             documentPresets: finderDocumentPresets,
+            showsCopyPathCommand: finderCopyPathCommand,
+            showsShowHiddenFilesCommand: finderShowHiddenFilesCommand,
+            showsHideHiddenFilesCommand: finderHideHiddenFilesCommand,
             observationRootPaths: observationRootPaths
         ))
     }

@@ -130,4 +130,31 @@ enum ShortcutRecorderValidation {
         }
         return nil
     }
+
+    static func clipboardShortcutRejectionReason(
+        for shortcut: RecordedShortcut,
+        settings: SettingsStore,
+        systemShortcuts: Set<RecordedShortcut> = SystemHotkeyConflictChecker.enabledSystemShortcuts()
+    ) -> String? {
+        if let reason = rejectionReason(
+            for: shortcut,
+            systemShortcuts: systemShortcuts
+        ) {
+            return reason
+        }
+        if settings.appHotkeyBindings.contains(where: {
+            $0.isEnabled && $0.recordedShortcut == shortcut
+        }) {
+            return AppStrings.text(.hotkeyDuplicate)
+        }
+        if settings.windowPlacementConfiguration.commands.contains(where: {
+            $0.isEnabled && $0.shortcut == shortcut
+        }) {
+            return AppStrings.text(.windowPlacementShortcutConflict)
+        }
+        if settings.windowCycleEnabled, shortcut == WindowCycleShortcut.recorded {
+            return AppStrings.text(.windowPlacementShortcutConflict)
+        }
+        return nil
+    }
 }

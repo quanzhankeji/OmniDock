@@ -496,9 +496,9 @@ final class ClipboardHistoryTests: XCTestCase {
     func testReservedClipboardShortcutIsRejectedByAppHotkeyRecorder() {
         XCTAssertEqual(
             ShortcutRecorderValidation.rejectionReason(
-                for: ClipboardHistoryShortcut.recorded,
+                for: ClipboardHistoryShortcut.defaultShortcut,
                 systemShortcuts: [],
-                reservedShortcuts: [ClipboardHistoryShortcut.recorded]
+                reservedShortcuts: [ClipboardHistoryShortcut.defaultShortcut]
             ),
             AppStrings.text(.hotkeyReservedForClipboardHistory)
         )
@@ -846,15 +846,15 @@ final class ClipboardHistoryTests: XCTestCase {
         service.stop()
     }
 
-    func testExistingAppBindingPreventsClipboardShortcutRegistration() {
+    func testExistingAppBindingYieldsToClipboardShortcut() {
         let settings = SettingsStore(defaults: isolatedDefaults(), livePreviewLimitProvider: { 8 })
         settings.appHotkeyBindings = [
             AppHotkeyBinding(
                 appName: "Sample",
                 bundleURLString: "file:///Applications/Sample.app",
                 bundleIdentifier: "com.example.Sample",
-                keyCode: ClipboardHistoryShortcut.recorded.keyCode,
-                modifierFlags: ClipboardHistoryShortcut.recorded.modifierFlags
+                keyCode: ClipboardHistoryShortcut.defaultShortcut.keyCode,
+                modifierFlags: ClipboardHistoryShortcut.defaultShortcut.modifierFlags
             )
         ]
         settings.clipboardHistoryEnabled = true
@@ -863,8 +863,8 @@ final class ClipboardHistoryTests: XCTestCase {
 
         service.start()
 
-        XCTAssertFalse(settings.clipboardHistoryEnabled)
-        XCTAssertEqual(registry.registerCount, 0)
+        XCTAssertTrue(settings.clipboardHistoryEnabled)
+        XCTAssertEqual(registry.registerCount, 1)
         service.stop()
     }
 
@@ -993,7 +993,7 @@ private final class ClipboardHistoryHotkeyRegistrySpy: ClipboardHistoryHotkeyReg
     private(set) var unregisterCount = 0
     private(set) var stopCount = 0
 
-    func register() -> OSStatus? {
+    func register(_ shortcut: RecordedShortcut) -> OSStatus? {
         registerCount += 1
         return registrationResult
     }

@@ -523,21 +523,31 @@ public final class DockInteractionCoordinator {
         let dockGeometry = DockGeometry()
         let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) ?? NSScreen.main
 
-        if dockGeometry.isPointInLikelyDockArea(point, screen: screen),
-           let target = dockHitTester.target(at: point) {
-            previewExitBeganAt = nil
-            let target = resolvedDockTarget(for: target)
-            guard DockTargetOwnershipPolicy.shouldHandle(
-                targetProcessIdentifier: target.processIdentifier
-            ) else {
+        if dockGeometry.isPointInLikelyDockArea(point, screen: screen) {
+            switch dockHitTester.hoverHitResult(at: point) {
+            case let .previewableTarget(hitTarget):
+                previewExitBeganAt = nil
+                let target = resolvedDockTarget(for: hitTarget)
+                guard DockTargetOwnershipPolicy.shouldHandle(
+                    targetProcessIdentifier: target.processIdentifier
+                ) else {
+                    hidePreview()
+                    hoverTarget = nil
+                    hoverBeganAt = nil
+                    return
+                }
+                handleDockHoverTarget(target)
+                synchronizeHoverTimer(isInteracting: true)
+                return
+            case .nonPreviewableDockItem:
                 hidePreview()
                 hoverTarget = nil
                 hoverBeganAt = nil
+                synchronizeHoverTimer(isInteracting: false)
                 return
+            case .none:
+                break
             }
-            handleDockHoverTarget(target)
-            synchronizeHoverTimer(isInteracting: true)
-            return
         }
 
         if shouldRetainPreview(at: point) {
@@ -553,6 +563,9 @@ public final class DockInteractionCoordinator {
 
     private func handleDockHoverTarget(_ target: DockAppTarget) {
         if hoverTarget?.isSameDockTile(as: target) != true {
+            if shownTarget?.isSameDockTile(as: target) != true {
+                hidePreview()
+            }
             hoverTarget = target
             hoverBeganAt = Date()
             return

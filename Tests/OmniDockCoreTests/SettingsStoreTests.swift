@@ -14,7 +14,11 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(store.toggleAppVisibilityOnDockClick)
         XCTAssertFalse(store.minimizeWindowsOnDockClickInsteadOfHide)
         XCTAssertTrue(store.hotkeysEnabled)
+        XCTAssertTrue(store.hotkeyHideOnRepeatedTrigger)
         XCTAssertFalse(store.finderExtensionEnabled)
+        XCTAssertTrue(store.finderCopyPathCommand)
+        XCTAssertTrue(store.finderShowHiddenFilesCommand)
+        XCTAssertTrue(store.finderHideHiddenFilesCommand)
         XCTAssertFalse(store.clipboardHistoryEnabled)
         XCTAssertEqual(store.clipboardHistoryLimit, 200)
         XCTAssertFalse(store.windowPlacementEnabled)
@@ -42,7 +46,11 @@ final class SettingsStoreTests: XCTestCase {
         store.toggleAppVisibilityOnDockClick = false
         store.minimizeWindowsOnDockClickInsteadOfHide = true
         store.hotkeysEnabled = false
+        store.hotkeyHideOnRepeatedTrigger = false
         store.finderExtensionEnabled = true
+        store.finderCopyPathCommand = false
+        store.finderShowHiddenFilesCommand = false
+        store.finderHideHiddenFilesCommand = false
         store.clipboardHistoryEnabled = true
         store.clipboardHistoryLimit = 350
         var placementConfiguration = store.windowPlacementConfiguration
@@ -77,7 +85,11 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(reloaded.toggleAppVisibilityOnDockClick)
         XCTAssertTrue(reloaded.minimizeWindowsOnDockClickInsteadOfHide)
         XCTAssertFalse(reloaded.hotkeysEnabled)
+        XCTAssertFalse(reloaded.hotkeyHideOnRepeatedTrigger)
         XCTAssertTrue(reloaded.finderExtensionEnabled)
+        XCTAssertFalse(reloaded.finderCopyPathCommand)
+        XCTAssertFalse(reloaded.finderShowHiddenFilesCommand)
+        XCTAssertFalse(reloaded.finderHideHiddenFilesCommand)
         XCTAssertTrue(reloaded.clipboardHistoryEnabled)
         XCTAssertEqual(reloaded.clipboardHistoryLimit, 350)
         XCTAssertTrue(reloaded.windowPlacementEnabled)

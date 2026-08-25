@@ -9,7 +9,7 @@ enum WindowPlacementShortcutPolicy {
             }
         )
         if settings.clipboardHistoryEnabled {
-            shortcuts.insert(ClipboardHistoryShortcut.recorded)
+            shortcuts.insert(settings.clipboardHistoryShortcut)
         }
         if settings.windowCycleEnabled {
             shortcuts.insert(WindowCycleShortcut.recorded)
@@ -68,6 +68,7 @@ final class WindowPlacementService {
     private let registrationStatus: WindowPlacementRegistrationStatusStore
     private let hotkeyRegistry: WindowPlacementHotkeyRegistry
     private let paletteController: WindowPlacementPaletteController
+    private let sizeHUDController: WindowPlacementSizeHUDController
     private let pointerMonitor: WindowPlacementPointerMonitor
     private var restoreFrames: [WindowPlacementRuntimeIdentifier: RestoreEntry] = [:]
     private var terminationObserver: NSObjectProtocol?
@@ -84,16 +85,14 @@ final class WindowPlacementService {
         self.registrationStatus = registrationStatus
         hotkeyRegistry = WindowPlacementHotkeyRegistry()
         paletteController = WindowPlacementPaletteController()
+        sizeHUDController = WindowPlacementSizeHUDController()
         pointerMonitor = WindowPlacementPointerMonitor()
 
         hotkeyRegistry.onTrigger = { [weak self] commandID in
             self?.perform(commandID: commandID)
         }
-        pointerMonitor.onGreenButtonHover = { [weak self] target, anchor in
-            self?.showPalette(for: target, anchor: anchor)
-        }
-        pointerMonitor.onPointerMoved = { [weak self] point in
-            self?.paletteController.pointerMoved(toEventTapPoint: point)
+        pointerMonitor.onGreenButtonClicked = { [weak self] target in
+            self?.toggleMaximize(for: target)
         }
         pointerMonitor.onDragBegan = { [weak self] target, screens in
             guard let self else {
@@ -115,10 +114,18 @@ final class WindowPlacementService {
         }
         pointerMonitor.onDragCancelled = { [weak self] in
             self?.paletteController.hideDragRegions()
+            self?.sizeHUDController.hide()
         }
         pointerMonitor.onDragCompleted = { [weak self] target, command, screen in
             self?.paletteController.hideDragRegions()
+            self?.sizeHUDController.hide()
             _ = self?.apply(command, to: target, preferredScreen: screen)
+        }
+        pointerMonitor.onDragSizeChanged = { [weak self] size, point in
+            self?.sizeHUDController.show(size: size, near: point)
+        }
+        pointerMonitor.onDragSizeHidden = { [weak self] in
+            self?.sizeHUDController.hide()
         }
         paletteController.onChoose = { [weak self] commandID, target in
             self?.perform(commandID: commandID, target: target)
@@ -333,21 +340,26 @@ final class WindowPlacementService {
             && abs(lhs.height - rhs.height) <= 3
     }
 
-    private func showPalette(
-        for target: WindowPlacementTarget,
-        anchor: CGRect
-    ) {
-        let commands = settings.windowPlacementConfiguration.commands.filter {
-            $0.isEnabled
-        }
-        guard !commands.isEmpty else {
+    private func toggleMaximize(for target: WindowPlacementTarget) {
+        let identifier = target.runtimeIdentifier
+        if let entry = restoreFrames[identifier],
+           framesAreEquivalent(target.frame, entry.lastAppliedFrame),
+           let command = enabledBuiltInCommand(.restore) {
+            _ = apply(command, to: target)
             return
         }
-        paletteController.show(
-            commands: commands,
-            target: target,
-            anchorEventTapFrame: anchor
-        )
+        guard let command = enabledBuiltInCommand(.maximize) else {
+            return
+        }
+        _ = apply(command, to: target)
+    }
+
+    private func enabledBuiltInCommand(
+        _ builtIn: BuiltInWindowPlacement
+    ) -> WindowPlacementCommand? {
+        settings.windowPlacementConfiguration.commands.first {
+            $0.isEnabled && $0.builtIn == builtIn
+        }
     }
 
     @objc private func settingsChanged(_ notification: Notification) {

@@ -70,7 +70,7 @@ public final class AppHotkeyService {
         var claimedShortcuts = Set<RecordedShortcut>()
         let systemShortcuts = SystemHotkeyConflictChecker.enabledSystemShortcuts()
         let reservedShortcuts: Set<RecordedShortcut> = settings.clipboardHistoryEnabled
-            ? [ClipboardHistoryShortcut.recorded]
+            ? [settings.clipboardHistoryShortcut]
             : []
         let placementShortcuts = Set(
             settings.windowPlacementConfiguration.commands.compactMap {
@@ -127,7 +127,8 @@ public final class AppHotkeyService {
             isHidden: app.isHidden,
             normalWindowCount: summary.normalWindowCount,
             unminimizedNormalWindowCount: summary.unminimizedNormalWindowCount,
-            onscreenNormalWindowCount: summary.onscreenNormalWindowCount
+            onscreenNormalWindowCount: summary.onscreenNormalWindowCount,
+            hideOnRepeatedTrigger: settings.hotkeyHideOnRepeatedTrigger
         )
         switch decision {
         case .launchApplication:

@@ -4,7 +4,7 @@ import XCTest
 
 final class FinderMenuTests: XCTestCase {
     @MainActor
-    func testFinderExtensionSettingsUsesTwoIndependentEditorSections() {
+    func testFinderExtensionSettingsUsesThreeIndependentEditorSections() {
         let view = FinderExtensionSettingsView(
             settings: SettingsStore(
                 defaults: isolatedDefaults(),
@@ -15,13 +15,17 @@ final class FinderMenuTests: XCTestCase {
 
         XCTAssertEqual(
             FinderExtensionSettingsSection.allCases,
-            [.documentTypes, .quickActions]
+            [.documentTypes, .quickActions, .quickCommands]
         )
         XCTAssertEqual(view.selectedSection, .documentTypes)
 
         view.selectSection(.quickActions)
 
         XCTAssertEqual(view.selectedSection, .quickActions)
+
+        view.selectSection(.quickCommands)
+
+        XCTAssertEqual(view.selectedSection, .quickCommands)
     }
 
     @MainActor
@@ -40,7 +44,7 @@ final class FinderMenuTests: XCTestCase {
             FinderExtensionSettingsSection.allCases.map(\.title).contains($0.title)
         }
 
-        XCTAssertEqual(navigationButtons.count, 2)
+        XCTAssertEqual(navigationButtons.count, 3)
         XCTAssertEqual(
             navigationButtons[0].frame.minX,
             navigationButtons[1].frame.minX,
@@ -52,6 +56,80 @@ final class FinderMenuTests: XCTestCase {
             accuracy: 0.5
         )
         XCTAssertGreaterThan(navigationButtons[0].bounds.width, 180)
+    }
+
+    @MainActor
+    func testFinderQuickCommandsStartImmediatelyBelowTheEnableCard() throws {
+        let view = FinderExtensionSettingsView(
+            settings: SettingsStore(
+                defaults: isolatedDefaults(),
+                livePreviewLimitProvider: { 6 }
+            ),
+            isExtensionEnabledInFinder: { true }
+        )
+        view.frame = NSRect(x: 0, y: 0, width: 900, height: 600)
+        view.selectSection(.quickCommands)
+        view.layoutSubtreeIfNeeded()
+
+        let enableSwitch = try XCTUnwrap(descendantSwitches(in: view).first)
+        let enableRow = try XCTUnwrap(enableSwitch.superview)
+        let enableFrame = enableRow.convert(enableRow.bounds, to: view)
+        let expectedTop = enableFrame.minY - 16
+
+        let navigationButton = try XCTUnwrap(
+            descendantButtons(in: view).first {
+                $0.title == AppStrings.text(.finderDocumentTypesTitle)
+            }
+        )
+        let detailTitles = descendantTextFields(in: view).filter {
+                $0.stringValue == AppStrings.text(.finderQuickCommandsTitle)
+        }
+
+        XCTAssertEqual(
+            navigationButton.convert(navigationButton.bounds, to: view).maxY,
+            expectedTop,
+            accuracy: 0.5
+        )
+        XCTAssertTrue(
+            detailTitles.contains {
+                abs($0.convert($0.bounds, to: view).maxY - expectedTop) <= 0.5
+            }
+        )
+
+        let setupSettings = SettingsStore(
+            defaults: isolatedDefaults(),
+            livePreviewLimitProvider: { 6 }
+        )
+        setupSettings.finderExtensionEnabled = true
+        let setupView = FinderExtensionSettingsView(
+            settings: setupSettings,
+            isExtensionEnabledInFinder: { false }
+        )
+        setupView.frame = NSRect(x: 0, y: 0, width: 900, height: 600)
+        setupView.selectSection(.quickCommands)
+        setupView.layoutSubtreeIfNeeded()
+
+        let setupButton = try XCTUnwrap(
+            descendantButtons(in: setupView).first {
+                $0.title == AppStrings.text(.finderExtensionOpenSettings)
+            }
+        )
+        let setupContainer = try XCTUnwrap(setupButton.superview)
+        let setupFrame = setupContainer.convert(
+            setupContainer.bounds,
+            to: setupView
+        )
+        let setupNavigationButton = try XCTUnwrap(
+            descendantButtons(in: setupView).first {
+                $0.title == AppStrings.text(.finderDocumentTypesTitle)
+            }
+        )
+
+        XCTAssertEqual(
+            setupNavigationButton.convert(setupNavigationButton.bounds, to: setupView).maxY,
+            setupFrame.minY - 16,
+            accuracy: 0.5
+        )
     }
 
     @MainActor
@@ -248,6 +326,50 @@ final class FinderMenuTests: XCTestCase {
                 ),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
+            ]
+        )
+    }
+
+    func testQuickCommandsDefaultToEnabledAndControlTheMenu() {
+        let context = FinderMenuContext(
+            location: .folderBackground,
+            currentDirectory: URL(fileURLWithPath: "/tmp/OmniDock"),
+            selectedURLs: []
+        )
+
+        XCTAssertEqual(
+            FinderMenuCatalog.entries(
+                for: context,
+                preferences: FinderMenuPreferences(isEnabled: true)
+            ),
+            [
+                .action(.copyCurrentDirectoryPath),
+                .documentSubmenu(
+                    FinderDocumentPreset.defaultPresets
+                        .filter(\.isEnabled)
+                        .map(FinderMenuAction.createDocument)
+                ),
+                .action(.showHiddenFiles),
+                .action(.hideHiddenFiles)
+            ]
+        )
+
+        XCTAssertEqual(
+            FinderMenuCatalog.entries(
+                for: context,
+                preferences: FinderMenuPreferences(
+                    isEnabled: true,
+                    showsCopyPathCommand: false,
+                    showsShowHiddenFilesCommand: false,
+                    showsHideHiddenFilesCommand: false
+                )
+            ),
+            [
+                .documentSubmenu(
+                    FinderDocumentPreset.defaultPresets
+                        .filter(\.isEnabled)
+                        .map(FinderMenuAction.createDocument)
+                )
             ]
         )
     }
@@ -585,6 +707,9 @@ final class FinderMenuTests: XCTestCase {
         XCTAssertEqual(decoded.launchShortcuts, FinderLaunchShortcut.defaultShortcuts)
         XCTAssertTrue(decoded.launchShortcuts.allSatisfy { !$0.isEnabled })
         XCTAssertEqual(decoded.documentPresets, FinderDocumentPreset.defaultPresets)
+        XCTAssertTrue(decoded.showsCopyPathCommand)
+        XCTAssertTrue(decoded.showsShowHiddenFilesCommand)
+        XCTAssertTrue(decoded.showsHideHiddenFilesCommand)
     }
 
     func testCommandURLRouterAndSignalAcceptOnlyFinderCommandIdentifiers() {
@@ -1158,6 +1283,18 @@ final class FinderMenuTests: XCTestCase {
     private func descendantButtons(in view: NSView) -> [NSButton] {
         view.subviews.flatMap { child in
             (child as? NSButton).map { [$0] } ?? descendantButtons(in: child)
+        }
+    }
+
+    private func descendantSwitches(in view: NSView) -> [NSSwitch] {
+        view.subviews.flatMap { child in
+            (child as? NSSwitch).map { [$0] } ?? descendantSwitches(in: child)
+        }
+    }
+
+    private func descendantTextFields(in view: NSView) -> [NSTextField] {
+        view.subviews.flatMap { child in
+            (child as? NSTextField).map { [$0] } ?? descendantTextFields(in: child)
         }
     }
 

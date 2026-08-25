@@ -144,8 +144,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         cmdTabPreviewService.start()
         windowCycleService.start()
         hotkeyService.start()
-        clipboardHistoryService.start()
         windowPlacementService.start()
+        // Clipboard history must start after the app-hotkey and window-placement
+        // services. NotificationCenter delivers settings-change notifications in
+        // observer registration order, so this guarantees those services yield a
+        // shortcut that collides with the (user-configurable) clipboard shortcut
+        // before the clipboard service tries to register it.
+        clipboardHistoryService.start()
         showPermissionOnboardingIfNeeded()
         applicationUpdateService.start()
         schedulePermissionRecheckAfterLaunch()

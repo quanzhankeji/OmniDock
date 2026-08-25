@@ -85,7 +85,8 @@ public enum AppHotkeyDecisionResolver {
         isHidden: Bool,
         normalWindowCount: Int? = nil,
         unminimizedNormalWindowCount: Int,
-        onscreenNormalWindowCount: Int? = nil
+        onscreenNormalWindowCount: Int? = nil,
+        hideOnRepeatedTrigger: Bool = true
     ) -> AppHotkeyDecision {
         guard isRunning else {
             return .launchApplication
@@ -103,10 +104,8 @@ public enum AppHotkeyDecisionResolver {
         ) {
         case .bringApplicationToFront:
             return .bringApplicationToFront
-        case .hideApplication:
-            return .hideApplication
-        case .minimizeApplicationWindows:
-            return .hideApplication
+        case .hideApplication, .minimizeApplicationWindows:
+            return hideOnRepeatedTrigger ? .hideApplication : .bringApplicationToFront
         }
     }
 }

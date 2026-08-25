@@ -102,6 +102,7 @@
 		68AE209526F22762A5ACCE3F /* UpdateProgressWindowController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCD1B2813464A45565566683 /* UpdateProgressWindowController.swift */; };
 		94E7ED2A11D974BB6586BD9E /* WindowPlacementPaletteController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84D366587D7366DF51E091AD /* WindowPlacementPaletteController.swift */; };
 		532523EC4B5D2D3B25E76E33 /* WindowPlacementSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F50771B3DC0D16851E07DE4D /* WindowPlacementSettingsView.swift */; };
+		1A2FA8FC769EDC4761A6A669 /* WindowPlacementSizeHUDController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D1FF25E426EB09B8802EB2 /* WindowPlacementSizeHUDController.swift */; };
 		F39A46ABDFFB4D66C30CCB96 /* FinderMenuExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = A18BD2DED7E1CE111A4BEDCA /* FinderMenuExtension.swift */; };
 		1CD0553BB69B87377A2529AA /* FinderCommandTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52CD10A1601C5E9DDC60C8EF /* FinderCommandTransport.swift */; };
 		E200345E124E1120FB011361 /* FinderMenuModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58239091F32F00B5095B417E /* FinderMenuModel.swift */; };
@@ -224,6 +225,7 @@
 		CCD1B2813464A45565566683 /* UpdateProgressWindowController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/UpdateProgressWindowController.swift"; sourceTree = SOURCE_ROOT; };
 		84D366587D7366DF51E091AD /* WindowPlacementPaletteController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/WindowPlacementPaletteController.swift"; sourceTree = SOURCE_ROOT; };
 		F50771B3DC0D16851E07DE4D /* WindowPlacementSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/WindowPlacementSettingsView.swift"; sourceTree = SOURCE_ROOT; };
+		38D1FF25E426EB09B8802EB2 /* WindowPlacementSizeHUDController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/UI/WindowPlacementSizeHUDController.swift"; sourceTree = SOURCE_ROOT; };
 		A18BD2DED7E1CE111A4BEDCA /* FinderMenuExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockFinderSync/FinderMenuExtension.swift"; sourceTree = SOURCE_ROOT; };
 		E0E27618A2D2A8FEBDD49F35 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Resources/Assets.xcassets"; sourceTree = SOURCE_ROOT; };
 		31BEFD43862C3893FFE18E56 /* OmniDock-Development.entitlements */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Resources/OmniDock-Development.entitlements"; sourceTree = SOURCE_ROOT; };
@@ -407,6 +409,7 @@
 				CCD1B2813464A45565566683 /* UpdateProgressWindowController.swift */,
 				84D366587D7366DF51E091AD /* WindowPlacementPaletteController.swift */,
 				F50771B3DC0D16851E07DE4D /* WindowPlacementSettingsView.swift */,
+				38D1FF25E426EB09B8802EB2 /* WindowPlacementSizeHUDController.swift */,
 				A18BD2DED7E1CE111A4BEDCA /* FinderMenuExtension.swift */,
 			);
 			name = Sources;
@@ -695,6 +698,7 @@
 				68AE209526F22762A5ACCE3F /* UpdateProgressWindowController.swift in Sources */,
 				94E7ED2A11D974BB6586BD9E /* WindowPlacementPaletteController.swift in Sources */,
 				532523EC4B5D2D3B25E76E33 /* WindowPlacementSettingsView.swift in Sources */,
+				1A2FA8FC769EDC4761A6A669 /* WindowPlacementSizeHUDController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

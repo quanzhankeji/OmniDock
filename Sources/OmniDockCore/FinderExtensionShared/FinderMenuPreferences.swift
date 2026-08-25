@@ -550,6 +550,9 @@ struct FinderMenuPreferences: Codable, Equatable {
     var groupsLaunchShortcuts: Bool
     var launchShortcuts: [FinderLaunchShortcut]
     var documentPresets: [FinderDocumentPreset]
+    var showsCopyPathCommand: Bool
+    var showsShowHiddenFilesCommand: Bool
+    var showsHideHiddenFilesCommand: Bool
     var observationRootPaths: [String]
 
     init(
@@ -558,6 +561,9 @@ struct FinderMenuPreferences: Codable, Equatable {
         groupsLaunchShortcuts: Bool = true,
         launchShortcuts: [FinderLaunchShortcut] = FinderLaunchShortcut.defaultShortcuts,
         documentPresets: [FinderDocumentPreset] = FinderDocumentPreset.defaultPresets,
+        showsCopyPathCommand: Bool = true,
+        showsShowHiddenFilesCommand: Bool = true,
+        showsHideHiddenFilesCommand: Bool = true,
         observationRootPaths: [String] = []
     ) {
         self.isEnabled = isEnabled
@@ -568,6 +574,9 @@ struct FinderMenuPreferences: Codable, Equatable {
             missingBuiltInsUseDefaults: true
         )
         self.documentPresets = documentPresets
+        self.showsCopyPathCommand = showsCopyPathCommand
+        self.showsShowHiddenFilesCommand = showsShowHiddenFilesCommand
+        self.showsHideHiddenFilesCommand = showsHideHiddenFilesCommand
         self.observationRootPaths = observationRootPaths
     }
 
@@ -577,6 +586,9 @@ struct FinderMenuPreferences: Codable, Equatable {
         case groupsLaunchShortcuts
         case launchShortcuts
         case documentPresets
+        case showsCopyPathCommand
+        case showsShowHiddenFilesCommand
+        case showsHideHiddenFilesCommand
         case observationRootPaths
     }
 
@@ -613,6 +625,18 @@ struct FinderMenuPreferences: Codable, Equatable {
         } else {
             documentPresets = FinderDocumentPreset.defaultPresets
         }
+        showsCopyPathCommand = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .showsCopyPathCommand
+        ) ?? true
+        showsShowHiddenFilesCommand = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .showsShowHiddenFilesCommand
+        ) ?? true
+        showsHideHiddenFilesCommand = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .showsHideHiddenFilesCommand
+        ) ?? true
         observationRootPaths = try container.decodeIfPresent(
             [String].self,
             forKey: .observationRootPaths
@@ -697,6 +721,9 @@ final class FinderMenuPreferencesStore {
         static let groupsLaunchShortcuts = "finderExtensionGroupsLaunchShortcuts"
         static let launchShortcuts = "finderExtensionLaunchShortcuts"
         static let documentPresets = "finderExtensionDocumentPresets"
+        static let showsCopyPathCommand = "finderExtensionCopyPathCommand"
+        static let showsShowHiddenFilesCommand = "finderExtensionShowHiddenFilesCommand"
+        static let showsHideHiddenFilesCommand = "finderExtensionHideHiddenFilesCommand"
         static let observationRootPaths = "finderExtensionObservationRootPaths"
         static let fileName = "FinderExtensionSettings.json"
     }
@@ -749,6 +776,15 @@ final class FinderMenuPreferencesStore {
                     [FinderDocumentPreset].self,
                     from: defaults.data(forKey: Key.documentPresets)
                 ) ?? FinderDocumentPreset.defaultPresets,
+                showsCopyPathCommand: defaults.object(
+                    forKey: Key.showsCopyPathCommand
+                ) as? Bool ?? true,
+                showsShowHiddenFilesCommand: defaults.object(
+                    forKey: Key.showsShowHiddenFilesCommand
+                ) as? Bool ?? true,
+                showsHideHiddenFilesCommand: defaults.object(
+                    forKey: Key.showsHideHiddenFilesCommand
+                ) as? Bool ?? true,
                 observationRootPaths: decoded(
                     [String].self,
                     from: defaults.data(forKey: Key.observationRootPaths)
@@ -777,6 +813,15 @@ final class FinderMenuPreferencesStore {
             defaults.set(preferences.groupsLaunchShortcuts, forKey: Key.groupsLaunchShortcuts)
             defaults.set(encoded(preferences.launchShortcuts), forKey: Key.launchShortcuts)
             defaults.set(encoded(preferences.documentPresets), forKey: Key.documentPresets)
+            defaults.set(preferences.showsCopyPathCommand, forKey: Key.showsCopyPathCommand)
+            defaults.set(
+                preferences.showsShowHiddenFilesCommand,
+                forKey: Key.showsShowHiddenFilesCommand
+            )
+            defaults.set(
+                preferences.showsHideHiddenFilesCommand,
+                forKey: Key.showsHideHiddenFilesCommand
+            )
             defaults.set(
                 encoded(preferences.observationRootPaths),
                 forKey: Key.observationRootPaths
