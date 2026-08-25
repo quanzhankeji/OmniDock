@@ -1,5 +1,6 @@
-# OmniDock 1.2.4
+# OmniDock 1.2.5
 
-- Add Hidden Bar controls for organizing menu bar icons, with manual reveal and optional automatic hiding.
-- Improve clipboard history loading and thumbnail performance.
-- Reduce idle event polling and strengthen Dock, Finder, preview, and window-management reliability.
+- Customize the Clipboard History shortcut with clearer conflict handling, and choose whether repeated app shortcuts hide the frontmost app.
+- Choose which Finder quick commands appear for Copy Path and hidden-file visibility, with a more compact settings layout.
+- Cancel drag-to-layout with Escape and optionally show a live size HUD while resizing.
+- Clear stale Dock previews when hovering items without previewable windows, alongside clipboard and shortcut reliability fixes.

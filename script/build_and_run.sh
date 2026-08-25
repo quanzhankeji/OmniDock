@@ -5,8 +5,8 @@ MODE="${1:-run}"
 APP_NAME="OmniDock"
 BUNDLE_ID="com.quanzhankeji.OmniDock"
 MIN_SYSTEM_VERSION="12.3"
-MARKETING_VERSION="1.2.4"
-BUILD_NUMBER="13"
+MARKETING_VERSION="1.2.5"
+BUILD_NUMBER="15"
 
 usage() {
   echo "usage: $0 [run|--stage|--debug|--logs|--telemetry|--verify|--install|--install-finder-extension]" >&2
