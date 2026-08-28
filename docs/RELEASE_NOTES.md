@@ -1,6 +1,6 @@
-# OmniDock 1.2.5
+# OmniDock 1.2.6
 
-- Customize the Clipboard History shortcut with clearer conflict handling, and choose whether repeated app shortcuts hide the frontmost app.
-- Choose which Finder quick commands appear for Copy Path and hidden-file visibility, with a more compact settings layout.
-- Cancel drag-to-layout with Escape and optionally show a live size HUD while resizing.
-- Clear stale Dock previews when hovering items without previewable windows, alongside clipboard and shortcut reliability fixes.
+- Encrypt clipboard history stored on your Mac and keep paste actions tied to their intended app.
+- Harden automatic updates and Finder commands around trusted packages and folders you have granted access to.
+- Refine window dragging and resizing, including precise Escape handling and smoother size HUD behavior.
+- Add required privacy declarations and a single version source for safer, more consistent releases.
