@@ -493,6 +493,7 @@
 			buildPhases = (
 				51B2760AD5BD9796D05C0BCB /* Sources */,
 				64E3204A7DF69C7452416018 /* Frameworks */,
+				30E88922D309BD07EFCE84D0 /* Copy Extension Resources */,
 			);
 			buildRules = ();
 			dependencies = ();
@@ -597,6 +598,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
 			shellScript = "set -euo pipefail\n\nresources_dir=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nmkdir -p \"$resources_dir\"\n\n/usr/bin/ditto \"${SRCROOT}/Resources/PrivacyInfo.xcprivacy\" \"${resources_dir}/PrivacyInfo.xcprivacy\"\n/usr/bin/ditto \"${SRCROOT}/LICENSE\" \"${resources_dir}/COPYING.txt\"\n\nfor localization_dir in \"${SRCROOT}\"/Sources/OmniDockCore/Resources/*.lproj; do\n  [[ -d \"$localization_dir\" ]] || continue\n  /usr/bin/ditto \"$localization_dir\" \"${resources_dir}/$(basename \"$localization_dir\")\"\ndone\n\n/usr/bin/xattr -dr com.apple.quarantine \"$resources_dir\" 2>/dev/null || true\n/usr/bin/xattr -cr \"${TARGET_BUILD_DIR}/${WRAPPER_NAME}\" 2>/dev/null || true\n";
+		};
+		30E88922D309BD07EFCE84D0 /* Copy Extension Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputFileListPaths = ();
+			inputPaths = (
+				"$(SRCROOT)/Resources/FinderSync/PrivacyInfo.xcprivacy",
+			);
+			name = "Copy Extension Resources";
+			outputFileListPaths = ();
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/PrivacyInfo.xcprivacy",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "set -euo pipefail\n\nresources_dir=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nmkdir -p \"$resources_dir\"\n\n/usr/bin/ditto \"${SRCROOT}/Resources/FinderSync/PrivacyInfo.xcprivacy\" \\\n  \"${resources_dir}/PrivacyInfo.xcprivacy\"\n\n/usr/bin/xattr -dr com.apple.quarantine \"$resources_dir\" 2>/dev/null || true\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

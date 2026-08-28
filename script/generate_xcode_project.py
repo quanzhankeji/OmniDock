@@ -147,6 +147,9 @@ def generate_pbxproj() -> str:
     finder_extension_frameworks_phase = oid(f"phase:{FINDER_EXTENSION_NAME}:frameworks")
     resources_phase = oid("phase:resources")
     resource_script_phase = oid("phase:copy-local-resources")
+    finder_extension_resource_script_phase = oid(
+        f"phase:{FINDER_EXTENSION_NAME}:copy-local-resources"
+    )
     embed_extensions_phase = oid("phase:embed-app-extensions")
     finder_extension_dependency = oid(f"dependency:{PROJECT_NAME}:{FINDER_EXTENSION_NAME}")
     finder_extension_proxy = oid(f"proxy:{PROJECT_NAME}:{FINDER_EXTENSION_NAME}")
@@ -393,6 +396,9 @@ def generate_pbxproj() -> str:
     lines.append("\t\t\tbuildPhases = (")
     lines.append(f"\t\t\t\t{finder_extension_sources_phase} /* Sources */,")
     lines.append(f"\t\t\t\t{finder_extension_frameworks_phase} /* Frameworks */,")
+    lines.append(
+        f"\t\t\t\t{finder_extension_resource_script_phase} /* Copy Extension Resources */,"
+    )
     lines.append("\t\t\t);")
     lines.append("\t\t\tbuildRules = ();")
     lines.append("\t\t\tdependencies = ();")
@@ -510,6 +516,40 @@ done
     lines.append("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
     lines.append("\t\t\tshellPath = /bin/bash;")
     lines.append(f"\t\t\tshellScript = {q(resource_script)};")
+    lines.append("\t\t};")
+
+    # The extension is its own bundle, so it needs its own privacy manifest
+    # declaring the required-reason APIs its code path uses. It is kept out of
+    # the app's resource list so the two manifests cannot overwrite each other.
+    finder_extension_resource_script = """set -euo pipefail
+
+resources_dir="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
+mkdir -p "$resources_dir"
+
+/usr/bin/ditto "${SRCROOT}/Resources/FinderSync/PrivacyInfo.xcprivacy" \\
+  "${resources_dir}/PrivacyInfo.xcprivacy"
+
+/usr/bin/xattr -dr com.apple.quarantine "$resources_dir" 2>/dev/null || true
+"""
+    lines.append(
+        f"\t\t{finder_extension_resource_script_phase} /* Copy Extension Resources */ = {{"
+    )
+    lines.append("\t\t\tisa = PBXShellScriptBuildPhase;")
+    lines.append("\t\t\talwaysOutOfDate = 1;")
+    lines.append("\t\t\tbuildActionMask = 2147483647;")
+    lines.append("\t\t\tfiles = ();")
+    lines.append("\t\t\tinputFileListPaths = ();")
+    lines.append("\t\t\tinputPaths = (")
+    lines.append("\t\t\t\t\"$(SRCROOT)/Resources/FinderSync/PrivacyInfo.xcprivacy\",")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tname = \"Copy Extension Resources\";")
+    lines.append("\t\t\toutputFileListPaths = ();")
+    lines.append("\t\t\toutputPaths = (")
+    lines.append("\t\t\t\t\"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/PrivacyInfo.xcprivacy\",")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
+    lines.append("\t\t\tshellPath = /bin/bash;")
+    lines.append(f"\t\t\tshellScript = {q(finder_extension_resource_script)};")
     lines.append("\t\t};")
 
     lines.extend(["/* End PBXShellScriptBuildPhase section */", "", "/* Begin PBXSourcesBuildPhase section */"])
@@ -801,6 +841,7 @@ def missing_inputs() -> list[Path]:
     required = [
         ROOT / "VERSION.json",
         ROOT / "Resources" / "Assets.xcassets",
+        ROOT / "Resources" / "FinderSync" / "PrivacyInfo.xcprivacy",
         ROOT / "Resources" / "OmniDock-Development.entitlements",
         ROOT / "Resources" / "OmniDock-AppStore.entitlements",
         ROOT / "Resources" / "OmniDock-Info.plist",

@@ -92,6 +92,52 @@ final class BuildEntitlementsTests: XCTestCase {
         }
     }
 
+    // The app and the Finder extension ship as separate bundles, so each needs
+    // its own manifest declaring the required-reason APIs on its own code path.
+    // Both read file attributes and app-group defaults through the command
+    // mailbox; only the app reports boot time.
+    func testBothBundlesDeclareTheRequiredReasonAPIsTheyUse() throws {
+        let resources = repositoryRoot().appendingPathComponent("Resources", isDirectory: true)
+        let manifests = [
+            "app": resources.appendingPathComponent("PrivacyInfo.xcprivacy"),
+            "extension": resources
+                .appendingPathComponent("FinderSync", isDirectory: true)
+                .appendingPathComponent("PrivacyInfo.xcprivacy")
+        ]
+
+        for (label, url) in manifests {
+            let manifest = try propertyList(at: url)
+            XCTAssertEqual(manifest["NSPrivacyTracking"] as? Bool, false, label)
+            XCTAssertEqual((manifest["NSPrivacyTrackingDomains"] as? [Any])?.count, 0, label)
+            XCTAssertEqual((manifest["NSPrivacyCollectedDataTypes"] as? [Any])?.count, 0, label)
+
+            let declared = try XCTUnwrap(
+                manifest["NSPrivacyAccessedAPITypes"] as? [[String: Any]],
+                label
+            )
+            let reasons = Dictionary(
+                uniqueKeysWithValues: declared.compactMap { entry -> (String, [String])? in
+                    guard let type = entry["NSPrivacyAccessedAPIType"] as? String,
+                          let reasons = entry["NSPrivacyAccessedAPITypeReasons"] as? [String]
+                    else {
+                        return nil
+                    }
+                    return (type, reasons)
+                }
+            )
+            XCTAssertEqual(
+                reasons["NSPrivacyAccessedAPICategoryUserDefaults"],
+                ["CA92.1"],
+                label
+            )
+            XCTAssertEqual(
+                reasons["NSPrivacyAccessedAPICategoryFileTimestamp"],
+                ["C617.1"],
+                label
+            )
+        }
+    }
+
     private func entitlements(at url: URL) throws -> [String: Any] {
         try propertyList(at: url)
     }

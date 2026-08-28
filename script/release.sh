@@ -199,6 +199,7 @@ for required_file in \
   "$ROOT_DIR/Resources/OmniDock-Info.plist" \
   "$ROOT_DIR/Resources/OmniDockFinderSync-Info.plist" \
   "$ROOT_DIR/Resources/PrivacyInfo.xcprivacy" \
+  "$ROOT_DIR/Resources/FinderSync/PrivacyInfo.xcprivacy" \
   "$ROOT_DIR/Sources/OmniDockCore/Resources/en.lproj/AppStrings.strings" \
   "$ROOT_DIR/Sources/OmniDockCore/Resources/en.lproj/InfoPlist.strings" \
   "$ROOT_DIR/Sources/OmniDockCore/Resources/zh-Hans.lproj/AppStrings.strings" \
@@ -549,6 +550,7 @@ verify_bundle_resources() {
     "$contents/MacOS/$APP_NAME" \
     "$contents/PlugIns/$FINDER_EXTENSION_NAME.appex/Contents/Info.plist" \
     "$contents/PlugIns/$FINDER_EXTENSION_NAME.appex/Contents/MacOS/$FINDER_EXTENSION_NAME" \
+    "$contents/PlugIns/$FINDER_EXTENSION_NAME.appex/Contents/Resources/PrivacyInfo.xcprivacy" \
     "$resources/AppIcon.icns" \
     "$resources/Assets.car" \
     "$resources/$BUNDLED_LICENSE_NAME" \
@@ -559,6 +561,13 @@ verify_bundle_resources() {
     "$resources/zh-Hans.lproj/InfoPlist.strings"; do
     [[ -f "$required_file" ]] || die "app bundle is missing required resource: $required_file"
   done
+
+  if /usr/bin/cmp -s \
+    "$resources/PrivacyInfo.xcprivacy" \
+    "$contents/PlugIns/$FINDER_EXTENSION_NAME.appex/Contents/Resources/PrivacyInfo.xcprivacy"
+  then
+    die "Finder extension is shipping the app's privacy manifest"
+  fi
 
   [[ -x "$contents/MacOS/$APP_NAME" ]] || die "app executable is not executable"
   [[ -x "$contents/PlugIns/$FINDER_EXTENSION_NAME.appex/Contents/MacOS/$FINDER_EXTENSION_NAME" ]] \

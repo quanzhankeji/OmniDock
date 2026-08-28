@@ -54,6 +54,8 @@ jobs:
           plutil -lint Resources/OmniDock-AppStore.entitlements
           plutil -lint Resources/OmniDockFinderSync-Info.plist
           plutil -lint Resources/OmniDockFinderSync.entitlements
+          plutil -lint Resources/PrivacyInfo.xcprivacy
+          plutil -lint Resources/FinderSync/PrivacyInfo.xcprivacy
           test "$(plutil -extract 'com\.apple\.security\.app-sandbox' raw Resources/OmniDock-AppStore.entitlements)" = "true"
           test "$(plutil -extract 'com\.apple\.security\.files\.user-selected\.read-write' raw Resources/OmniDock-AppStore.entitlements)" = "true"
           test "$(plutil -extract 'com\.apple\.security\.app-sandbox' raw Resources/OmniDockFinderSync.entitlements)" = "true"
@@ -96,6 +98,14 @@ jobs:
           test "$(plutil -extract 'NSExtension.NSExtensionPointIdentifier' raw "$extension/Contents/Info.plist")" = "com.apple.FinderSync"
           lipo "$binary" -verify_arch arm64 x86_64
           test "$(lipo "$binary" -archs | awk '{ print NF }')" -eq 2
+
+          # Each bundle carries its own privacy manifest; the extension's must
+          # not be the app's copy.
+          test -f "$extension/Contents/Resources/PrivacyInfo.xcprivacy"
+          plutil -lint "$extension/Contents/Resources/PrivacyInfo.xcprivacy"
+          ! cmp -s \
+            "$resources/PrivacyInfo.xcprivacy" \
+            "$extension/Contents/Resources/PrivacyInfo.xcprivacy"
 
           for file in \
             "$app/Contents/Info.plist" \
