@@ -26,6 +26,63 @@ final class ApplicationUpdateModelsTests: XCTestCase {
         XCTAssertEqual(release.installableZIPAsset?.sha256Digest, digest)
     }
 
+    func testAssetsHostedOutsideGitHubAreRejected() throws {
+        let digest = "sha256:\(String(repeating: "a", count: 64))"
+        for downloadURL in [
+            "https://example.com/OmniDock-1.2.2.zip",
+            "http://github.com/quanzhankeji/OmniDock/releases/download/1.2.2/OmniDock-1.2.2.zip",
+            "https://github.com.example.com/OmniDock-1.2.2.zip",
+            "https://evil-githubusercontent.com/OmniDock-1.2.2.zip",
+            "file:///tmp/OmniDock-1.2.2.zip"
+        ] {
+            let release = try decodeRelease(
+                tag: "1.2.2",
+                assets: [
+                    assetJSON(
+                        name: "OmniDock-1.2.2.zip",
+                        state: "uploaded",
+                        digest: digest,
+                        downloadURL: downloadURL
+                    )
+                ]
+            )
+            XCTAssertNil(release.installableZIPAsset, downloadURL)
+        }
+    }
+
+    func testAssetsOnGitHubContentDeliveryHostsAreAccepted() throws {
+        let digest = "sha256:\(String(repeating: "a", count: 64))"
+        let release = try decodeRelease(
+            tag: "1.2.2",
+            assets: [
+                assetJSON(
+                    name: "OmniDock-1.2.2.zip",
+                    state: "uploaded",
+                    digest: digest,
+                    downloadURL: "https://objects.githubusercontent.com/OmniDock-1.2.2.zip"
+                )
+            ]
+        )
+
+        XCTAssertEqual(release.installableZIPAsset?.name, "OmniDock-1.2.2.zip")
+    }
+
+    func testOnlyGitHubReleasePagesAreOpened() throws {
+        XCTAssertTrue(GitHubURLPolicy.isTrustedPageURL(
+            try XCTUnwrap(URL(string: "https://github.com/quanzhankeji/OmniDock/releases/tag/1.2.2"))
+        ))
+        // Asset delivery hosts are not release pages.
+        XCTAssertFalse(GitHubURLPolicy.isTrustedPageURL(
+            try XCTUnwrap(URL(string: "https://objects.githubusercontent.com/anything"))
+        ))
+        XCTAssertFalse(GitHubURLPolicy.isTrustedPageURL(
+            try XCTUnwrap(URL(string: "x-apple.systempreferences:com.apple.preference.security"))
+        ))
+        XCTAssertFalse(GitHubURLPolicy.isTrustedPageURL(
+            try XCTUnwrap(URL(string: "https://example.com/releases"))
+        ))
+    }
+
     func testDraftAndPrereleaseAreNotInstallable() throws {
         let draft = try decodeRelease(tag: "1.3.0", draft: true)
         let prerelease = try decodeRelease(tag: "1.3.0-beta.1", prerelease: true)
@@ -92,6 +149,39 @@ final class ApplicationUpdateModelsTests: XCTestCase {
             ),
             "2d615fab22b744fd9f90bb1f893c9c4b611c7b69f0b85138c93a7fc74fe60fa0"
         )
+    }
+
+    func testInstallerHelperIgnoresManifestOutsideTheUpdateStagingArea() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString,
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: root,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let readinessURL = root.appendingPathComponent("helper-ready")
+        let manifestURL = root.appendingPathComponent("install.json")
+        let manifest = UpdateInstallerManifest(
+            targetAppURL: root.appendingPathComponent("OmniDock.app"),
+            stagedAppURL: root.appendingPathComponent("Staged/OmniDock.app"),
+            cleanupDirectoryURL: root,
+            readinessFileURL: readinessURL,
+            currentProcessIdentifier: ProcessInfo.processInfo.processIdentifier,
+            expectedVersion: "99.0.0"
+        )
+        try JSONEncoder().encode(manifest).write(to: manifestURL)
+
+        XCTAssertTrue(UpdateInstallerCommand.runIfRequested(arguments: [
+            "OmniDock",
+            "--omnidock-apply-update",
+            manifestURL.path
+        ]))
+        // The helper reports readiness before it does any work, so an untouched
+        // readiness file proves the manifest was rejected up front.
+        XCTAssertFalse(FileManager.default.fileExists(atPath: readinessURL.path))
     }
 
     func testAtomicReplacementMovesNewAppAndRemovesOldApp() throws {
@@ -191,11 +281,13 @@ final class ApplicationUpdateModelsTests: XCTestCase {
     private func assetJSON(
         name: String,
         state: String,
-        digest: String
+        digest: String,
+        downloadURL: String? = nil
     ) -> [String: Any] {
         [
             "name": name,
-            "browser_download_url": "https://example.com/\(name)",
+            "browser_download_url": downloadURL
+                ?? "https://github.com/quanzhankeji/OmniDock/releases/download/1.2.2/\(name)",
             "size": 1024,
             "digest": digest,
             "state": state

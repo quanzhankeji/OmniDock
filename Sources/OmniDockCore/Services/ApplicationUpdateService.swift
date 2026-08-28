@@ -98,8 +98,13 @@ final class ApplicationUpdateService {
     }
 
     func openLatestReleasePage() {
-        let url = latestRelease?.pageURL
-            ?? URL(string: "https://github.com/quanzhankeji/OmniDock/releases/latest")!
+        let releasesURL = URL(
+            string: "https://github.com/quanzhankeji/OmniDock/releases/latest"
+        )!
+        let pageURL = latestRelease?.pageURL
+        let url = pageURL.flatMap {
+            GitHubURLPolicy.isTrustedPageURL($0) ? $0 : nil
+        } ?? releasesURL
         NSWorkspace.shared.open(url)
     }
 

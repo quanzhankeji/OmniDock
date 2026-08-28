@@ -67,7 +67,22 @@ struct UpdateInstallerManifest: Codable {
     let readinessFileURL: URL
     let currentProcessIdentifier: Int32
     let expectedVersion: String
-    let designatedRequirement: String
+}
+
+// Both the app and the helper resolve the staging area the same way, so the
+// helper can reject a manifest handed to it from anywhere else on disk.
+enum UpdateWorkingDirectory {
+    static func rootURL(fileManager: FileManager = .default) throws -> URL {
+        try fileManager.url(
+            for: .cachesDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        ).appendingPathComponent(
+            "com.quanzhankeji.OmniDock/Updates",
+            isDirectory: true
+        )
+    }
 }
 
 enum UpdateArtifactIntegrity {
@@ -130,7 +145,38 @@ enum UpdateBundleValidator {
         else {
             throw UpdatePackageError.signatureInvalid
         }
+        return try designatedRequirementText(for: staticCode)
+    }
 
+    // The installer helper is reachable from the command line, so anything it
+    // reads out of the manifest file is attacker-controlled: a permissive
+    // requirement passed in there would make the signature check meaningless.
+    // Deriving it from the running code instead ties the check to the copy of
+    // OmniDock that is actually performing the installation.
+    static func runningDesignatedRequirement() throws -> String {
+        var code: SecCode?
+        guard SecCodeCopySelf(SecCSFlags(), &code) == errSecSuccess,
+              let code
+        else {
+            throw UpdatePackageError.signatureInvalid
+        }
+
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(
+            code,
+            SecCSFlags(),
+            &staticCode
+        ) == errSecSuccess,
+        let staticCode
+        else {
+            throw UpdatePackageError.signatureInvalid
+        }
+        return try designatedRequirementText(for: staticCode)
+    }
+
+    private static func designatedRequirementText(
+        for staticCode: SecStaticCode
+    ) throws -> String {
         var requirement: SecRequirement?
         guard SecCodeCopyDesignatedRequirement(
             staticCode,
@@ -393,8 +439,7 @@ final class UpdatePackageInstaller: @unchecked Sendable {
             cleanupDirectoryURL: preparedUpdate.workingDirectory,
             readinessFileURL: readinessFileURL,
             currentProcessIdentifier: ProcessInfo.processInfo.processIdentifier,
-            expectedVersion: version.displayValue,
-            designatedRequirement: preparedUpdate.designatedRequirement
+            expectedVersion: version.displayValue
         )
         let manifestURL = preparedUpdate.workingDirectory.appendingPathComponent(
             "install.json"
@@ -439,15 +484,7 @@ final class UpdatePackageInstaller: @unchecked Sendable {
     }
 
     private func makeWorkingDirectory() throws -> URL {
-        let root = try fileManager.url(
-            for: .cachesDirectory,
-            in: .userDomainMask,
-            appropriateFor: nil,
-            create: true
-        ).appendingPathComponent(
-            "com.quanzhankeji.OmniDock/Updates",
-            isDirectory: true
-        )
+        let root = try UpdateWorkingDirectory.rootURL(fileManager: fileManager)
         try fileManager.createDirectory(
             at: root,
             withIntermediateDirectories: true
@@ -523,6 +560,9 @@ final class UpdateAssetDownloader: NSObject, URLSessionDownloadDelegate, @unchec
     ) async throws {
         guard asset.size > 0, asset.size <= maximumSize else {
             throw UpdatePackageError.assetTooLarge
+        }
+        guard GitHubURLPolicy.isTrustedAssetURL(asset.downloadURL) else {
+            throw UpdatePackageError.archiveInvalid
         }
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -651,6 +691,15 @@ public enum UpdateInstallerCommand {
 
         let manifestURL = URL(fileURLWithPath: arguments[2])
         do {
+            // Only manifests the app itself staged are honoured. This does not
+            // stand on its own - the staging area is user-writable - but it
+            // keeps the helper from being pointed at arbitrary files on disk.
+            guard isDescendant(
+                manifestURL,
+                of: try UpdateWorkingDirectory.rootURL()
+            ) else {
+                throw UpdatePackageError.installationUnavailable
+            }
             let data = try Data(contentsOf: manifestURL)
             let manifest = try JSONDecoder().decode(
                 UpdateInstallerManifest.self,
@@ -682,6 +731,8 @@ public enum UpdateInstallerCommand {
         else {
             throw UpdatePackageError.versionMismatch
         }
+        let designatedRequirement = try UpdateBundleValidator
+            .runningDesignatedRequirement()
 
         let fileManager = FileManager.default
         let targetURL = manifest.targetAppURL.resolvingSymlinksInPath()
@@ -705,7 +756,7 @@ public enum UpdateInstallerCommand {
         try UpdateBundleValidator.validate(
             appURL: targetURL,
             expectedVersion: installedVersion,
-            designatedRequirement: manifest.designatedRequirement,
+            designatedRequirement: designatedRequirement,
             assessGatekeeper: false
         )
 
@@ -726,7 +777,7 @@ public enum UpdateInstallerCommand {
             try UpdateBundleValidator.validate(
                 appURL: incomingURL,
                 expectedVersion: expectedVersion,
-                designatedRequirement: manifest.designatedRequirement
+                designatedRequirement: designatedRequirement
             )
             do {
                 try UpdateAtomicReplacement.perform(
@@ -749,10 +800,14 @@ public enum UpdateInstallerCommand {
         }
     }
 
+    // Symlinks are resolved on both sides so that a path spelled through
+    // "/var" is not treated as living outside its "/private/var" parent.
     private static func isDescendant(_ url: URL, of directoryURL: URL) -> Bool {
-        let directoryPath = directoryURL.standardizedFileURL.path
+        let directoryPath = directoryURL.resolvingSymlinksInPath()
+            .standardizedFileURL.path
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let candidatePath = url.standardizedFileURL.path
+        let candidatePath = url.resolvingSymlinksInPath()
+            .standardizedFileURL.path
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         return candidatePath.hasPrefix(directoryPath + "/")
     }

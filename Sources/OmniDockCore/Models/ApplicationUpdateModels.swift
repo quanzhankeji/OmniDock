@@ -89,6 +89,39 @@ struct SemanticVersion: Codable, Comparable, Hashable, Sendable {
     }
 }
 
+// Release JSON decides what the updater downloads and which page it opens, so
+// every URL taken from it is confined to GitHub over TLS. The SHA-256 digest
+// and the code signature still gate the payload itself; this stops a tampered
+// or unexpected response from sending the app off-platform to begin with.
+enum GitHubURLPolicy {
+    private static let websiteHosts: Set<String> = ["github.com", "www.github.com"]
+    private static let assetHostSuffix = ".githubusercontent.com"
+
+    static func isTrustedAssetURL(_ url: URL) -> Bool {
+        guard let host = secureHost(of: url) else {
+            return false
+        }
+        return websiteHosts.contains(host) || host.hasSuffix(assetHostSuffix)
+    }
+
+    static func isTrustedPageURL(_ url: URL) -> Bool {
+        guard let host = secureHost(of: url) else {
+            return false
+        }
+        return websiteHosts.contains(host)
+    }
+
+    private static func secureHost(of url: URL) -> String? {
+        guard url.scheme?.caseInsensitiveCompare("https") == .orderedSame,
+              let host = url.host?.lowercased(),
+              !host.isEmpty
+        else {
+            return nil
+        }
+        return host
+    }
+}
+
 struct GitHubReleaseAsset: Codable, Equatable, Sendable {
     let name: String
     let downloadURL: URL
@@ -149,7 +182,9 @@ struct GitHubRelease: Codable, Equatable, Sendable {
         }
         let expectedName = "OmniDock-\(version.displayValue).\(fileExtension)"
         return assets.first {
-            $0.name == expectedName && $0.state == "uploaded"
+            $0.name == expectedName
+                && $0.state == "uploaded"
+                && GitHubURLPolicy.isTrustedAssetURL($0.downloadURL)
         }
     }
 
