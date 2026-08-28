@@ -214,6 +214,8 @@
 "clipboardStorageUnavailable" = "Clipboard history could not be saved to disk. New entries will be kept only for this session.";
 "clipboardCopyFailed" = "Unable to copy this history item.";
 "clipboardPasteNeedsAccessibility" = "Copied. Automatic paste requires Accessibility permission.";
+"clipboardPasteTargetUnavailable" = "Copied. Automatic paste was skipped because the target app is no longer available.";
+"clipboardPasteSecureInputActive" = "Copied. Automatic paste was skipped because secure input is active.";
 "clipboardPreviewFirstCopied" = "First copied: %@";
 "clipboardPreviewLastCopied" = "Last copied: %@";
 "clipboardPreviewCopyCount" = "Copies: %d";

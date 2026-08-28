@@ -214,6 +214,8 @@
 "clipboardStorageUnavailable" = "无法将剪贴板历史保存到磁盘；本次运行的新记录只会保留在内存中。";
 "clipboardCopyFailed" = "无法复制这条历史记录。";
 "clipboardPasteNeedsAccessibility" = "已复制；自动粘贴需要辅助功能权限。";
+"clipboardPasteTargetUnavailable" = "已复制；目标应用已不可用，已跳过自动粘贴。";
+"clipboardPasteSecureInputActive" = "已复制；系统正处于安全输入状态，已跳过自动粘贴。";
 "clipboardPreviewFirstCopied" = "首次复制：%@";
 "clipboardPreviewLastCopied" = "最近复制：%@";
 "clipboardPreviewCopyCount" = "复制次数：%d";

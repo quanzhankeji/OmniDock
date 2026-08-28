@@ -216,6 +216,8 @@ enum AppStringKey: String, CaseIterable {
     case clipboardStorageUnavailable
     case clipboardCopyFailed
     case clipboardPasteNeedsAccessibility
+    case clipboardPasteTargetUnavailable
+    case clipboardPasteSecureInputActive
     case clipboardPreviewFirstCopied
     case clipboardPreviewLastCopied
     case clipboardPreviewCopyCount

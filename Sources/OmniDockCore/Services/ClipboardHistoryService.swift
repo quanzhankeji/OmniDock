@@ -9,6 +9,62 @@ enum ClipboardHistoryShortcut {
     )
 }
 
+enum ClipboardAutoPasteReadiness: Equatable {
+    case ready
+    case targetUnavailable
+    case secureInputActive
+}
+
+enum ClipboardAutoPasteStep: Equatable {
+    case paste
+    case wait
+    case cancel
+}
+
+// A synthetic Command-V goes to whichever application owns keyboard focus when
+// it is posted, not to the one the palette was opened over. Activation is
+// asynchronous, so pasting on a fixed delay can deliver clipboard content -
+// frequently a password or token - into an unintended application. These rules
+// keep the paste tied to the intended target and abandon it otherwise; the
+// entry is already on the pasteboard, so the user can still paste manually.
+enum ClipboardAutoPastePolicy {
+    static let activationTimeout: TimeInterval = 0.6
+    static let activationPollInterval: TimeInterval = 0.02
+
+    static func readiness(
+        hasTarget: Bool,
+        isTargetTerminated: Bool,
+        isSecureInputEnabled: Bool
+    ) -> ClipboardAutoPasteReadiness {
+        guard hasTarget, !isTargetTerminated else {
+            return .targetUnavailable
+        }
+        // Secure input suppresses synthetic key events, so the paste would be
+        // silently dropped. Say so instead of appearing to do nothing.
+        guard !isSecureInputEnabled else {
+            return .secureInputActive
+        }
+        return .ready
+    }
+
+    static func step(
+        frontmostProcessIdentifier: pid_t?,
+        targetProcessIdentifier: pid_t,
+        isTargetTerminated: Bool,
+        isSecureInputEnabled: Bool,
+        now: Date,
+        deadline: Date
+    ) -> ClipboardAutoPasteStep {
+        guard !isTargetTerminated, !isSecureInputEnabled else {
+            return .cancel
+        }
+        guard frontmostProcessIdentifier == targetProcessIdentifier else {
+            return now < deadline ? .wait : .cancel
+        }
+        return .paste
+    }
+}
+
 @MainActor
 final class ClipboardHistoryRegistrationStatus {
     static let changedNotification = Notification.Name("OmniDockClipboardHistoryRegistrationChanged")
@@ -343,11 +399,67 @@ final class ClipboardHistoryService {
             return
         }
 
-        panelController.hide()
-        sourceApplication?.activate(options: [.activateIgnoringOtherApps])
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-            Self.postPasteShortcut()
+        switch ClipboardAutoPastePolicy.readiness(
+            hasTarget: sourceApplication != nil,
+            isTargetTerminated: sourceApplication?.isTerminated ?? true,
+            isSecureInputEnabled: Self.isSecureInputEnabled()
+        ) {
+        case .ready:
+            guard let targetApplication = sourceApplication else {
+                return
+            }
+            panelController.hide()
+            targetApplication.activate(options: [.activateIgnoringOtherApps])
+            pasteWhenTargetBecomesFrontmost(
+                targetApplication,
+                deadline: Date().addingTimeInterval(
+                    ClipboardAutoPastePolicy.activationTimeout
+                )
+            )
+        case .targetUnavailable:
+            panelController.showTransientMessage(
+                AppStrings.text(.clipboardPasteTargetUnavailable),
+                hideAfter: 1.2
+            )
+        case .secureInputActive:
+            panelController.showTransientMessage(
+                AppStrings.text(.clipboardPasteSecureInputActive),
+                hideAfter: 1.2
+            )
         }
+    }
+
+    private func pasteWhenTargetBecomesFrontmost(
+        _ target: NSRunningApplication,
+        deadline: Date
+    ) {
+        switch ClipboardAutoPastePolicy.step(
+            frontmostProcessIdentifier: NSWorkspace.shared
+                .frontmostApplication?
+                .processIdentifier,
+            targetProcessIdentifier: target.processIdentifier,
+            isTargetTerminated: target.isTerminated,
+            isSecureInputEnabled: Self.isSecureInputEnabled(),
+            now: Date(),
+            deadline: deadline
+        ) {
+        case .paste:
+            Self.postPasteShortcut()
+        case .wait:
+            DispatchQueue.main.asyncAfter(
+                deadline: .now() + ClipboardAutoPastePolicy.activationPollInterval
+            ) { [weak self] in
+                self?.pasteWhenTargetBecomesFrontmost(target, deadline: deadline)
+            }
+        case .cancel:
+            // The palette is already hidden and the entry is on the pasteboard,
+            // so the user can paste manually where they intended.
+            break
+        }
+    }
+
+    private static func isSecureInputEnabled() -> Bool {
+        IsSecureEventInputEnabled()
     }
 
     private func refreshRecords() {

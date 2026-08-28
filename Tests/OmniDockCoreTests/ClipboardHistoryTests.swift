@@ -528,6 +528,83 @@ final class ClipboardHistoryTests: XCTestCase {
         XCTAssertEqual(try posixPermissions(of: blobURL), 0o600)
     }
 
+    func testAutoPasteReadinessRejectsMissingTargetAndSecureInput() {
+        XCTAssertEqual(
+            ClipboardAutoPastePolicy.readiness(
+                hasTarget: true,
+                isTargetTerminated: false,
+                isSecureInputEnabled: false
+            ),
+            .ready
+        )
+        XCTAssertEqual(
+            ClipboardAutoPastePolicy.readiness(
+                hasTarget: false,
+                isTargetTerminated: false,
+                isSecureInputEnabled: false
+            ),
+            .targetUnavailable
+        )
+        XCTAssertEqual(
+            ClipboardAutoPastePolicy.readiness(
+                hasTarget: true,
+                isTargetTerminated: true,
+                isSecureInputEnabled: false
+            ),
+            .targetUnavailable
+        )
+        XCTAssertEqual(
+            ClipboardAutoPastePolicy.readiness(
+                hasTarget: true,
+                isTargetTerminated: false,
+                isSecureInputEnabled: true
+            ),
+            .secureInputActive
+        )
+    }
+
+    func testAutoPasteWaitsForTargetInsteadOfPastingIntoAnotherApp() {
+        let now = Date()
+        let deadline = now.addingTimeInterval(
+            ClipboardAutoPastePolicy.activationTimeout
+        )
+
+        XCTAssertEqual(
+            autoPasteStep(frontmost: 42, now: now, deadline: deadline),
+            .wait
+        )
+        XCTAssertEqual(
+            autoPasteStep(frontmost: nil, now: now, deadline: deadline),
+            .wait
+        )
+        XCTAssertEqual(
+            autoPasteStep(frontmost: 7, now: now, deadline: deadline),
+            .paste
+        )
+        XCTAssertEqual(
+            autoPasteStep(frontmost: 42, now: deadline, deadline: deadline),
+            .cancel
+        )
+        XCTAssertEqual(
+            autoPasteStep(
+                frontmost: 7,
+                now: now,
+                deadline: deadline,
+                isTargetTerminated: true
+            ),
+            .cancel
+        )
+        XCTAssertEqual(
+            autoPasteStep(
+                frontmost: 7,
+                now: now,
+                deadline: deadline,
+                isSecureInputEnabled: true
+            ),
+            .cancel
+        )
+    }
+
     func testStoredArchiveLeavesNoClipboardTextOnDisk() throws {
         let directory = try makeStoreDirectory()
         let storeURL = directory.appendingPathComponent("Clipboard.sqlite")
@@ -1195,6 +1272,23 @@ final class ClipboardHistoryTests: XCTestCase {
     private func posixPermissions(of url: URL) throws -> UInt16 {
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         return try XCTUnwrap((attributes[.posixPermissions] as? NSNumber)?.uint16Value)
+    }
+
+    private func autoPasteStep(
+        frontmost: pid_t?,
+        now: Date,
+        deadline: Date,
+        isTargetTerminated: Bool = false,
+        isSecureInputEnabled: Bool = false
+    ) -> ClipboardAutoPasteStep {
+        ClipboardAutoPastePolicy.step(
+            frontmostProcessIdentifier: frontmost,
+            targetProcessIdentifier: 7,
+            isTargetTerminated: isTargetTerminated,
+            isSecureInputEnabled: isSecureInputEnabled,
+            now: now,
+            deadline: deadline
+        )
     }
 
     private func isolatedDefaults() -> UserDefaults {
