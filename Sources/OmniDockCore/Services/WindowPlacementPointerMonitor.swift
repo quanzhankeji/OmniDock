@@ -96,6 +96,30 @@ enum WindowPlacementDragPolicy {
     }
 }
 
+// Escape cancels a drag, which needs a tap that can swallow the key so it never
+// reaches the window underneath. Interception is therefore open only between a
+// left-button press and its release: a persistent keyDown tap would route every
+// keystroke on the system through this process for as long as window placement
+// is enabled, which is a keylogger-shaped surface the feature does not need.
+enum WindowPlacementKeyboardInterceptionPolicy {
+    static func nextState(
+        isIntercepting: Bool,
+        eventType: CGEventType
+    ) -> Bool {
+        switch eventType {
+        case .leftMouseDown:
+            return true
+        case .leftMouseUp, .mouseMoved:
+            // A plain move means no button is held (a held button reports
+            // .leftMouseDragged), so this also recovers from a mouse-up that
+            // was missed while the tap was disabled.
+            return false
+        default:
+            return isIntercepting
+        }
+    }
+}
+
 enum WindowPlacementEscapeCancellationPolicy {
     static func isAvailable(
         isEnabled: Bool,
@@ -408,6 +432,8 @@ private final class WindowPlacementEventTapThread: @unchecked Sendable {
     private let handler: Handler
     private let lifecycleLock = NSLock()
     private var eventTap: CFMachPort?
+    private var keyboardTap: CFMachPort?
+    private var keyboardSource: CFRunLoopSource?
     private var runLoop: CFRunLoop?
     private var thread: Thread?
     private var stopped: DispatchSemaphore?
@@ -481,12 +507,80 @@ private final class WindowPlacementEventTapThread: @unchecked Sendable {
         type: CGEventType,
         event: CGEvent
     ) -> Unmanaged<CGEvent>? {
+        setKeyboardMonitoringEnabled(
+            WindowPlacementKeyboardInterceptionPolicy.nextState(
+                isIntercepting: isKeyboardMonitoringActive,
+                eventType: type
+            )
+        )
         let result = handler(type, event)
         guard type == .tapDisabledByTimeout || type == .tapDisabledByUserInput else {
             return result
         }
         scheduleRecovery()
         return result
+    }
+
+    private var isKeyboardMonitoringActive: Bool {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        return keyboardTap != nil
+    }
+
+    // Must be called on the tap thread: it mutates that thread's run loop.
+    fileprivate func setKeyboardMonitoringEnabled(_ isEnabled: Bool) {
+        lifecycleLock.lock()
+        let runLoop = self.runLoop
+        let isActive = keyboardTap != nil
+        lifecycleLock.unlock()
+
+        guard isEnabled != isActive,
+              let runLoop,
+              CFRunLoopGetCurrent() === runLoop
+        else {
+            return
+        }
+        guard isEnabled else {
+            teardownKeyboardTap(runLoop: runLoop)
+            return
+        }
+
+        let mask = CGEventMask(1) << CGEventMask(CGEventType.keyDown.rawValue)
+        guard let keyboardTap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: mask,
+            callback: windowPlacementEventTapCallback,
+            userInfo: Unmanaged.passUnretained(self).toOpaque()
+        ),
+        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, keyboardTap, 0)
+        else {
+            return
+        }
+        lifecycleLock.lock()
+        self.keyboardTap = keyboardTap
+        self.keyboardSource = source
+        lifecycleLock.unlock()
+        CFRunLoopAddSource(runLoop, source, .commonModes)
+        CGEvent.tapEnable(tap: keyboardTap, enable: true)
+    }
+
+    private func teardownKeyboardTap(runLoop: CFRunLoop?) {
+        lifecycleLock.lock()
+        let keyboardTap = self.keyboardTap
+        let keyboardSource = self.keyboardSource
+        self.keyboardTap = nil
+        self.keyboardSource = nil
+        lifecycleLock.unlock()
+
+        if let keyboardSource, let runLoop {
+            CFRunLoopRemoveSource(runLoop, keyboardSource, .commonModes)
+        }
+        if let keyboardTap {
+            CGEvent.tapEnable(tap: keyboardTap, enable: false)
+            CFMachPortInvalidate(keyboardTap)
+        }
     }
 
     private func run(
@@ -497,8 +591,7 @@ private final class WindowPlacementEventTapThread: @unchecked Sendable {
             CGEventType.mouseMoved,
             .leftMouseDown,
             .leftMouseDragged,
-            .leftMouseUp,
-            .keyDown
+            .leftMouseUp
         ].reduce(CGEventMask(0)) {
             $0 | (CGEventMask(1) << CGEventMask($1.rawValue))
         }
@@ -535,6 +628,7 @@ private final class WindowPlacementEventTapThread: @unchecked Sendable {
             CFRunLoopRun()
         }
 
+        teardownKeyboardTap(runLoop: runLoop)
         CFRunLoopRemoveSource(runLoop, source, .commonModes)
         CGEvent.tapEnable(tap: eventTap, enable: false)
         CFMachPortInvalidate(eventTap)
@@ -570,6 +664,12 @@ private final class WindowPlacementEventTapThread: @unchecked Sendable {
                 }
                 CGEvent.tapEnable(tap: eventTap, enable: true)
                 self.lifecycleLock.lock()
+                let keyboardTap = self.keyboardTap
+                self.lifecycleLock.unlock()
+                if let keyboardTap {
+                    CGEvent.tapEnable(tap: keyboardTap, enable: true)
+                }
+                self.lifecycleLock.lock()
                 self.recoveryPolicy.didEnable(
                     at: ProcessInfo.processInfo.systemUptime
                 )
@@ -582,6 +682,8 @@ private final class WindowPlacementEventTapThread: @unchecked Sendable {
     private func clearState() {
         lifecycleLock.lock()
         eventTap = nil
+        keyboardTap = nil
+        keyboardSource = nil
         runLoop = nil
         thread = nil
         stopped = nil

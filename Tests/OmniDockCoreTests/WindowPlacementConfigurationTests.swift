@@ -3,6 +3,32 @@ import AppKit
 @testable import OmniDockCore
 
 final class WindowPlacementConfigurationTests: XCTestCase {
+    func testKeyboardInterceptionOnlySpansTheLeftButtonPress() {
+        var isIntercepting = false
+        func advance(_ eventType: CGEventType) -> Bool {
+            isIntercepting = WindowPlacementKeyboardInterceptionPolicy.nextState(
+                isIntercepting: isIntercepting,
+                eventType: eventType
+            )
+            return isIntercepting
+        }
+
+        // Idle pointer movement never opens keyboard interception.
+        XCTAssertFalse(advance(.mouseMoved))
+        // A press may become a drag, so Escape has to be catchable from here...
+        XCTAssertTrue(advance(.leftMouseDown))
+        XCTAssertTrue(advance(.leftMouseDragged))
+        XCTAssertTrue(advance(.keyDown))
+        // ...and only until the button comes back up.
+        XCTAssertFalse(advance(.leftMouseUp))
+        XCTAssertFalse(advance(.keyDown))
+        XCTAssertFalse(advance(.leftMouseDragged))
+
+        // A missed mouse-up is recovered by the next plain move.
+        _ = advance(.leftMouseDown)
+        XCTAssertFalse(advance(.mouseMoved))
+    }
+
     func testSettingsWindowLayoutRejectsRestoredOversizedFrame() {
         XCTAssertEqual(
             SettingsWindowLayoutMetrics.normalizedContentSize(
