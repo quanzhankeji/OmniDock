@@ -5,8 +5,6 @@ MODE="${1:-run}"
 APP_NAME="OmniDock"
 BUNDLE_ID="com.quanzhankeji.OmniDock"
 MIN_SYSTEM_VERSION="12.3"
-MARKETING_VERSION="1.2.5"
-BUILD_NUMBER="15"
 
 usage() {
   echo "usage: $0 [run|--stage|--debug|--logs|--telemetry|--verify|--install|--install-finder-extension]" >&2
@@ -36,6 +34,13 @@ if [[ "$MODE" == "--debug" || "$MODE" == "debug" ]]; then
 fi
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VERSION_MANIFEST="$ROOT_DIR/VERSION.json"
+[[ -f "$VERSION_MANIFEST" ]] || {
+  echo "Missing version manifest: $VERSION_MANIFEST" >&2
+  exit 1
+}
+MARKETING_VERSION="$(/usr/bin/plutil -extract marketingVersion raw "$VERSION_MANIFEST")"
+BUILD_NUMBER="$(/usr/bin/plutil -extract buildNumber raw "$VERSION_MANIFEST")"
 DEFAULT_APP_DIR="${TMPDIR:-/tmp}/omnidock-app"
 DIST_DIR="${OMNIDOCK_APP_DIR:-$DEFAULT_APP_DIR}"
 APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
@@ -127,7 +132,15 @@ cat >"$INFO_PLIST" <<PLIST
   <key>NSScreenCaptureUsageDescription</key>
   <string>OmniDock uses Screen Recording permission to create window thumbnails, including live images and one-time static snapshots, above Dock icons.</string>
   <key>NSInputMonitoringUsageDescription</key>
-  <string>OmniDock uses input monitoring permission to detect repeated Dock icon clicks.</string>
+  <string>OmniDock uses Input Monitoring to detect Dock icon clicks and Option-Tab while its window switcher is open.</string>
+  <key>NSDesktopFolderUsageDescription</key>
+  <string>OmniDock needs access to your Desktop to create files from Finder right-click actions.</string>
+  <key>NSDocumentsFolderUsageDescription</key>
+  <string>OmniDock needs access to your Documents folder to create files from Finder right-click actions.</string>
+  <key>NSDownloadsFolderUsageDescription</key>
+  <string>OmniDock needs access to your Downloads folder to create files from Finder right-click actions.</string>
+  <key>NSRemovableVolumesUsageDescription</key>
+  <string>OmniDock needs access to removable volumes when you use Finder right-click file actions there.</string>
   <key>NSSupportsSuddenTermination</key>
   <false/>
 </dict>
@@ -383,6 +396,12 @@ verify_finder_extension_bundle() {
   local extension_entitlements
   local main_sandbox
   local extension_sandbox
+  local main_group
+  local extension_group
+  local main_info_group
+  local extension_info_group
+  local main_get_task_allow
+  local extension_get_task_allow
   main_entitlements="$(mktemp)"
   extension_entitlements="$(mktemp)"
 
@@ -395,6 +414,12 @@ verify_finder_extension_bundle() {
   /usr/bin/codesign -d --entitlements :- "$extension" >"$extension_entitlements" 2>/dev/null
   main_sandbox="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.app-sandbox' "$main_entitlements" 2>/dev/null || true)"
   extension_sandbox="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.app-sandbox' "$extension_entitlements" 2>/dev/null || true)"
+  main_group="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.application-groups:0' "$main_entitlements" 2>/dev/null || true)"
+  extension_group="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.application-groups:0' "$extension_entitlements" 2>/dev/null || true)"
+  main_info_group="$(/usr/libexec/PlistBuddy -c 'Print :OmniDockAppGroupIdentifier' "$bundle/Contents/Info.plist" 2>/dev/null || true)"
+  extension_info_group="$(/usr/libexec/PlistBuddy -c 'Print :OmniDockAppGroupIdentifier' "$extension_info" 2>/dev/null || true)"
+  main_get_task_allow="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.get-task-allow' "$main_entitlements" 2>/dev/null || true)"
+  extension_get_task_allow="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.get-task-allow' "$extension_entitlements" 2>/dev/null || true)"
 
   if [[ "$main_sandbox" == "true" ]]; then
     echo "Local OmniDock build must remain unsandboxed so cross-application controls work." >&2
@@ -403,6 +428,19 @@ verify_finder_extension_bundle() {
   fi
   if [[ "$extension_sandbox" != "true" ]]; then
     echo "Finder Sync extension must remain sandboxed." >&2
+    rm -f "$main_entitlements" "$extension_entitlements"
+    return 1
+  fi
+  if [[ -z "$main_group" || "$main_group" != "$extension_group" \
+        || "$main_group" != "$main_info_group" \
+        || "$main_group" != "$extension_info_group" \
+        || "$main_group" == *'$('* ]]; then
+    echo "Main app and Finder extension must use one resolved App Group." >&2
+    rm -f "$main_entitlements" "$extension_entitlements"
+    return 1
+  fi
+  if [[ "$main_get_task_allow" == "true" || "$extension_get_task_allow" == "true" ]]; then
+    echo "Release installation must not enable get-task-allow." >&2
     rm -f "$main_entitlements" "$extension_entitlements"
     return 1
   fi

@@ -651,8 +651,20 @@ enum FinderObservationRoots {
     ) -> Set<URL> {
         // Finder routes the desktop layer through the filesystem root on some systems.
         // Monitoring it does not grant the sandbox additional file access.
+        Set(
+            [URL(fileURLWithPath: "/", isDirectory: true)]
+                + commandTargetURLs(
+                    homeDirectory: homeDirectory,
+                    authorizedDirectoryPaths: authorizedDirectoryPaths
+                )
+        )
+    }
+
+    static func commandTargetURLs(
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        authorizedDirectoryPaths: [String] = []
+    ) -> [URL] {
         let standardDirectories = [
-            URL(fileURLWithPath: "/", isDirectory: true),
             desktopURL(homeDirectory: homeDirectory),
             homeDirectory.appendingPathComponent("Documents", isDirectory: true),
             homeDirectory.appendingPathComponent("Downloads", isDirectory: true),
@@ -669,7 +681,9 @@ enum FinderObservationRoots {
             URL(fileURLWithPath: $0, isDirectory: true)
         }
 
-        return Set((standardDirectories + authorizedDirectories).flatMap(canonicalURLs(for:)))
+        return Array(Set(
+            (standardDirectories + authorizedDirectories).flatMap(canonicalURLs(for:))
+        ))
     }
 
     static func folderURL(

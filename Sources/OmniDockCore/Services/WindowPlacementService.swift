@@ -124,6 +124,12 @@ final class WindowPlacementService {
         pointerMonitor.onDragSizeChanged = { [weak self] size, point in
             self?.sizeHUDController.show(size: size, near: point)
         }
+        pointerMonitor.onDragSizePointMoved = { [weak self] point in
+            self?.sizeHUDController.move(near: point)
+        }
+        pointerMonitor.onDragSizeSuspended = { [weak self] in
+            self?.sizeHUDController.suspend()
+        }
         pointerMonitor.onDragSizeHidden = { [weak self] in
             self?.sizeHUDController.hide()
         }
@@ -224,6 +230,11 @@ final class WindowPlacementService {
             registrationStatus.setWarning(nil)
         }
 
+        if configuration.showsSizeOnDrag {
+            // Build the bubble now so the first frame of a resize never pays
+            // for window creation and initial text layout.
+            sizeHUDController.prepare()
+        }
         if configuration.showsGreenButtonPalette
             || configuration.observesWindowDragging {
             pointerMonitor.start(configuration: configuration)

@@ -1,3 +1,4 @@
+import ApplicationServices
 import CoreGraphics
 import XCTest
 @testable import OmniDockCore
@@ -5,6 +6,20 @@ import XCTest
 final class DockClickGesturePolicyTests: XCTestCase {
     func testAccessibilityQueriesUseABoundedDefaultTimeout() {
         XCTAssertEqual(AccessibilityElementFactory.messagingTimeout, 0.5)
+    }
+
+    func testAccessibilityPointDecoderRejectsSizeValues() {
+        var size = CGSize(width: 42, height: 24)
+        let value = AXValueCreate(.cgSize, &size)
+
+        XCTAssertNil(AccessibilityElementFactory.point(from: value))
+    }
+
+    func testAccessibilitySizeDecoderRejectsPointValues() {
+        var point = CGPoint(x: 42, y: 24)
+        let value = AXValueCreate(.cgPoint, &point)
+
+        XCTAssertNil(AccessibilityElementFactory.size(from: value))
     }
 
     func testEventTapRecoveryUsesFiniteBackoff() {

@@ -1056,29 +1056,11 @@ private final class SystemCmdTabProcessSwitcherProvider: CmdTabProcessSwitcherPr
     }
 
     private func pointAttribute(_ attribute: String, from element: AXUIElement) -> CGPoint? {
-        var rawValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &rawValue) == .success,
-              let rawValue,
-              CFGetTypeID(rawValue) == AXValueGetTypeID()
-        else {
-            return nil
-        }
-        let value = rawValue as! AXValue
-        var point = CGPoint.zero
-        return AXValueGetValue(value, .cgPoint, &point) ? point : nil
+        AccessibilityElementFactory.pointAttribute(attribute, from: element)
     }
 
     private func sizeAttribute(_ attribute: String, from element: AXUIElement) -> CGSize? {
-        var rawValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &rawValue) == .success,
-              let rawValue,
-              CFGetTypeID(rawValue) == AXValueGetTypeID()
-        else {
-            return nil
-        }
-        let value = rawValue as! AXValue
-        var size = CGSize.zero
-        return AXValueGetValue(value, .cgSize, &size) ? size : nil
+        AccessibilityElementFactory.sizeAttribute(attribute, from: element)
     }
 }
 

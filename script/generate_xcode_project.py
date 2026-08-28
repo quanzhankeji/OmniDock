@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 from pathlib import Path
 import sys
 
@@ -46,6 +47,23 @@ def q(value: str) -> str:
 
 def rel(path: Path) -> str:
     return path.relative_to(ROOT).as_posix()
+
+
+def load_version_manifest() -> tuple[str, str]:
+    manifest_path = ROOT / "VERSION.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"Invalid VERSION.json: {error}") from error
+
+    marketing_version = manifest.get("marketingVersion")
+    build_number = manifest.get("buildNumber")
+    version_parts = marketing_version.split(".") if isinstance(marketing_version, str) else []
+    if len(version_parts) not in (2, 3) or not all(part.isdigit() for part in version_parts):
+        raise ValueError("VERSION.json marketingVersion must contain two or three integers")
+    if not isinstance(build_number, int) or isinstance(build_number, bool) or build_number < 1:
+        raise ValueError("VERSION.json buildNumber must be a positive integer")
+    return marketing_version, str(build_number)
 
 
 def list_app_sources() -> list[str]:
@@ -106,6 +124,7 @@ def build_settings(settings: dict[str, object], indent: str = "\t\t\t\t") -> str
 
 
 def generate_pbxproj() -> str:
+    marketing_version, build_number = load_version_manifest()
     swift_sources = list_app_sources()
     finder_extension_sources = list_finder_extension_sources()
     all_swift_sources = sorted(set([*swift_sources, *finder_extension_sources]))
@@ -578,6 +597,7 @@ done
     }
     release_project_settings = {
         **base_project_settings,
+        "CODE_SIGN_INJECT_BASE_ENTITLEMENTS": "NO",
         "DEBUG_INFORMATION_FORMAT": "dwarf-with-dsym",
         "ENABLE_NS_ASSERTIONS": "NO",
         "MTL_ENABLE_DEBUG_INFO": "NO",
@@ -589,13 +609,13 @@ done
         "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
         "CODE_SIGN_STYLE": "Automatic",
         "COMBINE_HIDPI_IMAGES": "YES",
-        "CURRENT_PROJECT_VERSION": "15",
+        "CURRENT_PROJECT_VERSION": build_number,
         "ENABLE_HARDENED_RUNTIME": "YES",
         "GENERATE_INFOPLIST_FILE": "NO",
         "INFOPLIST_FILE": "Resources/OmniDock-Info.plist",
         "LD_RUNPATH_SEARCH_PATHS": ["$(inherited)", "@executable_path/../Frameworks"],
         "MACOSX_DEPLOYMENT_TARGET": MIN_MACOS,
-        "MARKETING_VERSION": "1.2.5",
+        "MARKETING_VERSION": marketing_version,
         "PRODUCT_BUNDLE_IDENTIFIER": BUNDLE_ID,
         "PRODUCT_NAME": "$(TARGET_NAME)",
         "SDKROOT": "macosx",
@@ -617,13 +637,13 @@ done
         "APPLICATION_EXTENSION_API_ONLY": "YES",
         "CODE_SIGN_ENTITLEMENTS": "Resources/OmniDockFinderSync.entitlements",
         "CODE_SIGN_STYLE": "Automatic",
-        "CURRENT_PROJECT_VERSION": "15",
+        "CURRENT_PROJECT_VERSION": build_number,
         "ENABLE_HARDENED_RUNTIME": "YES",
         "GENERATE_INFOPLIST_FILE": "NO",
         "INFOPLIST_FILE": "Resources/OmniDockFinderSync-Info.plist",
         "LD_RUNPATH_SEARCH_PATHS": ["$(inherited)", "@executable_path/../Frameworks", "@loader_path/../Frameworks"],
         "MACOSX_DEPLOYMENT_TARGET": MIN_MACOS,
-        "MARKETING_VERSION": "1.2.5",
+        "MARKETING_VERSION": marketing_version,
         "PRODUCT_BUNDLE_IDENTIFIER": FINDER_EXTENSION_BUNDLE_ID,
         "PRODUCT_NAME": "$(TARGET_NAME)",
         "SDKROOT": "macosx",
@@ -779,6 +799,7 @@ def generated_outputs() -> list[tuple[Path, bytes]]:
 
 def missing_inputs() -> list[Path]:
     required = [
+        ROOT / "VERSION.json",
         ROOT / "Resources" / "Assets.xcassets",
         ROOT / "Resources" / "OmniDock-Development.entitlements",
         ROOT / "Resources" / "OmniDock-AppStore.entitlements",

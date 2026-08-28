@@ -187,6 +187,7 @@ SOURCE_COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 /usr/bin/xcrun --find stapler >/dev/null 2>&1 || die "stapler is unavailable in the active Xcode toolchain"
 
 for required_file in \
+  "$ROOT_DIR/VERSION.json" \
   "$ROOT_DIR/Package.swift" \
   "$ROOT_DIR/LICENSE" \
   "$ROOT_DIR/LICENSING.md" \
@@ -204,6 +205,12 @@ for required_file in \
   "$ROOT_DIR/Sources/OmniDockCore/Resources/zh-Hans.lproj/InfoPlist.strings"; do
   [[ -f "$required_file" ]] || die "required release input is missing: $required_file"
 done
+SOURCE_VERSION="$(/usr/bin/plutil -extract marketingVersion raw "$ROOT_DIR/VERSION.json")"
+SOURCE_BUILD_NUMBER="$(/usr/bin/plutil -extract buildNumber raw "$ROOT_DIR/VERSION.json")"
+[[ "$VERSION" == "$SOURCE_VERSION" ]] \
+  || die "--version must match VERSION.json ($SOURCE_VERSION)"
+[[ "$BUILD_NUMBER" == "$SOURCE_BUILD_NUMBER" ]] \
+  || die "--build must match VERSION.json ($SOURCE_BUILD_NUMBER)"
 SOURCE_LICENSE_SHA256="$(/usr/bin/shasum -a 256 "$ROOT_DIR/LICENSE" | /usr/bin/awk '{ print $1 }')"
 case "$LICENSE_MODE" in
   gpl)
@@ -636,6 +643,8 @@ verify_signed_app() {
   local extension_entitlements="$WORK_DIR/signed-extension-entitlements.plist"
   local app_sandbox
   local extension_sandbox
+  local app_get_task_allow
+  local extension_get_task_allow
 
   /usr/bin/codesign --verify --deep --strict --verbose=4 "$bundle"
   verify_developer_id_signature "$extension" "Finder extension"
@@ -657,10 +666,24 @@ verify_signed_app() {
       -extract "com\\.apple\\.security\\.app-sandbox" raw \
       "$extension_entitlements"
   )"
+  app_get_task_allow="$(
+    /usr/bin/plutil \
+      -extract "com\.apple\.security\.get-task-allow" raw \
+      "$app_entitlements" 2>/dev/null || true
+  )"
+  extension_get_task_allow="$(
+    /usr/bin/plutil \
+      -extract "com\.apple\.security\.get-task-allow" raw \
+      "$extension_entitlements" 2>/dev/null || true
+  )"
   [[ "$app_sandbox" != "true" ]] \
     || die "direct-distribution main app must not be sandboxed"
   [[ "$extension_sandbox" == "true" ]] \
     || die "Finder extension signature is missing App Sandbox"
+  [[ "$app_get_task_allow" != "true" ]] \
+    || die "direct-distribution main app signature enables get-task-allow"
+  [[ "$extension_get_task_allow" != "true" ]] \
+    || die "Finder extension signature enables get-task-allow"
   verify_application_group_entitlement \
     "$app_entitlements" \
     "main app signature"

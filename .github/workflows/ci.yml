@@ -44,6 +44,10 @@ jobs:
           ./script/release.sh --help | grep -q -- '--dmg-notary-submission-id <uuid>'
       - name: Verify generated project
         run: ./script/generate_xcode_project.py --check
+      - name: Verify version manifest
+        run: |
+          test -n "$(plutil -extract marketingVersion raw VERSION.json)"
+          test "$(plutil -extract buildNumber raw VERSION.json)" -gt 0
       - name: Validate App Store metadata inputs
         run: |
           plutil -lint Resources/OmniDock-Info.plist
@@ -83,6 +87,9 @@ jobs:
           )"
           expected_version="$(printf '%s\n' "$build_settings" | awk -F ' = ' '/^[[:space:]]*MARKETING_VERSION = / { print $2; exit }')"
           expected_build="$(printf '%s\n' "$build_settings" | awk -F ' = ' '/^[[:space:]]*CURRENT_PROJECT_VERSION = / { print $2; exit }')"
+          expected_manifest_version="$(plutil -extract marketingVersion raw VERSION.json)"
+          expected_manifest_build="$(plutil -extract buildNumber raw VERSION.json)"
+          release_base_entitlements="$(printf '%s\n' "$build_settings" | awk -F ' = ' '/^[[:space:]]*CODE_SIGN_INJECT_BASE_ENTITLEMENTS = / { print $2; exit }')"
 
           test -x "$binary"
           test -x "$extension/Contents/MacOS/OmniDockFinderSync"
@@ -111,5 +118,8 @@ jobs:
           test "$(plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist")" = "com.quanzhankeji.OmniDock"
           test -n "$expected_version"
           test -n "$expected_build"
+          test "$expected_version" = "$expected_manifest_version"
+          test "$expected_build" = "$expected_manifest_build"
+          test "$release_base_entitlements" = "NO"
           test "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" = "$expected_version"
           test "$(plutil -extract CFBundleVersion raw "$app/Contents/Info.plist")" = "$expected_build"

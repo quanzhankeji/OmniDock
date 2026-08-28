@@ -752,37 +752,11 @@ enum AccessibilityPreviewWindowReader {
     }
 
     private static func pointAttribute(_ attribute: String, from element: AXUIElement) -> CGPoint? {
-        var rawValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &rawValue) == .success,
-              let rawValue,
-              CFGetTypeID(rawValue) == AXValueGetTypeID()
-        else {
-            return nil
-        }
-
-        let value = rawValue as! AXValue
-        var point = CGPoint.zero
-        guard AXValueGetValue(value, .cgPoint, &point) else {
-            return nil
-        }
-        return point
+        AccessibilityElementFactory.pointAttribute(attribute, from: element)
     }
 
     private static func sizeAttribute(_ attribute: String, from element: AXUIElement) -> CGSize? {
-        var rawValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &rawValue) == .success,
-              let rawValue,
-              CFGetTypeID(rawValue) == AXValueGetTypeID()
-        else {
-            return nil
-        }
-
-        let value = rawValue as! AXValue
-        var size = CGSize.zero
-        guard AXValueGetValue(value, .cgSize, &size) else {
-            return nil
-        }
-        return size
+        AccessibilityElementFactory.sizeAttribute(attribute, from: element)
     }
 }
 

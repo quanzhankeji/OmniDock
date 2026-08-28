@@ -9,6 +9,8 @@ final class FinderFileCommandCoordinator: NSObject {
     private let directoryGrantStore: FinderDirectoryGrantStore
     private let fileManager: FileManager
     private let hiddenFilesController: FinderHiddenFilesController
+    private let homeDirectory: URL
+    private let revealFiles: ([URL]) -> Void
     private var isListening = false
 
     init(
@@ -16,13 +18,19 @@ final class FinderFileCommandCoordinator: NSObject {
         preferencesStore: FinderMenuPreferencesStore = FinderMenuPreferencesStore(),
         directoryGrantStore: FinderDirectoryGrantStore = FinderDirectoryGrantStore(),
         fileManager: FileManager = .default,
-        hiddenFilesController: FinderHiddenFilesController? = nil
+        hiddenFilesController: FinderHiddenFilesController? = nil,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        revealFiles: @escaping ([URL]) -> Void = {
+            NSWorkspace.shared.activateFileViewerSelecting($0)
+        }
     ) {
         self.requestMailbox = requestMailbox
         self.preferencesStore = preferencesStore
         self.directoryGrantStore = directoryGrantStore
         self.fileManager = fileManager
         self.hiddenFilesController = hiddenFilesController ?? FinderHiddenFilesController()
+        self.homeDirectory = homeDirectory
+        self.revealFiles = revealFiles
         super.init()
     }
 
@@ -61,12 +69,15 @@ final class FinderFileCommandCoordinator: NSObject {
     }
 
     func handle(requestID: UUID) {
-        guard let request = requestMailbox.take(id: requestID),
-              preferencesStore.snapshot().isEnabled
+        guard let request = requestMailbox.take(id: requestID) else {
+            return
+        }
+        let preferences = preferencesStore.snapshot()
+        guard preferences.isEnabled
         else {
             return
         }
-        execute(request.command)
+        execute(request.command, preferences: preferences)
     }
 
     @objc private func commandBecameAvailable(_ notification: Notification) {
@@ -76,18 +87,64 @@ final class FinderFileCommandCoordinator: NSObject {
         handle(requestID: requestID)
     }
 
-    private func execute(_ command: FinderCommand) {
+    private func execute(
+        _ command: FinderCommand,
+        preferences: FinderMenuPreferences
+    ) {
         switch command {
         case let .createDocument(fileExtension, directoryDisplayPath):
+            guard FinderCommandAuthorizationPolicy.documentPreset(
+                for: fileExtension,
+                preferences: preferences
+            ) != nil else {
+                return
+            }
+            let directory = URL(
+                fileURLWithPath: directoryDisplayPath,
+                isDirectory: true
+            )
+            guard FinderCommandAuthorizationPolicy.isAllowedTarget(
+                directory,
+                preferences: preferences,
+                homeDirectory: homeDirectory
+            ) else {
+                return
+            }
             createFile(
                 fileExtension: fileExtension,
                 directoryDisplayPath: directoryDisplayPath
             )
         case let .setHiddenFilesVisible(isVisible):
+            guard FinderCommandAuthorizationPolicy.allowsHiddenFilesCommand(
+                isVisible: isVisible,
+                preferences: preferences
+            ) else {
+                return
+            }
             hiddenFilesController.setHiddenFilesVisible(isVisible)
-        case let .openSelection(shortcut, selectedDisplayPaths):
+        case let .openSelection(requestedShortcut, selectedDisplayPaths):
+            guard let shortcut = FinderCommandAuthorizationPolicy.launchShortcut(
+                matching: requestedShortcut,
+                preferences: preferences
+            ) else {
+                return
+            }
+            let selectedURLs = selectedDisplayPaths.map {
+                URL(fileURLWithPath: $0).standardizedFileURL
+            }
+            guard !selectedURLs.isEmpty,
+                  selectedURLs.allSatisfy({
+                      FinderCommandAuthorizationPolicy.isAllowedTarget(
+                          $0,
+                          preferences: preferences,
+                          homeDirectory: homeDirectory
+                      )
+                  })
+            else {
+                return
+            }
             openSelection(
-                selectedDisplayPaths,
+                selectedURLs,
                 with: shortcut
             )
         }
@@ -200,7 +257,7 @@ final class FinderFileCommandCoordinator: NSObject {
     }
 
     private func reveal(_ file: URL) {
-        NSWorkspace.shared.activateFileViewerSelecting([file])
+        revealFiles([file])
     }
 
     nonisolated static func isPermissionFailure(_ error: Error) -> Bool {
@@ -214,11 +271,10 @@ final class FinderFileCommandCoordinator: NSObject {
     }
 
     private func openSelection(
-        _ selectedDisplayPaths: [String],
+        _ selectedURLs: [URL],
         with shortcut: FinderLaunchShortcut
     ) {
-        let urls = selectedDisplayPaths
-            .map { URL(fileURLWithPath: $0).standardizedFileURL }
+        let urls = selectedURLs
             .filter { fileManager.fileExists(atPath: $0.path) }
         guard !urls.isEmpty else {
             return
@@ -291,6 +347,57 @@ final class FinderFileCommandCoordinator: NSObject {
         )
         alert.addButton(withTitle: AppStrings.text(.finderExtensionFailureDismiss))
         alert.runModal()
+    }
+}
+
+enum FinderCommandAuthorizationPolicy {
+    static func isAllowedTarget(
+        _ target: URL,
+        preferences: FinderMenuPreferences,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> Bool {
+        let resolvedTarget = target.standardizedFileURL.resolvingSymlinksInPath()
+        return FinderObservationRoots.commandTargetURLs(
+            homeDirectory: homeDirectory,
+            authorizedDirectoryPaths: preferences.observationRootPaths
+        ).contains { root in
+            FinderDirectoryGrantStore.contains(
+                resolvedTarget,
+                in: root.resolvingSymlinksInPath()
+            )
+        }
+    }
+
+    static func documentPreset(
+        for fileExtension: String,
+        preferences: FinderMenuPreferences
+    ) -> FinderDocumentPreset? {
+        guard let normalizedExtension = FinderDocumentPreset.normalizedFileExtension(
+            fileExtension
+        ) else {
+            return nil
+        }
+        return preferences.documentPresets.first {
+            $0.isEnabled && $0.fileExtension == normalizedExtension
+        }
+    }
+
+    static func launchShortcut(
+        matching requestedShortcut: FinderLaunchShortcut,
+        preferences: FinderMenuPreferences
+    ) -> FinderLaunchShortcut? {
+        preferences.launchShortcuts.first {
+            $0.id == requestedShortcut.id && $0.isEnabled
+        }
+    }
+
+    static func allowsHiddenFilesCommand(
+        isVisible: Bool,
+        preferences: FinderMenuPreferences
+    ) -> Bool {
+        isVisible
+            ? preferences.showsShowHiddenFilesCommand
+            : preferences.showsHideHiddenFilesCommand
     }
 }
 

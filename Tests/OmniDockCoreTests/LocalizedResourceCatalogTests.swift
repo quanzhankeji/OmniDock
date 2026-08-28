@@ -209,7 +209,11 @@ final class LocalizedResourceCatalogTests: XCTestCase {
     func testInfoPlistPermissionStringsExistForSupportedLanguages() throws {
         let keys = [
             "NSScreenCaptureUsageDescription",
-            "NSInputMonitoringUsageDescription"
+            "NSInputMonitoringUsageDescription",
+            "NSDesktopFolderUsageDescription",
+            "NSDocumentsFolderUsageDescription",
+            "NSDownloadsFolderUsageDescription",
+            "NSRemovableVolumesUsageDescription"
         ]
 
         for language in AppLanguage.Resolved.allCases {

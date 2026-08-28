@@ -52,7 +52,7 @@ enum DisplayCoordinateConverter {
         )
     }
 
-    private static func displayID(containingQuartzPoint point: CGPoint) -> CGDirectDisplayID? {
+    static func displayID(containingQuartzPoint point: CGPoint) -> CGDirectDisplayID? {
         var displayID = CGDirectDisplayID()
         var displayCount: UInt32 = 0
         let status = CGGetDisplaysWithPoint(point, 1, &displayID, &displayCount)
@@ -62,7 +62,7 @@ enum DisplayCoordinateConverter {
         return displayID
     }
 
-    private static func screen(for displayID: CGDirectDisplayID) -> NSScreen? {
+    static func screen(for displayID: CGDirectDisplayID) -> NSScreen? {
         NSScreen.screens.first { screen in
             guard let screenNumber = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
                 return false

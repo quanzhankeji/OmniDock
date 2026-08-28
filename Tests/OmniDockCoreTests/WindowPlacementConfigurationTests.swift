@@ -755,26 +755,109 @@ final class WindowPlacementConfigurationTests: XCTestCase {
         ))
     }
 
-    func testSizeHUDHidesOnlyForSustainedRapidPointerMotion() {
-        XCTAssertTrue(WindowPlacementSizeHUDPolicy.isRapidPointerMotion(
+    func testSizeHUDMotionTrackerIgnoresAnIsolatedSpeedSpike() {
+        var tracker = WindowPlacementSizeHUDPolicy.MotionTracker()
+
+        XCTAssertFalse(tracker.record(
             from: .zero,
             to: CGPoint(x: 30, y: 0),
-            elapsed: 0.01
+            elapsed: 0.01,
+            timestamp: 0.01
         ))
-        XCTAssertFalse(WindowPlacementSizeHUDPolicy.isRapidPointerMotion(
+        for index in 2 ... 12 {
+            XCTAssertFalse(tracker.record(
+                from: .zero,
+                to: CGPoint(x: 3, y: 0),
+                elapsed: 0.01,
+                timestamp: Double(index) * 0.01
+            ))
+        }
+    }
+
+    func testSizeHUDMotionTrackerRequiresSustainedRapidMotion() {
+        var tracker = WindowPlacementSizeHUDPolicy.MotionTracker()
+
+        for index in 1 ... 5 {
+            XCTAssertFalse(tracker.record(
+                from: .zero,
+                to: CGPoint(x: 15, y: 0),
+                elapsed: 0.01,
+                timestamp: Double(index) * 0.01
+            ))
+        }
+        XCTAssertTrue(tracker.record(
+            from: .zero,
+            to: CGPoint(x: 15, y: 0),
+            elapsed: 0.01,
+            timestamp: 0.06
+        ))
+    }
+
+    func testSizeHUDMotionTrackerUsesHysteresisBeforeSettling() {
+        var tracker = WindowPlacementSizeHUDPolicy.MotionTracker()
+        for index in 1 ... 6 {
+            _ = tracker.record(
+                from: .zero,
+                to: CGPoint(x: 15, y: 0),
+                elapsed: 0.01,
+                timestamp: Double(index) * 0.01
+            )
+        }
+
+        XCTAssertTrue(tracker.record(
+            from: .zero,
+            to: CGPoint(x: 7, y: 0),
+            elapsed: 0.01,
+            timestamp: 0.07
+        ))
+
+        var isRapid = true
+        for index in 8 ... 30 {
+            isRapid = tracker.record(
+                from: .zero,
+                to: CGPoint(x: 3, y: 0),
+                elapsed: 0.01,
+                timestamp: Double(index) * 0.01
+            )
+        }
+        XCTAssertFalse(isRapid)
+    }
+
+    func testSizeHUDMotionTrackerCoalescesVeryShortSamples() {
+        var tracker = WindowPlacementSizeHUDPolicy.MotionTracker()
+
+        for index in 1 ... 3 {
+            XCTAssertFalse(tracker.record(
+                from: .zero,
+                to: CGPoint(x: 2, y: 0),
+                elapsed: 0.001,
+                timestamp: Double(index) * 0.001
+            ))
+        }
+        XCTAssertFalse(tracker.record(
             from: .zero,
             to: CGPoint(x: 2, y: 0),
-            elapsed: 0.02
+            elapsed: 0.002,
+            timestamp: 0.005
         ))
-        XCTAssertFalse(WindowPlacementSizeHUDPolicy.isRapidPointerMotion(
+    }
+
+    func testSizeHUDMotionTrackerResetsAfterAnIdleGap() {
+        var tracker = WindowPlacementSizeHUDPolicy.MotionTracker()
+        for index in 1 ... 6 {
+            _ = tracker.record(
+                from: .zero,
+                to: CGPoint(x: 15, y: 0),
+                elapsed: 0.01,
+                timestamp: Double(index) * 0.01
+            )
+        }
+
+        XCTAssertFalse(tracker.record(
             from: .zero,
             to: CGPoint(x: 300, y: 0),
-            elapsed: 0.3
-        ))
-        XCTAssertFalse(WindowPlacementSizeHUDPolicy.isRapidPointerMotion(
-            from: .zero,
-            to: CGPoint(x: 300, y: 0),
-            elapsed: 0
+            elapsed: 0.3,
+            timestamp: 0.36
         ))
     }
 

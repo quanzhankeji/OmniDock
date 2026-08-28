@@ -534,29 +534,11 @@ public final class DockHitTester {
     }
 
     private func pointAttribute(_ attribute: String, from element: AXUIElement) -> CGPoint? {
-        var rawValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &rawValue) == .success,
-              let rawValue,
-              CFGetTypeID(rawValue) == AXValueGetTypeID()
-        else {
-            return nil
-        }
-        var point = CGPoint.zero
-        AXValueGetValue(rawValue as! AXValue, .cgPoint, &point)
-        return point
+        AccessibilityElementFactory.pointAttribute(attribute, from: element)
     }
 
     private func sizeAttribute(_ attribute: String, from element: AXUIElement) -> CGSize? {
-        var rawValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, attribute as CFString, &rawValue) == .success,
-              let rawValue,
-              CFGetTypeID(rawValue) == AXValueGetTypeID()
-        else {
-            return nil
-        }
-        var size = CGSize.zero
-        AXValueGetValue(rawValue as! AXValue, .cgSize, &size)
-        return size
+        AccessibilityElementFactory.sizeAttribute(attribute, from: element)
     }
 
 }

@@ -1,2 +1,6 @@
 "NSScreenCaptureUsageDescription" = "OmniDock 使用屏幕录制权限生成窗口缩略图，包括实时画面和一次性静态截图。";
 "NSInputMonitoringUsageDescription" = "OmniDock 使用输入监控权限检测 Dock 图标点击，并且只在窗口切换器打开期间检测 Option-Tab。";
+"NSDesktopFolderUsageDescription" = "OmniDock 需要访问桌面，以便通过 Finder 右键操作新建文件。";
+"NSDocumentsFolderUsageDescription" = "OmniDock 需要访问文稿文件夹，以便通过 Finder 右键操作新建文件。";
+"NSDownloadsFolderUsageDescription" = "OmniDock 需要访问下载文件夹，以便通过 Finder 右键操作新建文件。";
+"NSRemovableVolumesUsageDescription" = "当你在可移动磁盘中使用 Finder 右键文件操作时，OmniDock 需要访问对应磁盘。";

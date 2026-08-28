@@ -52,6 +52,46 @@ final class BuildEntitlementsTests: XCTestCase {
         XCTAssertTrue(implementation.contains("final class FinderMenuExtension: FIFinderSync"))
     }
 
+    func testReleaseBuildUsesVersionManifestAndRejectsBaseDebugEntitlements() throws {
+        let root = repositoryRoot()
+        let manifestData = try Data(
+            contentsOf: root.appendingPathComponent("VERSION.json")
+        )
+        let manifest = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: manifestData) as? [String: Any]
+        )
+        let version = try XCTUnwrap(manifest["marketingVersion"] as? String)
+        let build = try XCTUnwrap(manifest["buildNumber"] as? Int)
+        let project = try String(
+            contentsOf: root
+                .appendingPathComponent("OmniDock.xcodeproj", isDirectory: true)
+                .appendingPathComponent("project.pbxproj"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(project.contains("MARKETING_VERSION = \"\(version)\";"))
+        XCTAssertTrue(project.contains("CURRENT_PROJECT_VERSION = \"\(build)\";"))
+        XCTAssertTrue(project.contains("CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;"))
+    }
+
+    func testMainInfoPlistDeclaresFinderFileAccessPurposes() throws {
+        let info = try propertyList(
+            at: repositoryRoot()
+                .appendingPathComponent("Resources", isDirectory: true)
+                .appendingPathComponent("OmniDock-Info.plist")
+        )
+        let keys = [
+            "NSDesktopFolderUsageDescription",
+            "NSDocumentsFolderUsageDescription",
+            "NSDownloadsFolderUsageDescription",
+            "NSRemovableVolumesUsageDescription"
+        ]
+
+        for key in keys {
+            XCTAssertFalse((info[key] as? String)?.isEmpty ?? true, "Missing \(key)")
+        }
+    }
+
     private func entitlements(at url: URL) throws -> [String: Any] {
         try propertyList(at: url)
     }

@@ -112,7 +112,106 @@ enum WindowPlacementSizeHUDPolicy {
     static let refreshInterval: TimeInterval = 1.0 / 30.0
     static let rapidMotionRevealDelay: TimeInterval = 0.14
     private static let resizeEdgeTolerance: CGFloat = 14
-    private static let rapidPointerSpeed: CGFloat = 900
+    private static let motionWindow: TimeInterval = 0.1
+    private static let minimumSampleInterval: TimeInterval = 1.0 / 240.0
+    private static let rapidMotionMinimumDuration: TimeInterval = 0.06
+    private static let settledMotionMinimumDuration: TimeInterval = 0.1
+    private static let rapidMotionMinimumSamples = 3
+    private static let rapidPointerSpeed: CGFloat = 1_100
+    private static let settledPointerSpeed: CGFloat = 450
+
+    struct MotionTracker {
+        private struct Sample {
+            let timestamp: TimeInterval
+            let distance: CGFloat
+            let elapsed: TimeInterval
+        }
+
+        private var samples: [Sample] = []
+        private var pendingDistance: CGFloat = 0
+        private var pendingElapsed: TimeInterval = 0
+        private var rapidSampleCount = 0
+        private var rapidDuration: TimeInterval = 0
+        private var settledDuration: TimeInterval = 0
+        private(set) var isRapid = false
+
+        mutating func record(
+            from start: CGPoint,
+            to end: CGPoint,
+            elapsed: TimeInterval,
+            timestamp: TimeInterval
+        ) -> Bool {
+            guard elapsed > 0, elapsed <= 0.25 else {
+                reset()
+                return false
+            }
+
+            pendingDistance += hypot(end.x - start.x, end.y - start.y)
+            pendingElapsed += elapsed
+            guard pendingElapsed >= minimumSampleInterval else {
+                return isRapid
+            }
+
+            samples.append(Sample(
+                timestamp: timestamp,
+                distance: pendingDistance,
+                elapsed: pendingElapsed
+            ))
+            pendingDistance = 0
+            pendingElapsed = 0
+            samples.removeAll {
+                timestamp - $0.timestamp > motionWindow
+            }
+
+            let totals = samples.reduce(into: (distance: CGFloat(0), elapsed: 0.0)) {
+                result, sample in
+                result.distance += sample.distance
+                result.elapsed += sample.elapsed
+            }
+            guard totals.elapsed > 0 else {
+                reset()
+                return false
+            }
+            let speed = totals.distance / totals.elapsed
+
+            if isRapid {
+                if speed <= settledPointerSpeed {
+                    settledDuration += samples.last?.elapsed ?? 0
+                    if settledDuration >= settledMotionMinimumDuration {
+                        reset()
+                    }
+                } else {
+                    settledDuration = 0
+                }
+                return isRapid
+            }
+
+            if speed >= rapidPointerSpeed {
+                rapidSampleCount += 1
+                rapidDuration += samples.last?.elapsed ?? 0
+                if rapidSampleCount >= rapidMotionMinimumSamples,
+                   rapidDuration >= rapidMotionMinimumDuration
+                {
+                    isRapid = true
+                    settledDuration = 0
+                }
+            } else {
+                rapidSampleCount = 0
+                rapidDuration = 0
+            }
+            return isRapid
+        }
+
+        mutating func reset() {
+            samples.removeAll(keepingCapacity: true)
+            pendingDistance = 0
+            pendingElapsed = 0
+            rapidSampleCount = 0
+            rapidDuration = 0
+            settledDuration = 0
+            isRapid = false
+        }
+    }
 
     static func beginsNearResizeEdge(
         at point: CGPoint,
@@ -139,17 +238,6 @@ enum WindowPlacementSizeHUDPolicy {
             && beganNearResizeEdge
     }
 
-    static func isRapidPointerMotion(
-        from start: CGPoint,
-        to end: CGPoint,
-        elapsed: TimeInterval
-    ) -> Bool {
-        guard elapsed > 0, elapsed <= 0.25 else {
-            return false
-        }
-        return hypot(end.x - start.x, end.y - start.y) / elapsed
-            >= rapidPointerSpeed
-    }
 }
 
 private final class WindowPlacementPointerState: @unchecked Sendable {
@@ -165,6 +253,8 @@ private final class WindowPlacementPointerState: @unchecked Sendable {
     private var dragCancellationAvailable = false
     private var dragCancellationPending = false
     private var lastPointerDispatchAt: TimeInterval = 0
+    private var pendingDragPoint: CGPoint?
+    private var pendingDragTimestamp: TimeInterval = 0
 
     func updateGreenButton(_ snapshot: GreenButtonSnapshot?) {
         lock.lock()
@@ -254,6 +344,39 @@ private final class WindowPlacementPointerState: @unchecked Sendable {
         return press.frame.insetBy(dx: -3, dy: -3).contains(point) ? press : nil
     }
 
+    /// Coalesces drag events. While a delivery is already queued for the main
+    /// actor, later events only replace the stored position; the caller is told
+    /// to schedule a hop exactly once per pending position. Without this a
+    /// momentarily busy main thread accumulates a backlog of hops that all
+    /// flush at once and drag the size bubble through stale positions.
+    func enqueueDragPoint(
+        _ point: CGPoint,
+        timestamp: TimeInterval
+    ) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        let needsDelivery = pendingDragPoint == nil
+        pendingDragPoint = point
+        pendingDragTimestamp = timestamp
+        return needsDelivery
+    }
+
+    func takePendingDragPoint() -> (point: CGPoint, timestamp: TimeInterval)? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let point = pendingDragPoint else {
+            return nil
+        }
+        pendingDragPoint = nil
+        return (point, pendingDragTimestamp)
+    }
+
+    func clearPendingDragPoint() {
+        lock.lock()
+        pendingDragPoint = nil
+        lock.unlock()
+    }
+
     func shouldDispatchPointerMove(
         at timestamp: TimeInterval,
         minimumInterval: TimeInterval
@@ -266,6 +389,10 @@ private final class WindowPlacementPointerState: @unchecked Sendable {
         lastPointerDispatchAt = timestamp
         return true
     }
+}
+
+private struct WindowPlacementDragFrameRequest: @unchecked Sendable {
+    let target: WindowPlacementTarget
 }
 
 private struct WindowPlacementGreenButtonQueryResult: @unchecked Sendable {
@@ -483,6 +610,8 @@ final class WindowPlacementPointerMonitor {
         WindowPlacementScreen
     ) -> Void)?
     var onDragSizeChanged: ((CGSize, CGPoint) -> Void)?
+    var onDragSizePointMoved: ((CGPoint) -> Void)?
+    var onDragSizeSuspended: (() -> Void)?
     var onDragSizeHidden: (() -> Void)?
 
     private struct DragSession {
@@ -497,6 +626,7 @@ final class WindowPlacementPointerMonitor {
         var lastInspectionAt: TimeInterval = 0
         var lastPointerPoint: CGPoint
         var lastPointerTimestamp: TimeInterval
+        var sizeHUDMotionTracker = WindowPlacementSizeHUDPolicy.MotionTracker()
         var isSizeHUDVisible = false
     }
 
@@ -516,6 +646,14 @@ final class WindowPlacementPointerMonitor {
     private var greenButtonRefreshTimer: Timer?
     private var lastGreenButtonRefreshAt: TimeInterval = 0
     private var isGreenButtonQueryInFlight = false
+    // Kept apart from `accessibilityQueue`: the green-button probe walks the
+    // same application that is being resized, and sharing one serial queue
+    // would let it delay every size measurement behind it.
+    private let dragFrameQueue = DispatchQueue(
+        label: "com.quanzhankeji.OmniDock.window-placement-drag-frame",
+        qos: .userInteractive
+    )
+    private var isDragFrameQueryInFlight = false
     private var sizeHUDRevealWorkItem: DispatchWorkItem?
 
     func start(configuration: WindowPlacementConfiguration) {
@@ -539,6 +677,7 @@ final class WindowPlacementPointerMonitor {
         cancelSizeHUDReveal()
         dragSession = nil
         lastGreenButtonRefreshAt = 0
+        pointerState.clearPendingDragPoint()
         pointerState.cancelGreenButtonPress()
         pointerState.resetDragCancellation()
         pointerState.updateGreenButton(nil)
@@ -585,8 +724,10 @@ final class WindowPlacementPointerMonitor {
             if pointerState.isDragCancellationPending() {
                 return Unmanaged.passUnretained(event)
             }
-            Task { @MainActor [weak self] in
-                self?.updateDrag(at: point, timestamp: timestamp)
+            if pointerState.enqueueDragPoint(point, timestamp: timestamp) {
+                Task { @MainActor [weak self] in
+                    self?.drainPendingDrag()
+                }
             }
         case .leftMouseUp:
             if let snapshot = pointerState.finishGreenButtonPress(at: point) {
@@ -613,6 +754,13 @@ final class WindowPlacementPointerMonitor {
             break
         }
         return Unmanaged.passUnretained(event)
+    }
+
+    private func drainPendingDrag() {
+        guard let pending = pointerState.takePendingDragPoint() else {
+            return
+        }
+        updateDrag(at: pending.point, timestamp: pending.timestamp)
     }
 
     private func handlePointerMoved(at point: CGPoint) {
@@ -659,7 +807,11 @@ final class WindowPlacementPointerMonitor {
             pointerState.updateGreenButton(nil)
             return
         }
-        guard !isGreenButtonQueryInFlight else {
+        // The probe issues a dozen accessibility round trips to the frontmost
+        // application, which during a drag is the window being resized. The
+        // snapshot is not consulted mid-drag, so skipping it keeps that
+        // application free to answer the measurement queries instead.
+        guard dragSession == nil, !isGreenButtonQueryInFlight else {
             return
         }
         isGreenButtonQueryInFlight = true
@@ -670,7 +822,7 @@ final class WindowPlacementPointerMonitor {
                     buttonFrame: $0.buttonFrame
                 )
             }
-            DispatchQueue.main.async { [weak self] in
+            Task { @MainActor [weak self] in
                 self?.finishGreenButtonQuery(result, now: now)
             }
         }
@@ -699,6 +851,7 @@ final class WindowPlacementPointerMonitor {
         timestamp: TimeInterval
     ) {
         cancelSizeHUDReveal()
+        pointerState.clearPendingDragPoint()
         pointerState.resetDragCancellation()
         onDragSizeHidden?()
         guard configuration.observesWindowDragging,
@@ -724,10 +877,11 @@ final class WindowPlacementPointerMonitor {
             return
         }
 
-        let isRapidPointerMotion = WindowPlacementSizeHUDPolicy.isRapidPointerMotion(
+        let shouldHideSizeHUD = session.sizeHUDMotionTracker.record(
             from: session.lastPointerPoint,
             to: point,
-            elapsed: timestamp - session.lastPointerTimestamp
+            elapsed: timestamp - session.lastPointerTimestamp,
+            timestamp: timestamp
         )
         session.lastPointerPoint = point
         session.lastPointerTimestamp = timestamp
@@ -737,12 +891,20 @@ final class WindowPlacementPointerMonitor {
             interaction: session.interaction,
             beganNearResizeEdge: session.beganNearResizeEdge
         ) {
-            if isRapidPointerMotion {
+            if shouldHideSizeHUD {
                 hideSizeHUD(in: &session)
                 dragSession = session
                 scheduleSizeHUDReveal(for: session.id)
                 return
             }
+        }
+
+        // The bubble follows the pointer on every event; only the measurement
+        // it prints is sampled on the slower inspection cadence. Keeping the
+        // two apart is what stops window queries from gating how smoothly the
+        // bubble tracks the cursor.
+        if session.isSizeHUDVisible {
+            onDragSizePointMoved?(point)
         }
 
         let inspectionInterval = session.interaction == .resizing
@@ -753,11 +915,35 @@ final class WindowPlacementPointerMonitor {
             return
         }
         session.lastInspectionAt = timestamp
+
+        // A recognized resize can no longer be reclassified, so its frame is
+        // sampled off the main thread. The window being resized is busy laying
+        // itself out, and a synchronous accessibility round trip to it would
+        // stall every queued pointer event behind it.
+        if session.interaction == .resizing {
+            pointerState.setDragCancellationAvailable(false)
+            guard WindowPlacementSizeHUDPolicy.shouldTrack(
+                isEnabled: configuration.showsSizeOnDrag,
+                interaction: session.interaction,
+                beganNearResizeEdge: session.beganNearResizeEdge
+            ) else {
+                hideSizeHUD(in: &session)
+                cancelSizeHUDReveal()
+                dragSession = session
+                return
+            }
+            cancelSizeHUDReveal()
+            dragSession = session
+            requestResizeFrameSample(for: session)
+            return
+        }
+
         guard let currentFrame = WindowPlacementAccessibility.currentFrame(
             of: session.target
         ) else {
             dragSession = nil
             cancelSizeHUDReveal()
+            pointerState.clearPendingDragPoint()
             pointerState.resetDragCancellation()
             onDragCancelled?()
             return
@@ -781,17 +967,10 @@ final class WindowPlacementPointerMonitor {
                 dragSession = session
                 return
             }
-
-            if isRapidPointerMotion {
-                hideSizeHUD(in: &session)
-                dragSession = session
-                scheduleSizeHUDReveal(for: session.id)
-            } else {
-                cancelSizeHUDReveal()
-                session.isSizeHUDVisible = true
-                dragSession = session
-                onDragSizeChanged?(currentFrame.size, point)
-            }
+            cancelSizeHUDReveal()
+            session.isSizeHUDVisible = true
+            dragSession = session
+            onDragSizeChanged?(currentFrame.size, point)
             return
         }
 
@@ -843,6 +1022,7 @@ final class WindowPlacementPointerMonitor {
 
     private func finishDrag() {
         cancelSizeHUDReveal()
+        pointerState.clearPendingDragPoint()
         if pointerState.isDragCancellationPending() {
             dragSession = nil
             pointerState.resetDragCancellation()
@@ -877,6 +1057,7 @@ final class WindowPlacementPointerMonitor {
         }
         dragSession = nil
         cancelSizeHUDReveal()
+        pointerState.clearPendingDragPoint()
         pointerState.resetDragCancellation()
         onDragCancelled?()
     }
@@ -886,7 +1067,7 @@ final class WindowPlacementPointerMonitor {
             return
         }
         session.isSizeHUDVisible = false
-        onDragSizeHidden?()
+        onDragSizeSuspended?()
     }
 
     private func scheduleSizeHUDReveal(for sessionID: UUID) {
@@ -911,17 +1092,66 @@ final class WindowPlacementPointerMonitor {
                   isEnabled: configuration.showsSizeOnDrag,
                   interaction: session.interaction,
                   beganNearResizeEdge: session.beganNearResizeEdge
-              ),
-              let currentFrame = WindowPlacementAccessibility.currentFrame(
-                  of: session.target
               )
         else {
             return
         }
         session.lastInspectionAt = ProcessInfo.processInfo.systemUptime
+        session.sizeHUDMotionTracker.reset()
+        dragSession = session
+        requestResizeFrameSample(for: session)
+    }
+
+    private func requestResizeFrameSample(for session: DragSession) {
+        guard !isDragFrameQueryInFlight else {
+            return
+        }
+        isDragFrameQueryInFlight = true
+        let sessionID = session.id
+        let request = WindowPlacementDragFrameRequest(target: session.target)
+        dragFrameQueue.async { [weak self] in
+            let frame = WindowPlacementAccessibility.currentFrame(
+                of: request.target
+            )
+            // Main-thread work for this gesture is funnelled through the
+            // main actor so a measurement can never overtake a pointer
+            // position that was queued ahead of it. Mixing executors let a
+            // late sample reposition the bubble to a stale point and be
+            // corrected one event later, which reads as a jitter.
+            Task { @MainActor [weak self] in
+                self?.finishResizeFrameSample(frame, sessionID: sessionID)
+            }
+        }
+    }
+
+    /// A missing frame here is treated as a dropped sample rather than a lost
+    /// window: an application that is mid-resize can miss a single query, and
+    /// tearing the session down would leave the bubble frozen for the rest of
+    /// the drag. The gesture still ends on mouse up.
+    private func finishResizeFrameSample(
+        _ frame: CGRect?,
+        sessionID: UUID
+    ) {
+        isDragFrameQueryInFlight = false
+        guard var session = dragSession,
+              session.id == sessionID,
+              session.interaction == .resizing,
+              !session.sizeHUDMotionTracker.isRapid,
+              sizeHUDRevealWorkItem == nil,
+              WindowPlacementSizeHUDPolicy.shouldTrack(
+                  isEnabled: configuration.showsSizeOnDrag,
+                  interaction: session.interaction,
+                  beganNearResizeEdge: session.beganNearResizeEdge
+              ),
+              let frame
+        else {
+            return
+        }
         session.isSizeHUDVisible = true
         dragSession = session
-        onDragSizeChanged?(currentFrame.size, session.lastPointerPoint)
+        // Pair the measurement with the newest pointer position rather than the
+        // one that requested it, so a late sample never snaps the bubble back.
+        onDragSizeChanged?(frame.size, session.lastPointerPoint)
     }
 
     private func cancelSizeHUDReveal() {

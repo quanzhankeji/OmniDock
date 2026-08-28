@@ -1,2 +1,6 @@
 "NSScreenCaptureUsageDescription" = "OmniDock uses Screen Recording permission to create window thumbnails, including live images and one-time static snapshots, above Dock icons.";
 "NSInputMonitoringUsageDescription" = "OmniDock uses Input Monitoring to detect Dock icon clicks and Option-Tab while its window switcher is open.";
+"NSDesktopFolderUsageDescription" = "OmniDock needs access to your Desktop to create files from Finder right-click actions.";
+"NSDocumentsFolderUsageDescription" = "OmniDock needs access to your Documents folder to create files from Finder right-click actions.";
+"NSDownloadsFolderUsageDescription" = "OmniDock needs access to your Downloads folder to create files from Finder right-click actions.";
+"NSRemovableVolumesUsageDescription" = "OmniDock needs access to removable volumes when you use Finder right-click file actions there.";
