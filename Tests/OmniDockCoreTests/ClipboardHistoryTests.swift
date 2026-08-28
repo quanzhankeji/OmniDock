@@ -1,5 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
+import CoreData
+import CryptoKit
 import XCTest
 @testable import OmniDockCore
 
@@ -441,12 +443,21 @@ final class ClipboardHistoryTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let historyCandidate = try candidate(text: "Persisted", capturedAt: Date())
 
-        var store: ClipboardHistoryStore? = ClipboardHistoryStore(storeURL: storeURL, inMemory: false)
+        let cipher = ClipboardHistoryCipher.ephemeral()
+        var store: ClipboardHistoryStore? = ClipboardHistoryStore(
+            storeURL: storeURL,
+            inMemory: false,
+            cipher: cipher
+        )
         store?.store(historyCandidate, limit: 200, maximumTotalBytes: 1_000_000)
         XCTAssertEqual(store?.records().count, 1)
         store = nil
 
-        let reloaded = ClipboardHistoryStore(storeURL: storeURL, inMemory: false)
+        let reloaded = ClipboardHistoryStore(
+            storeURL: storeURL,
+            inMemory: false,
+            cipher: cipher
+        )
         XCTAssertEqual(reloaded.records().map(\.summary), ["Persisted"])
     }
 
@@ -456,7 +467,11 @@ final class ClipboardHistoryTests: XCTestCase {
         let storeURL = directory.appendingPathComponent("Clipboard.sqlite")
         defer { try? FileManager.default.removeItem(at: directory) }
 
-        let store = ClipboardHistoryStore(storeURL: storeURL, inMemory: false)
+        let store = ClipboardHistoryStore(
+            storeURL: storeURL,
+            inMemory: false,
+            cipher: .ephemeral()
+        )
         store.store(
             try candidate(text: "Private", capturedAt: Date()),
             limit: 200,
@@ -481,6 +496,164 @@ final class ClipboardHistoryTests: XCTestCase {
             XCTAssertEqual(permissions & 0o022, 0)
             XCTAssertNotEqual(permissions & 0o600, 0)
         }
+    }
+
+    func testPersistentStoreSecuresExternalBinaryDataFiles() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("OmniDockClipboardExternal-\(UUID().uuidString)", isDirectory: true)
+        let storeURL = directory.appendingPathComponent("Clipboard.sqlite")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try ClipboardStoreFileProtection.prepareDirectory(directory)
+
+        // Core Data promotes clipboard images and large text out of the row
+        // into this sibling directory, creating both with the default umask.
+        let externalDirectory = directory
+            .appendingPathComponent(".Clipboard_SUPPORT", isDirectory: true)
+            .appendingPathComponent("_EXTERNAL_DATA", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: externalDirectory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o755]
+        )
+        let blobURL = externalDirectory.appendingPathComponent(UUID().uuidString)
+        try Data("Private".utf8).write(to: blobURL)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o644],
+            ofItemAtPath: blobURL.path
+        )
+
+        ClipboardStoreFileProtection.secureStoreFiles(storeURL: storeURL)
+
+        XCTAssertEqual(try posixPermissions(of: externalDirectory), 0o700)
+        XCTAssertEqual(try posixPermissions(of: blobURL), 0o600)
+    }
+
+    func testStoredArchiveLeavesNoClipboardTextOnDisk() throws {
+        let directory = try makeStoreDirectory()
+        let storeURL = directory.appendingPathComponent("Clipboard.sqlite")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let secret = "CorrectHorseBatteryStaple-\(UUID().uuidString)"
+
+        let store = ClipboardHistoryStore(
+            storeURL: storeURL,
+            inMemory: false,
+            cipher: .ephemeral()
+        )
+        store.store(
+            try candidate(text: secret, capturedAt: Date()),
+            limit: 200,
+            maximumTotalBytes: 1_000_000
+        )
+
+        XCTAssertEqual(store.records().map(\.summary), [secret])
+        XCTAssertFalse(try directoryContainsPlaintext(directory, needle: secret))
+    }
+
+    func testArchiveFromAnIncompatibleSchemaIsDiscardedWithItsPlaintext() throws {
+        let directory = try makeStoreDirectory()
+        let storeURL = directory.appendingPathComponent("Clipboard.sqlite")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let secret = "LegacyPlaintext-\(UUID().uuidString)"
+
+        try writeLegacySchemaEntry(text: secret, to: storeURL)
+        XCTAssertTrue(try directoryContainsPlaintext(directory, needle: secret))
+
+        let store = ClipboardHistoryStore(
+            storeURL: storeURL,
+            inMemory: false,
+            cipher: .ephemeral()
+        )
+
+        // The old archive is dropped rather than migrated, and its plaintext
+        // goes with it. The store is immediately usable again.
+        XCTAssertTrue(store.records().isEmpty)
+        XCTAssertNil(store.warning)
+        XCTAssertFalse(try directoryContainsPlaintext(directory, needle: secret))
+
+        let fresh = "AfterRebuild-\(UUID().uuidString)"
+        store.store(
+            try candidate(text: fresh, capturedAt: Date()),
+            limit: 200,
+            maximumTotalBytes: 1_000_000
+        )
+        XCTAssertEqual(store.records().map(\.summary), [fresh])
+        XCTAssertFalse(try directoryContainsPlaintext(directory, needle: fresh))
+    }
+
+    func testEntriesSealedWithALostKeyAreDiscarded() throws {
+        let directory = try makeStoreDirectory()
+        let storeURL = directory.appendingPathComponent("Clipboard.sqlite")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = ClipboardHistoryStore(
+            storeURL: storeURL,
+            inMemory: false,
+            cipher: .ephemeral()
+        )
+        store.store(
+            try candidate(text: "Unrecoverable", capturedAt: Date()),
+            limit: 200,
+            maximumTotalBytes: 1_000_000
+        )
+        XCTAssertEqual(store.records().count, 1)
+
+        // A restored archive whose Keychain item did not come with it.
+        let reopened = ClipboardHistoryStore(
+            storeURL: storeURL,
+            inMemory: false,
+            cipher: .ephemeral()
+        )
+
+        XCTAssertTrue(reopened.records().isEmpty)
+    }
+
+    func testUnavailableKeyKeepsHistoryOutOfTheStoreFile() throws {
+        let directory = try makeStoreDirectory()
+        let storeURL = directory.appendingPathComponent("Clipboard.sqlite")
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let store = ClipboardHistoryStore(
+            storeURL: storeURL,
+            inMemory: false,
+            keyStore: FailingClipboardKeyStore()
+        )
+        store.store(
+            try candidate(text: "Session only", capturedAt: Date()),
+            limit: 200,
+            maximumTotalBytes: 1_000_000
+        )
+
+        // The entry is usable for this session but never reaches the disk.
+        XCTAssertEqual(store.records().count, 1)
+        XCTAssertNotNil(store.warning)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: storeURL.path))
+    }
+
+    func testCipherRoundTripsAndBlindsTheDeduplicationIndex() throws {
+        let cipher = ClipboardHistoryCipher.ephemeral()
+        let plaintext = Data("clipboard secret".utf8)
+
+        let sealed = try XCTUnwrap(cipher.seal(plaintext))
+        XCTAssertNil(sealed.range(of: Data("secret".utf8)))
+        XCTAssertEqual(cipher.open(sealed), plaintext)
+
+        let sealedText = try XCTUnwrap(cipher.seal(text: "clipboard secret"))
+        XCTAssertEqual(cipher.openText(sealedText), "clipboard secret")
+
+        // Another key cannot open it, and neither can a tampered box.
+        XCTAssertNil(ClipboardHistoryCipher.ephemeral().open(sealed))
+        var tampered = sealed
+        tampered[tampered.count - 1] ^= 0xFF
+        XCTAssertNil(cipher.open(tampered))
+        XCTAssertNil(cipher.open(Data("not a sealed box".utf8)))
+
+        let digest = String(repeating: "a", count: 64)
+        XCTAssertEqual(cipher.blindIndex(for: digest), cipher.blindIndex(for: digest))
+        XCTAssertNotEqual(cipher.blindIndex(for: digest), digest)
+        XCTAssertNotEqual(
+            cipher.blindIndex(for: digest),
+            ClipboardHistoryCipher.ephemeral().blindIndex(for: digest)
+        )
     }
 
     func testSearchIsCaseAndDiacriticInsensitive() throws {
@@ -933,6 +1106,97 @@ final class ClipboardHistoryTests: XCTestCase {
         )
     }
 
+    private func makeStoreDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("OmniDockClipboardCrypto-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    // Scans the SQLite file, its journal siblings, and any externally stored
+    // blob for the clipboard text, which is where plaintext used to survive.
+    private func directoryContainsPlaintext(
+        _ directory: URL,
+        needle: String
+    ) throws -> Bool {
+        let needleData = Data(needle.utf8)
+        let enumerator = try XCTUnwrap(FileManager.default.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [],
+            errorHandler: nil
+        ))
+        for case let url as URL in enumerator {
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
+                  let contents = try? Data(contentsOf: url)
+            else {
+                continue
+            }
+            if contents.range(of: needleData) != nil {
+                return true
+            }
+        }
+        return false
+    }
+
+    // Reproduces the plaintext schema a build without encryption wrote, so the
+    // discard path is exercised against a real incompatible file.
+    private func writeLegacySchemaEntry(text: String, to storeURL: URL) throws {
+        let entity = NSEntityDescription()
+        entity.name = "ClipboardHistoryEntry"
+        entity.managedObjectClassName = NSStringFromClass(NSManagedObject.self)
+        entity.properties = [
+            legacyAttribute("id", type: .UUIDAttributeType, optional: false),
+            legacyAttribute("capturedAt", type: .dateAttributeType, optional: false),
+            legacyAttribute("summary", type: .stringAttributeType, optional: false),
+            legacyAttribute("payloadData", type: .binaryDataAttributeType, optional: false)
+        ]
+        let model = NSManagedObjectModel()
+        model.entities = [entity]
+        model.versionIdentifiers = ["1"]
+
+        let coordinator = NSPersistentStoreCoordinator(managedObjectModel: model)
+        try coordinator.addPersistentStore(
+            ofType: NSSQLiteStoreType,
+            configurationName: nil,
+            at: storeURL,
+            options: nil
+        )
+        let context = NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
+        context.persistentStoreCoordinator = coordinator
+
+        let object = NSEntityDescription.insertNewObject(
+            forEntityName: "ClipboardHistoryEntry",
+            into: context
+        )
+        object.setValue(UUID(), forKey: "id")
+        object.setValue(Date(), forKey: "capturedAt")
+        object.setValue(text, forKey: "summary")
+        object.setValue(Data(text.utf8), forKey: "payloadData")
+        try context.save()
+
+        for store in coordinator.persistentStores {
+            try coordinator.remove(store)
+        }
+    }
+
+    private func legacyAttribute(
+        _ name: String,
+        type: NSAttributeType,
+        optional: Bool
+    ) -> NSAttributeDescription {
+        let attribute = NSAttributeDescription()
+        attribute.name = name
+        attribute.attributeType = type
+        attribute.isOptional = optional
+        return attribute
+    }
+
+    private func posixPermissions(of url: URL) throws -> UInt16 {
+        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+        return try XCTUnwrap((attributes[.posixPermissions] as? NSNumber)?.uint16Value)
+    }
+
     private func isolatedDefaults() -> UserDefaults {
         let name = "OmniDockClipboardTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
@@ -982,6 +1246,12 @@ final class ClipboardHistoryTests: XCTestCase {
             let current = (subview as? NSImageView).map { [$0] } ?? []
             return current + descendantImageViews(in: subview)
         }
+    }
+}
+
+private struct FailingClipboardKeyStore: ClipboardHistoryKeyStoring {
+    func loadOrCreateKey() throws -> SymmetricKey {
+        throw ClipboardHistoryKeyError.keychainUnavailable(errSecAuthFailed)
     }
 }
 

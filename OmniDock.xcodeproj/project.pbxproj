@@ -25,6 +25,7 @@
 		4AC80169CFFF36CDE4D25817 /* ApplicationPresentationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E10EED6D6A911629989ECC7 /* ApplicationPresentationCoordinator.swift */; };
 		F989CA9BB32021537A01BD85 /* ApplicationUpdateService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F676B8A32BD4C9A807C5A26 /* ApplicationUpdateService.swift */; };
 		89182724F61B136567EF01D2 /* CGWindowDictionary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 27E00C378893CB08991CC38B /* CGWindowDictionary.swift */; };
+		FC802AA5D45097E251BAAEE4 /* ClipboardHistoryCipher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18B066688DA498F65D91231A /* ClipboardHistoryCipher.swift */; };
 		EB24CA44E5E925CBAFA9B9D2 /* ClipboardHistoryCodec.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACDDD18EF72F718165F4AEE /* ClipboardHistoryCodec.swift */; };
 		88433CD632897E2A9701AFCF /* ClipboardHistoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43C87C5B4CF8F120EABBA5AD /* ClipboardHistoryService.swift */; };
 		770FDD328B9797377E657550 /* ClipboardHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD15823E751D6633175D5FFD /* ClipboardHistoryStore.swift */; };
@@ -148,6 +149,7 @@
 		2E10EED6D6A911629989ECC7 /* ApplicationPresentationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/ApplicationPresentationCoordinator.swift"; sourceTree = SOURCE_ROOT; };
 		0F676B8A32BD4C9A807C5A26 /* ApplicationUpdateService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/ApplicationUpdateService.swift"; sourceTree = SOURCE_ROOT; };
 		27E00C378893CB08991CC38B /* CGWindowDictionary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/CGWindowDictionary.swift"; sourceTree = SOURCE_ROOT; };
+		18B066688DA498F65D91231A /* ClipboardHistoryCipher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/ClipboardHistoryCipher.swift"; sourceTree = SOURCE_ROOT; };
 		4ACDDD18EF72F718165F4AEE /* ClipboardHistoryCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/ClipboardHistoryCodec.swift"; sourceTree = SOURCE_ROOT; };
 		43C87C5B4CF8F120EABBA5AD /* ClipboardHistoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/ClipboardHistoryService.swift"; sourceTree = SOURCE_ROOT; };
 		CD15823E751D6633175D5FFD /* ClipboardHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/ClipboardHistoryStore.swift"; sourceTree = SOURCE_ROOT; };
@@ -332,6 +334,7 @@
 				2E10EED6D6A911629989ECC7 /* ApplicationPresentationCoordinator.swift */,
 				0F676B8A32BD4C9A807C5A26 /* ApplicationUpdateService.swift */,
 				27E00C378893CB08991CC38B /* CGWindowDictionary.swift */,
+				18B066688DA498F65D91231A /* ClipboardHistoryCipher.swift */,
 				4ACDDD18EF72F718165F4AEE /* ClipboardHistoryCodec.swift */,
 				43C87C5B4CF8F120EABBA5AD /* ClipboardHistoryService.swift */,
 				CD15823E751D6633175D5FFD /* ClipboardHistoryStore.swift */,
@@ -621,6 +624,7 @@
 				4AC80169CFFF36CDE4D25817 /* ApplicationPresentationCoordinator.swift in Sources */,
 				F989CA9BB32021537A01BD85 /* ApplicationUpdateService.swift in Sources */,
 				89182724F61B136567EF01D2 /* CGWindowDictionary.swift in Sources */,
+				FC802AA5D45097E251BAAEE4 /* ClipboardHistoryCipher.swift in Sources */,
 				EB24CA44E5E925CBAFA9B9D2 /* ClipboardHistoryCodec.swift in Sources */,
 				88433CD632897E2A9701AFCF /* ClipboardHistoryService.swift in Sources */,
 				770FDD328B9797377E657550 /* ClipboardHistoryStore.swift in Sources */,

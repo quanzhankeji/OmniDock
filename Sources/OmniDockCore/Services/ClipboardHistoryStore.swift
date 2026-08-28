@@ -27,6 +27,8 @@ enum ClipboardStoreFileProtection {
         fileManager: FileManager = .default
     ) {
         let directory = storeURL.deletingLastPathComponent()
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
         guard let enumerator = fileManager.enumerator(
             at: directory,
             includingPropertiesForKeys: [.isDirectoryKey],
@@ -36,29 +38,56 @@ enum ClipboardStoreFileProtection {
             return
         }
 
-        let storePrefix = storeURL.lastPathComponent
+        let directoryPrefix = directory.path.hasSuffix("/")
+            ? directory.path
+            : directory.path + "/"
+        let storePrefixes = securedPathPrefixes(for: storeURL)
         for case let url as URL in enumerator {
-            let relativePath = url.path.dropFirst(directory.path.count + 1)
-            guard relativePath.hasPrefix(storePrefix) else {
+            // The enumerator reports symlink-resolved paths ("/private/var"
+            // for a store under "/var"), so both sides are resolved before the
+            // store directory is trimmed off. Comparing unresolved paths
+            // silently mismatches and skips every file.
+            let resolvedURL = url.resolvingSymlinksInPath().standardizedFileURL
+            guard resolvedURL.path.hasPrefix(directoryPrefix) else {
                 continue
             }
-            let isDirectory = (try? url.resourceValues(
+            let relativePath = resolvedURL.path.dropFirst(directoryPrefix.count)
+            guard storePrefixes.contains(where: relativePath.hasPrefix) else {
+                continue
+            }
+            let isDirectory = (try? resolvedURL.resourceValues(
                 forKeys: [.isDirectoryKey]
             ).isDirectory) == true
             let permissions = isDirectory ? 0o700 : 0o600
-            try? (url as NSURL).setResourceValue(
+            try? (resolvedURL as NSURL).setResourceValue(
                 FileProtectionType.complete,
                 forKey: .fileProtectionKey
             )
             try? fileManager.setAttributes(
                 [.posixPermissions: permissions],
-                ofItemAtPath: url.path
+                ofItemAtPath: resolvedURL.path
             )
-            url.withUnsafeFileSystemRepresentation { path in
+            resolvedURL.withUnsafeFileSystemRepresentation { path in
                 guard let path else { return }
                 _ = chmod(path, mode_t(permissions))
             }
         }
+    }
+
+    // The SQLite file and its -wal/-shm siblings all start with the store file
+    // name, but Core Data keeps blobs promoted out of the row (any clipboard
+    // image or large text, because payloadData allows external storage) in a
+    // sibling ".<store name without extension>_SUPPORT" directory. Those files
+    // are created with the default umask, so they must be listed here or the
+    // largest clipboard entries stay group- and world-readable.
+    static func securedPathPrefixes(for storeURL: URL) -> [String] {
+        let fileName = storeURL.lastPathComponent
+        let baseName = storeURL.deletingPathExtension().lastPathComponent
+        return [
+            fileName,
+            ".\(baseName)_SUPPORT",
+            ".\(fileName)_SUPPORT"
+        ]
     }
 }
 
@@ -78,67 +107,103 @@ protocol ClipboardHistoryPersisting: AnyObject {
     func prune(limit: Int, maximumTotalBytes: Int)
 }
 
+
 final class ClipboardHistoryStore: ClipboardHistoryPersisting {
+    // Only structural columns stay readable. They order, deduplicate, and prune
+    // the archive without revealing anything about what was copied; everything
+    // carrying content or provenance is stored as an AES-GCM box.
     private enum Field {
         static let id = "id"
         static let capturedAt = "capturedAt"
         static let lastCopiedAt = "lastCopiedAt"
-        static let sourceApplicationName = "sourceApplicationName"
-        static let sourceBundleIdentifier = "sourceBundleIdentifier"
         static let kind = "kind"
-        static let summary = "summary"
-        static let searchableText = "searchableText"
-        static let fingerprint = "fingerprint"
-        static let payloadData = "payloadData"
-        static let thumbnailData = "thumbnailData"
         static let copyCount = "copyCount"
         static let byteCount = "byteCount"
+        static let fingerprint = "fingerprint"
+        static let sealedSummary = "sealedSummary"
+        static let sealedSearchableText = "sealedSearchableText"
+        static let sealedSourceName = "sealedSourceName"
+        static let sealedSourceBundleIdentifier = "sealedSourceBundleIdentifier"
+        static let sealedPayload = "sealedPayload"
+        static let sealedThumbnail = "sealedThumbnail"
     }
 
     private static let entityName = "ClipboardHistoryEntry"
 
+    // Bump this whenever the layout changes. Clipboard history is a
+    // convenience cache, not a document, so an incompatible or unreadable file
+    // is discarded and rebuilt instead of migrated: there is no migration code
+    // to go wrong, and a schema change can never strand someone's install.
+    private static let schemaVersion = "2"
+
+    private static let storeOptions: [String: Any] = [
+        // Zero freed cells instead of leaving them in the file, so a pruned or
+        // deleted entry does not linger in the store's free pages.
+        NSSQLitePragmasOption: ["secure_delete": "TRUE"]
+    ]
+
     private let context: NSManagedObjectContext
     private let storeURL: URL?
+    private let cipher: ClipboardHistoryCipher
     private(set) var warning: String?
 
     convenience init() {
         self.init(storeURL: Self.defaultStoreURL(), inMemory: false)
     }
 
-    init(storeURL: URL?, inMemory: Bool) {
-        let model = Self.makeModel()
-        let coordinator = NSPersistentStoreCoordinator(managedObjectModel: model)
+    init(
+        storeURL: URL?,
+        inMemory: Bool,
+        cipher: ClipboardHistoryCipher? = nil,
+        keyStore: ClipboardHistoryKeyStoring = ClipboardHistoryKeychainKeyStore()
+    ) {
+        let coordinator = NSPersistentStoreCoordinator(
+            managedObjectModel: Self.makeModel()
+        )
         let context = NSManagedObjectContext(concurrencyType: .mainQueueConcurrencyType)
         context.persistentStoreCoordinator = coordinator
         context.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy
         context.undoManager = nil
         self.context = context
-        self.storeURL = inMemory ? nil : storeURL
+
+        // Without a key there is no safe way to persist: writing plaintext
+        // instead would quietly hand back the exposure encryption is here to
+        // remove. The archive then stays in memory for the session, and the
+        // file on disk is left untouched for a later launch that can unlock it.
+        var keyWarning: String?
+        var resolvedCipher = cipher
+        if resolvedCipher == nil {
+            if inMemory {
+                resolvedCipher = .ephemeral()
+            } else {
+                do {
+                    resolvedCipher = ClipboardHistoryCipher(
+                        key: try keyStore.loadOrCreateKey()
+                    )
+                } catch {
+                    NSLog("OmniDock clipboard history key unavailable: \(error)")
+                    resolvedCipher = .ephemeral()
+                    keyWarning = AppStrings.text(.clipboardStorageUnavailable)
+                }
+            }
+        }
+        self.cipher = resolvedCipher ?? .ephemeral()
+        var resolvedStoreURL = (inMemory || keyWarning != nil) ? nil : storeURL
 
         do {
-            if inMemory {
+            if let resolvedStoreURL {
+                try Self.openStore(coordinator: coordinator, at: resolvedStoreURL)
+                ClipboardStoreFileProtection.secureStoreFiles(storeURL: resolvedStoreURL)
+            } else {
                 try coordinator.addPersistentStore(
                     ofType: NSInMemoryStoreType,
                     configurationName: nil,
                     at: nil
                 )
-            } else if let storeURL {
-                try ClipboardStoreFileProtection.prepareDirectory(
-                    storeURL.deletingLastPathComponent()
-                )
-                try coordinator.addPersistentStore(
-                    ofType: NSSQLiteStoreType,
-                    configurationName: nil,
-                    at: storeURL,
-                    options: [
-                        NSMigratePersistentStoresAutomaticallyOption: true,
-                        NSInferMappingModelAutomaticallyOption: true
-                    ]
-                )
-                ClipboardStoreFileProtection.secureStoreFiles(storeURL: storeURL)
             }
         } catch {
-            warning = AppStrings.text(.clipboardStorageUnavailable)
+            keyWarning = AppStrings.text(.clipboardStorageUnavailable)
+            resolvedStoreURL = nil
             do {
                 try coordinator.addPersistentStore(
                     ofType: NSInMemoryStoreType,
@@ -149,11 +214,13 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
                 NSLog("OmniDock clipboard history store failed: \(error.localizedDescription)")
             }
         }
+        self.storeURL = resolvedStoreURL
+        warning = keyWarning
     }
 
     func records() -> [ClipboardHistoryRecord] {
         // Dictionary fetches read only the listed attributes straight from the
-        // store. This deliberately excludes payloadData, which can be tens of
+        // store. This deliberately excludes the payload, which can be tens of
         // megabytes per row and would otherwise be faulted in for every record
         // on every refresh even though the list UI never needs it.
         //
@@ -166,14 +233,14 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
             Field.id,
             Field.capturedAt,
             Field.lastCopiedAt,
-            Field.sourceApplicationName,
-            Field.sourceBundleIdentifier,
             Field.kind,
-            Field.summary,
-            Field.searchableText,
             Field.copyCount,
             Field.byteCount,
-            Field.thumbnailData
+            Field.sealedSummary,
+            Field.sealedSearchableText,
+            Field.sealedSourceName,
+            Field.sealedSourceBundleIdentifier,
+            Field.sealedThumbnail
         ]
         request.sortDescriptors = [
             NSSortDescriptor(key: Field.lastCopiedAt, ascending: false)
@@ -186,7 +253,8 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
 
     func payload(for id: UUID) -> ClipboardPayload? {
         guard let object = fetchObject(id: id),
-              let data = object.value(forKey: Field.payloadData) as? Data
+              let sealed = object.value(forKey: Field.sealedPayload) as? Data,
+              let data = cipher.open(sealed)
         else {
             return nil
         }
@@ -199,7 +267,20 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
         limit: Int,
         maximumTotalBytes: Int
     ) -> ClipboardHistoryRecord? {
-        let existingObject = fetchObject(fingerprint: candidate.fingerprint)
+        guard let sealedSummary = cipher.seal(text: candidate.summary),
+              let sealedSearchableText = cipher.seal(text: candidate.searchableText),
+              let sealedSourceName = cipher.seal(text: candidate.sourceApplicationName),
+              let sealedPayload = cipher.seal(candidate.payloadData)
+        else {
+            warning = AppStrings.text(.clipboardStorageUnavailable)
+            return nil
+        }
+        let sealedThumbnail = candidate.thumbnailData.flatMap(cipher.seal)
+        let sealedSourceBundleIdentifier = candidate.sourceBundleIdentifier
+            .flatMap(cipher.seal(text:))
+        let fingerprint = cipher.blindIndex(for: candidate.fingerprint)
+
+        let existingObject = fetchObject(fingerprint: fingerprint)
         let object = existingObject
             ?? NSEntityDescription.insertNewObject(
                 forEntityName: Self.entityName,
@@ -214,14 +295,17 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
         )
         object.setValue(existingCapturedAt ?? candidate.capturedAt, forKey: Field.capturedAt)
         object.setValue(candidate.capturedAt, forKey: Field.lastCopiedAt)
-        object.setValue(candidate.sourceApplicationName, forKey: Field.sourceApplicationName)
-        object.setValue(candidate.sourceBundleIdentifier, forKey: Field.sourceBundleIdentifier)
         object.setValue(candidate.kind.rawValue, forKey: Field.kind)
-        object.setValue(candidate.summary, forKey: Field.summary)
-        object.setValue(candidate.searchableText, forKey: Field.searchableText)
-        object.setValue(candidate.fingerprint, forKey: Field.fingerprint)
-        object.setValue(candidate.payloadData, forKey: Field.payloadData)
-        object.setValue(candidate.thumbnailData, forKey: Field.thumbnailData)
+        object.setValue(fingerprint, forKey: Field.fingerprint)
+        object.setValue(sealedSummary, forKey: Field.sealedSummary)
+        object.setValue(sealedSearchableText, forKey: Field.sealedSearchableText)
+        object.setValue(sealedSourceName, forKey: Field.sealedSourceName)
+        object.setValue(
+            sealedSourceBundleIdentifier,
+            forKey: Field.sealedSourceBundleIdentifier
+        )
+        object.setValue(sealedPayload, forKey: Field.sealedPayload)
+        object.setValue(sealedThumbnail, forKey: Field.sealedThumbnail)
         object.setValue(max(existingCopyCount + 1, 1), forKey: Field.copyCount)
         object.setValue(Int64(candidate.byteCount), forKey: Field.byteCount)
 
@@ -295,6 +379,86 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
         save()
     }
 
+    // A file written by a different schema, or one that cannot be opened at
+    // all, is thrown away and recreated. Losing a clipboard cache is a far
+    // better outcome than a migration that half-succeeds, and it keeps future
+    // schema changes free of per-version upgrade code.
+    private static func openStore(
+        coordinator: NSPersistentStoreCoordinator,
+        at storeURL: URL
+    ) throws {
+        try ClipboardStoreFileProtection.prepareDirectory(
+            storeURL.deletingLastPathComponent()
+        )
+        if !isCompatible(storeURL: storeURL, coordinator: coordinator) {
+            discardStore(at: storeURL, coordinator: coordinator)
+        }
+        do {
+            try coordinator.addPersistentStore(
+                ofType: NSSQLiteStoreType,
+                configurationName: nil,
+                at: storeURL,
+                options: storeOptions
+            )
+        } catch {
+            NSLog("OmniDock clipboard history archive is unusable, rebuilding: \(error)")
+            discardStore(at: storeURL, coordinator: coordinator)
+            try coordinator.addPersistentStore(
+                ofType: NSSQLiteStoreType,
+                configurationName: nil,
+                at: storeURL,
+                options: storeOptions
+            )
+        }
+    }
+
+    private static func isCompatible(
+        storeURL: URL,
+        coordinator: NSPersistentStoreCoordinator
+    ) -> Bool {
+        guard FileManager.default.fileExists(atPath: storeURL.path) else {
+            return true
+        }
+        guard let metadata = try? NSPersistentStoreCoordinator.metadataForPersistentStore(
+            ofType: NSSQLiteStoreType,
+            at: storeURL
+        ) else {
+            return false
+        }
+        guard let versions = metadata[NSStoreModelVersionIdentifiersKey] as? [Any],
+              versions.map({ "\($0)" }) == [schemaVersion]
+        else {
+            return false
+        }
+        return coordinator.managedObjectModel.isConfiguration(
+            withName: nil,
+            compatibleWithStoreMetadata: metadata
+        )
+    }
+
+    private static func discardStore(
+        at storeURL: URL,
+        coordinator: NSPersistentStoreCoordinator
+    ) {
+        try? coordinator.destroyPersistentStore(
+            at: storeURL,
+            ofType: NSSQLiteStoreType,
+            options: storeOptions
+        )
+        // destroyPersistentStore does not always take the journal siblings or
+        // the external blob directory with it, and leaving those behind would
+        // reattach stale content to a fresh archive.
+        let directory = storeURL.deletingLastPathComponent()
+        let prefixes = ClipboardStoreFileProtection.securedPathPrefixes(for: storeURL)
+        let contents = (try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        )) ?? []
+        for url in contents where prefixes.contains(where: url.lastPathComponent.hasPrefix) {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
     private func fetchObject(id: UUID) -> NSManagedObject? {
         let request = NSFetchRequest<NSManagedObject>(entityName: Self.entityName)
         request.predicate = NSPredicate(format: "%K == %@", Field.id, id as CVarArg)
@@ -328,15 +492,20 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
         record { object.value(forKey: $0) }
     }
 
+    // An entry that will not open was sealed with a key this install no longer
+    // has, so it is skipped rather than shown as a blank row.
     private func record(fieldValue: (String) -> Any?) -> ClipboardHistoryRecord? {
         guard let id = fieldValue(Field.id) as? UUID,
               let capturedAt = fieldValue(Field.capturedAt) as? Date,
               let lastCopiedAt = fieldValue(Field.lastCopiedAt) as? Date,
-              let sourceApplicationName = fieldValue(Field.sourceApplicationName) as? String,
               let kindValue = fieldValue(Field.kind) as? String,
               let kind = ClipboardContentKind(rawValue: kindValue),
-              let summary = fieldValue(Field.summary) as? String,
-              let searchableText = fieldValue(Field.searchableText) as? String
+              let sealedSummary = fieldValue(Field.sealedSummary) as? Data,
+              let summary = cipher.openText(sealedSummary),
+              let sealedSearchableText = fieldValue(Field.sealedSearchableText) as? Data,
+              let searchableText = cipher.openText(sealedSearchableText),
+              let sealedSourceName = fieldValue(Field.sealedSourceName) as? Data,
+              let sourceApplicationName = cipher.openText(sealedSourceName)
         else {
             return nil
         }
@@ -346,13 +515,15 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
             capturedAt: capturedAt,
             lastCopiedAt: lastCopiedAt,
             sourceApplicationName: sourceApplicationName,
-            sourceBundleIdentifier: fieldValue(Field.sourceBundleIdentifier) as? String,
+            sourceBundleIdentifier: (
+                fieldValue(Field.sealedSourceBundleIdentifier) as? Data
+            ).flatMap(cipher.openText),
             kind: kind,
             summary: summary,
             searchableText: searchableText,
             copyCount: Int(fieldValue(Field.copyCount) as? Int64 ?? 1),
             byteCount: Int(fieldValue(Field.byteCount) as? Int64 ?? 0),
-            thumbnailData: fieldValue(Field.thumbnailData) as? Data
+            thumbnailData: (fieldValue(Field.sealedThumbnail) as? Data).flatMap(cipher.open)
         )
     }
 
@@ -365,7 +536,7 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
             .appendingPathComponent("ClipboardHistory.sqlite", isDirectory: false)
     }
 
-    private static func makeModel() -> NSManagedObjectModel {
+    static func makeModel() -> NSManagedObjectModel {
         let entity = NSEntityDescription()
         entity.name = entityName
         entity.managedObjectClassName = NSStringFromClass(NSManagedObject.self)
@@ -373,56 +544,68 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
         let id = attribute(Field.id, type: .UUIDAttributeType, optional: false)
         let capturedAt = attribute(Field.capturedAt, type: .dateAttributeType, optional: false)
         let lastCopiedAt = attribute(Field.lastCopiedAt, type: .dateAttributeType, optional: false)
-        let sourceName = attribute(
-            Field.sourceApplicationName,
-            type: .stringAttributeType,
-            optional: false
-        )
-        let sourceBundle = attribute(
-            Field.sourceBundleIdentifier,
-            type: .stringAttributeType,
-            optional: true
-        )
         let kind = attribute(Field.kind, type: .stringAttributeType, optional: false)
-        let summary = attribute(Field.summary, type: .stringAttributeType, optional: false)
-        let searchableText = attribute(
-            Field.searchableText,
-            type: .stringAttributeType,
-            optional: false
-        )
-        let fingerprint = attribute(Field.fingerprint, type: .stringAttributeType, optional: false)
-        let payload = attribute(Field.payloadData, type: .binaryDataAttributeType, optional: false)
-        payload.allowsExternalBinaryDataStorage = true
-        let thumbnail = attribute(
-            Field.thumbnailData,
-            type: .binaryDataAttributeType,
-            optional: true
-        )
-        thumbnail.allowsExternalBinaryDataStorage = true
         let copyCount = attribute(Field.copyCount, type: .integer64AttributeType, optional: false)
         copyCount.defaultValue = 1
         let byteCount = attribute(Field.byteCount, type: .integer64AttributeType, optional: false)
         byteCount.defaultValue = 0
+        let fingerprint = attribute(Field.fingerprint, type: .stringAttributeType, optional: false)
+
+        let sealedSummary = attribute(
+            Field.sealedSummary,
+            type: .binaryDataAttributeType,
+            optional: false
+        )
+        let sealedSearchableText = attribute(
+            Field.sealedSearchableText,
+            type: .binaryDataAttributeType,
+            optional: false
+        )
+        let sealedSourceName = attribute(
+            Field.sealedSourceName,
+            type: .binaryDataAttributeType,
+            optional: false
+        )
+        let sealedSourceBundleIdentifier = attribute(
+            Field.sealedSourceBundleIdentifier,
+            type: .binaryDataAttributeType,
+            optional: true
+        )
+        let sealedPayload = attribute(
+            Field.sealedPayload,
+            type: .binaryDataAttributeType,
+            optional: false
+        )
+        sealedPayload.allowsExternalBinaryDataStorage = true
+        let sealedThumbnail = attribute(
+            Field.sealedThumbnail,
+            type: .binaryDataAttributeType,
+            optional: true
+        )
+        sealedThumbnail.allowsExternalBinaryDataStorage = true
 
         entity.properties = [
             id,
             capturedAt,
             lastCopiedAt,
-            sourceName,
-            sourceBundle,
             kind,
-            summary,
-            searchableText,
-            fingerprint,
-            payload,
-            thumbnail,
             copyCount,
-            byteCount
+            byteCount,
+            fingerprint,
+            sealedSummary,
+            sealedSearchableText,
+            sealedSourceName,
+            sealedSourceBundleIdentifier,
+            sealedPayload,
+            sealedThumbnail
         ]
+        // The fingerprint is a keyed index over the payload, so identical
+        // content collapses onto one row without the column revealing content.
         entity.uniquenessConstraints = [[Field.fingerprint]]
 
         let model = NSManagedObjectModel()
         model.entities = [entity]
+        model.versionIdentifiers = [schemaVersion]
         return model
     }
 
