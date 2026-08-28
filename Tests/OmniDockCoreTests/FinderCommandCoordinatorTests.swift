@@ -30,11 +30,14 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         )
         try mailbox.enqueue(request)
 
+        let grantStore = FinderDirectoryGrantStore(defaults: isolatedDefaults())
+        try grantStore.remember(directory: destination)
+
         var revealedFiles: [URL] = []
         FinderFileCommandCoordinator(
             requestMailbox: mailbox,
             preferencesStore: preferences,
-            directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            directoryGrantStore: grantStore,
             homeDirectory: root.appendingPathComponent("Home", isDirectory: true),
             revealFiles: { revealedFiles = $0 }
         ).handle(requestID: request.id)
@@ -68,11 +71,14 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         )
         try mailbox.enqueue(request)
 
+        let grantStore = FinderDirectoryGrantStore(defaults: isolatedDefaults())
+        try grantStore.remember(directory: allowed)
+
         var didReveal = false
         FinderFileCommandCoordinator(
             requestMailbox: mailbox,
             preferencesStore: preferences,
-            directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            directoryGrantStore: grantStore,
             homeDirectory: root.appendingPathComponent("Home", isDirectory: true),
             revealFiles: { _ in didReveal = true }
         ).handle(requestID: request.id)
@@ -84,6 +90,47 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         )
         XCTAssertFalse(didReveal)
         XCTAssertNil(mailbox.take(id: request.id))
+    }
+
+    func testObservationRootPathAloneDoesNotAuthorizeACommand() throws {
+        let root = try makeTemporaryDirectory()
+        let injected = root.appendingPathComponent("Injected", isDirectory: true)
+        try FileManager.default.createDirectory(at: injected, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        // The observation root list lives in the shared app-group defaults,
+        // which any process running as this user can write. Without a matching
+        // security-scoped bookmark it must not grant write access.
+        let preferences = makePreferencesStore(
+            FinderMenuPreferences(
+                isEnabled: true,
+                observationRootPaths: [injected.path]
+            )
+        )
+        let mailbox = FinderCommandMailbox(directoryProvider: { root })
+        let request = FinderCommandEnvelope(
+            command: .createDocument(
+                fileExtension: "txt",
+                directoryDisplayPath: injected.path
+            )
+        )
+        try mailbox.enqueue(request)
+
+        var didReveal = false
+        FinderFileCommandCoordinator(
+            requestMailbox: mailbox,
+            preferencesStore: preferences,
+            directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            homeDirectory: root.appendingPathComponent("Home", isDirectory: true),
+            revealFiles: { _ in didReveal = true }
+        ).handle(requestID: request.id)
+
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: injected.appendingPathComponent("NewFile.txt").path
+            )
+        )
+        XCTAssertFalse(didReveal)
     }
 
     func testAuthorizationUsesSavedShortcutInsteadOfMailboxPayload() {
@@ -138,7 +185,7 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         XCTAssertFalse(
             FinderCommandAuthorizationPolicy.isAllowedTarget(
                 unrelated,
-                preferences: FinderMenuPreferences(),
+                authorizedDirectoryPaths: [],
                 homeDirectory: home
             )
         )
@@ -160,7 +207,7 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         XCTAssertFalse(
             FinderCommandAuthorizationPolicy.isAllowedTarget(
                 escapingLink,
-                preferences: FinderMenuPreferences(observationRootPaths: [allowed.path]),
+                authorizedDirectoryPaths: [allowed.path],
                 homeDirectory: root.appendingPathComponent("Home", isDirectory: true)
             )
         )

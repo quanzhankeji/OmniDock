@@ -103,6 +103,26 @@ final class FinderDirectoryGrantStore {
         return nil
     }
 
+    // Authorization is derived from the bookmarks the user actually granted
+    // through the open panel. The mirrored path list in the shared app-group
+    // defaults exists so the Finder extension can register its observation
+    // roots, and any process running as this user can write to it; a
+    // security-scoped bookmark cannot be forged the same way.
+    func authorizedDirectoryPaths() -> [String] {
+        savedRecords().compactMap { record in
+            var isStale = false
+            guard let url = try? URL(
+                resolvingBookmarkData: record.bookmark,
+                options: .withSecurityScope,
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            ) else {
+                return nil
+            }
+            return url.standardizedFileURL.path
+        }
+    }
+
     func remember(directory: URL) throws {
         invalidateUsabilityCache()
         let record = try bookmarkRecord(for: directory.standardizedFileURL)

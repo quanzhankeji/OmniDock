@@ -105,7 +105,7 @@ final class FinderFileCommandCoordinator: NSObject {
             )
             guard FinderCommandAuthorizationPolicy.isAllowedTarget(
                 directory,
-                preferences: preferences,
+                authorizedDirectoryPaths: directoryGrantStore.authorizedDirectoryPaths(),
                 homeDirectory: homeDirectory
             ) else {
                 return
@@ -132,11 +132,14 @@ final class FinderFileCommandCoordinator: NSObject {
             let selectedURLs = selectedDisplayPaths.map {
                 URL(fileURLWithPath: $0).standardizedFileURL
             }
+            // Resolved once: every selected item is checked against the same
+            // set of granted directories.
+            let authorizedDirectoryPaths = directoryGrantStore.authorizedDirectoryPaths()
             guard !selectedURLs.isEmpty,
                   selectedURLs.allSatisfy({
                       FinderCommandAuthorizationPolicy.isAllowedTarget(
                           $0,
-                          preferences: preferences,
+                          authorizedDirectoryPaths: authorizedDirectoryPaths,
                           homeDirectory: homeDirectory
                       )
                   })
@@ -351,15 +354,19 @@ final class FinderFileCommandCoordinator: NSObject {
 }
 
 enum FinderCommandAuthorizationPolicy {
+    // The authorized directories must come from the app's own security-scoped
+    // bookmarks, never from the path list published into the shared app-group
+    // defaults: that list is only a hint for the Finder extension's observation
+    // roots, and it is writable by any process running as this user.
     static func isAllowedTarget(
         _ target: URL,
-        preferences: FinderMenuPreferences,
+        authorizedDirectoryPaths: [String],
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> Bool {
         let resolvedTarget = target.standardizedFileURL.resolvingSymlinksInPath()
         return FinderObservationRoots.commandTargetURLs(
             homeDirectory: homeDirectory,
-            authorizedDirectoryPaths: preferences.observationRootPaths
+            authorizedDirectoryPaths: authorizedDirectoryPaths
         ).contains { root in
             FinderDirectoryGrantStore.contains(
                 resolvedTarget,
