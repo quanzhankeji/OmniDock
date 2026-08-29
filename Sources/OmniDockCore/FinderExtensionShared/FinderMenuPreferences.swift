@@ -688,9 +688,16 @@ enum FinderObservationRoots {
 
     static func folderURL(
         targetedURL: URL?,
+        selectedURLs: [URL] = [],
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> URL {
-        targetedURL ?? desktopURL(homeDirectory: homeDirectory)
+        if let selectedURL = selectedURLs.first {
+            return selectedURL.standardizedFileURL.deletingLastPathComponent()
+        }
+        if let targetedURL {
+            return targetedURL.standardizedFileURL
+        }
+        return desktopURL(homeDirectory: homeDirectory)
     }
 
     static func desktopURL(

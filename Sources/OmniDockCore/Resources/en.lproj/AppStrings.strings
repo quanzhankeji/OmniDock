@@ -117,7 +117,7 @@
 "finderExtensionAccessDetail" = "Choose “%@” or one of its parent folders to allow OmniDock to create files there. This is only required once.";
 "finderExtensionAccessButton" = "Allow";
 "finderQuickOpenTitle" = "Quick Actions";
-"finderQuickOpenDetail" = "Open selected Finder items with apps you choose.";
+"finderQuickOpenDetail" = "Open the current Finder folder with apps you choose.";
 "finderQuickOpenGroupedTitle" = "Group Apps in a Submenu";
 "finderQuickOpenGroupedDetail" = "Place selected apps under one Open With submenu.";
 "finderQuickOpenAdd" = "Choose App";
@@ -128,8 +128,8 @@
 "finderQuickOpenLoading" = "Checking…";
 "finderQuickOpenInstalled" = "Installed";
 "finderQuickOpenNotInstalled" = "Not Installed";
-"finderQuickOpenFailedTitle" = "Could Not Open Item";
-"finderQuickOpenFailedDetail" = "OmniDock could not open the selected item with “%@”. %@";
+"finderQuickOpenFailedTitle" = "Could Not Open Folder";
+"finderQuickOpenFailedDetail" = "OmniDock could not open the current folder with “%@”. %@";
 "finderQuickOpenApplicationMissing" = "The application is no longer available.";
 "finderQuickCommandsTitle" = "Quick Commands";
 "finderQuickCommandsDetail" = "Choose which commands appear in Finder contextual menus.";

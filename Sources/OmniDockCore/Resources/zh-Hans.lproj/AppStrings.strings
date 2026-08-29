@@ -117,7 +117,7 @@
 "finderExtensionAccessDetail" = "请选择“%@”或它的上级文件夹，允许 OmniDock 在其中新建文件。此授权只需完成一次。";
 "finderExtensionAccessButton" = "允许";
 "finderQuickOpenTitle" = "快捷操作";
-"finderQuickOpenDetail" = "使用选择的应用打开 Finder 中选中的项目。";
+"finderQuickOpenDetail" = "使用选择的应用打开当前 Finder 文件夹。";
 "finderQuickOpenGroupedTitle" = "折叠应用菜单";
 "finderQuickOpenGroupedDetail" = "将所选应用收纳到一个“打开方式”子菜单中。";
 "finderQuickOpenAdd" = "选择应用";
@@ -128,8 +128,8 @@
 "finderQuickOpenLoading" = "正在检测…";
 "finderQuickOpenInstalled" = "已安装";
 "finderQuickOpenNotInstalled" = "未安装";
-"finderQuickOpenFailedTitle" = "无法打开所选项目";
-"finderQuickOpenFailedDetail" = "无法使用“%@”打开所选项目。%@";
+"finderQuickOpenFailedTitle" = "无法打开当前文件夹";
+"finderQuickOpenFailedDetail" = "无法使用“%@”打开当前文件夹。%@";
 "finderQuickOpenApplicationMissing" = "该应用已经不可用。";
 "finderQuickCommandsTitle" = "快捷指令";
 "finderQuickCommandsDetail" = "选择要在 Finder 右键菜单中显示的快捷命令。";

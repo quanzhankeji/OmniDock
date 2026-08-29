@@ -213,6 +213,89 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         )
     }
 
+    func testCoordinatorOpensTheCurrentDirectoryInsteadOfTheSelectedFile() throws {
+        let home = try makeTemporaryDirectory()
+        let downloads = home.appendingPathComponent("Downloads", isDirectory: true)
+        let selectedFile = downloads.appendingPathComponent("Installer.dmg")
+        let application = home.appendingPathComponent("Sample.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: application, withIntermediateDirectories: true)
+        try Data().write(to: selectedFile)
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        let shortcut = FinderLaunchShortcut(
+            displayName: "Sample App",
+            bundleURLString: application.absoluteString,
+            bundleIdentifier: "com.example.sample"
+        )
+        let preferences = makePreferencesStore(FinderMenuPreferences(
+            isEnabled: true,
+            launchShortcuts: [shortcut]
+        ))
+        let mailbox = FinderCommandMailbox(directoryProvider: { home })
+        let request = FinderCommandEnvelope(command: .openDirectory(
+            shortcut: shortcut,
+            directoryDisplayPath: downloads.path
+        ))
+        try mailbox.enqueue(request)
+
+        var openedDirectory: URL?
+        var openedApplication: URL?
+        FinderFileCommandCoordinator(
+            requestMailbox: mailbox,
+            preferencesStore: preferences,
+            directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            homeDirectory: home,
+            openApplication: { directoryURL, applicationURL, completion in
+                openedDirectory = directoryURL
+                openedApplication = applicationURL
+                completion(nil)
+            }
+        ).handle(requestID: request.id)
+
+        XCTAssertEqual(openedDirectory, downloads)
+        XCTAssertNotEqual(openedDirectory, selectedFile)
+        XCTAssertEqual(openedApplication, application)
+    }
+
+    func testCoordinatorNeverPassesAFileToAQuickOpenApplication() throws {
+        let home = try makeTemporaryDirectory()
+        let downloads = home.appendingPathComponent("Downloads", isDirectory: true)
+        let selectedFile = downloads.appendingPathComponent("Installer.dmg")
+        let application = home.appendingPathComponent("Sample.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: application, withIntermediateDirectories: true)
+        try Data().write(to: selectedFile)
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        let shortcut = FinderLaunchShortcut(
+            displayName: "Sample App",
+            bundleURLString: application.absoluteString,
+            bundleIdentifier: "com.example.sample"
+        )
+        let preferences = makePreferencesStore(FinderMenuPreferences(
+            isEnabled: true,
+            launchShortcuts: [shortcut]
+        ))
+        let mailbox = FinderCommandMailbox(directoryProvider: { home })
+        let request = FinderCommandEnvelope(command: .openDirectory(
+            shortcut: shortcut,
+            directoryDisplayPath: selectedFile.path
+        ))
+        try mailbox.enqueue(request)
+
+        var didOpenApplication = false
+        FinderFileCommandCoordinator(
+            requestMailbox: mailbox,
+            preferencesStore: preferences,
+            directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            homeDirectory: home,
+            openApplication: { _, _, _ in didOpenApplication = true }
+        ).handle(requestID: request.id)
+
+        XCTAssertFalse(didOpenApplication)
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("OmniDockFinderCommandTests-\(UUID().uuidString)", isDirectory: true)

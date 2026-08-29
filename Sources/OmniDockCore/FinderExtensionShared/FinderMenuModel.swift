@@ -6,13 +6,13 @@ enum FinderMenuAction: Equatable {
     case copySelectedPaths
     case showHiddenFiles
     case hideHiddenFiles
-    case openSelection(FinderLaunchShortcut)
+    case openDirectory(FinderLaunchShortcut)
 
     func isAvailable(in location: FinderMenuLocation) -> Bool {
         switch self {
         case .createDocument, .copyCurrentDirectoryPath:
             return location == .folderBackground
-        case .copySelectedPaths, .openSelection:
+        case .copySelectedPaths, .openDirectory:
             return location == .selection
         case .showHiddenFiles, .hideHiddenFiles:
             return true
@@ -118,17 +118,22 @@ enum FinderMenuCatalog {
                 return []
             }
 
-            let applicationActions = preferences.launchShortcuts
-                .filter { shortcut in
-                    guard shortcut.isEnabled else {
-                        return false
+            let applicationActions: [FinderMenuAction]
+            if context.currentDirectory == nil {
+                applicationActions = []
+            } else {
+                applicationActions = preferences.launchShortcuts
+                    .filter { shortcut in
+                        guard shortcut.isEnabled else {
+                            return false
+                        }
+                        guard let url = shortcut.bundleURL else {
+                            return false
+                        }
+                        return FileManager.default.fileExists(atPath: url.path)
                     }
-                    guard let url = shortcut.bundleURL else {
-                        return false
-                    }
-                    return FileManager.default.fileExists(atPath: url.path)
-                }
-                .map(FinderMenuAction.openSelection)
+                    .map(FinderMenuAction.openDirectory)
+            }
 
             var entries: [FinderMenuEntry] = []
             if preferences.showsCopyPathCommand {
@@ -186,7 +191,7 @@ enum FinderMenuLabels {
             return preset.fileExtension == "txt"
                 ? "Text File"
                 : preset.displayName
-        case let (.openSelection(shortcut), _):
+        case let (.openDirectory(shortcut), _):
             return shortcut.displayName
         }
     }

@@ -15,9 +15,10 @@ OmniDock is a local-first macOS utility for faster window switching, app control
 - Optionally switch between individual windows with Alt-Tab (Option-Tab), using static previews and the same close and quit controls.
 - Assign per-app global shortcuts to launch, bring forward, or hide apps with the same toggle behavior.
 - Resize and position the frontmost window with global shortcuts, a green-button layout menu, or configurable drag zones.
-- Optionally add configurable Finder right-click commands for copying paths, creating empty files, showing or hiding hidden files, and opening selected items with chosen applications.
+- Optionally add configurable Finder right-click commands for copying paths, creating empty files, showing or hiding hidden files, and opening the current folder with chosen applications.
 - Optionally keep a local, searchable clipboard history for text, formatted content, links, images, and files, opened with `Command-Shift-C`.
 - Organize less-used menu bar icons behind an expandable divider, with manual reveal and optional automatic hiding.
+- Optionally launch OmniDock automatically when you log in on macOS 13 or later.
 - Choose English, Simplified Chinese, or the system language, with light, dark, or system appearance.
 - Check for official updates and verify their GitHub digest and Developer ID signature before installation.
 - Avoid browser tab navigation shortcuts so those shortcuts stay with the browser.
@@ -81,7 +82,7 @@ The optional Command-Tab preview augments the native macOS application switcher 
 
 The Finder extension is off by default. Open `OD` > `Settings` > `Finder Extension`, then turn on `Enable`. macOS may open its extension management page; enable OmniDock there to let Finder load the menu.
 
-When enabled, right-clicking an empty area in a Finder Sync-monitored local folder offers **Copy Path**, a configurable **New File** submenu, and commands for showing or hiding hidden files. Text and Markdown are included by default, and additional file types can be added in OmniDock settings. Right-clicking selected items offers **Copy Path**, hidden-file visibility commands, and optional shortcuts for opening the selection with chosen applications. Copied selections place every path on a separate line, and new files use an available `NewFile.<extension>` name without overwriting existing files.
+When enabled, right-clicking an empty area in a Finder Sync-monitored local folder offers **Copy Path**, a configurable **New File** submenu, and commands for showing or hiding hidden files. Text and Markdown are included by default, and additional file types can be added in OmniDock settings. Right-clicking selected items offers **Copy Path**, hidden-file visibility commands, and optional shortcuts for opening the current Finder folder with chosen applications. Copied selections place every path on a separate line, and new files use an available `NewFile.<extension>` name without overwriting existing files.
 
 OmniDock registers the local Desktop, Documents, Downloads, and other local folders that you explicitly authorize. Finder right-click extensions are currently unavailable in iCloud-synced folders, and some third-party cloud locations may not expose these commands either.
 

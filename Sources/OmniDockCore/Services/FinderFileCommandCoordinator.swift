@@ -11,6 +11,11 @@ final class FinderFileCommandCoordinator: NSObject {
     private let hiddenFilesController: FinderHiddenFilesController
     private let homeDirectory: URL
     private let revealFiles: ([URL]) -> Void
+    private let openApplication: (
+        _ directoryURL: URL,
+        _ applicationURL: URL,
+        _ completion: @escaping (Error?) -> Void
+    ) -> Void
     private var isListening = false
 
     init(
@@ -22,6 +27,21 @@ final class FinderFileCommandCoordinator: NSObject {
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         revealFiles: @escaping ([URL]) -> Void = {
             NSWorkspace.shared.activateFileViewerSelecting($0)
+        },
+        openApplication: @escaping (
+            _ directoryURL: URL,
+            _ applicationURL: URL,
+            _ completion: @escaping (Error?) -> Void
+        ) -> Void = { directoryURL, applicationURL, completion in
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            NSWorkspace.shared.open(
+                [directoryURL],
+                withApplicationAt: applicationURL,
+                configuration: configuration
+            ) { _, error in
+                completion(error)
+            }
         }
     ) {
         self.requestMailbox = requestMailbox
@@ -31,6 +51,7 @@ final class FinderFileCommandCoordinator: NSObject {
         self.hiddenFilesController = hiddenFilesController ?? FinderHiddenFilesController()
         self.homeDirectory = homeDirectory
         self.revealFiles = revealFiles
+        self.openApplication = openApplication
         super.init()
     }
 
@@ -122,32 +143,27 @@ final class FinderFileCommandCoordinator: NSObject {
                 return
             }
             hiddenFilesController.setHiddenFilesVisible(isVisible)
-        case let .openSelection(requestedShortcut, selectedDisplayPaths):
+        case let .openDirectory(requestedShortcut, directoryDisplayPath):
             guard let shortcut = FinderCommandAuthorizationPolicy.launchShortcut(
                 matching: requestedShortcut,
                 preferences: preferences
             ) else {
                 return
             }
-            let selectedURLs = selectedDisplayPaths.map {
-                URL(fileURLWithPath: $0).standardizedFileURL
-            }
-            // Resolved once: every selected item is checked against the same
-            // set of granted directories.
+            let directory = URL(
+                fileURLWithPath: directoryDisplayPath,
+                isDirectory: true
+            ).standardizedFileURL
             let authorizedDirectoryPaths = directoryGrantStore.authorizedDirectoryPaths()
-            guard !selectedURLs.isEmpty,
-                  selectedURLs.allSatisfy({
-                      FinderCommandAuthorizationPolicy.isAllowedTarget(
-                          $0,
-                          authorizedDirectoryPaths: authorizedDirectoryPaths,
-                          homeDirectory: homeDirectory
-                      )
-                  })
-            else {
+            guard FinderCommandAuthorizationPolicy.isAllowedTarget(
+                directory,
+                authorizedDirectoryPaths: authorizedDirectoryPaths,
+                homeDirectory: homeDirectory
+            ) else {
                 return
             }
-            openSelection(
-                selectedURLs,
+            openDirectory(
+                directory,
                 with: shortcut
             )
         }
@@ -273,13 +289,15 @@ final class FinderFileCommandCoordinator: NSObject {
             && (error.code == Int(EACCES) || error.code == Int(EPERM))
     }
 
-    private func openSelection(
-        _ selectedURLs: [URL],
+    private func openDirectory(
+        _ directoryURL: URL,
         with shortcut: FinderLaunchShortcut
     ) {
-        let urls = selectedURLs
-            .filter { fileManager.fileExists(atPath: $0.path) }
-        guard !urls.isEmpty else {
+        var isDirectory = ObjCBool(false)
+        guard fileManager.fileExists(
+            atPath: directoryURL.path,
+            isDirectory: &isDirectory
+        ), isDirectory.boolValue else {
             return
         }
 
@@ -299,13 +317,7 @@ final class FinderFileCommandCoordinator: NSObject {
             return
         }
 
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = true
-        NSWorkspace.shared.open(
-            urls,
-            withApplicationAt: applicationURL,
-            configuration: configuration
-        ) { [weak self] _, error in
+        openApplication(directoryURL, applicationURL) { [weak self] error in
             guard let error else {
                 return
             }

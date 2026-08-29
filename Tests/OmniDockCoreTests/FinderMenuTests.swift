@@ -382,6 +382,15 @@ final class FinderMenuTests: XCTestCase {
         XCTAssertFalse(FinderMenuAction.copyCurrentDirectoryPath.isAvailable(in: .selection))
         XCTAssertTrue(FinderMenuAction.copySelectedPaths.isAvailable(in: .selection))
         XCTAssertFalse(FinderMenuAction.copySelectedPaths.isAvailable(in: .folderBackground))
+        let shortcut = FinderLaunchShortcut(
+            displayName: "Sample App",
+            bundleURLString: URL(fileURLWithPath: "/Applications/Sample.app").absoluteString,
+            bundleIdentifier: "com.example.sample"
+        )
+        XCTAssertTrue(FinderMenuAction.openDirectory(shortcut).isAvailable(in: .selection))
+        XCTAssertFalse(
+            FinderMenuAction.openDirectory(shortcut).isAvailable(in: .folderBackground)
+        )
         XCTAssertTrue(FinderMenuAction.showHiddenFiles.isAvailable(in: .folderBackground))
         XCTAssertTrue(FinderMenuAction.showHiddenFiles.isAvailable(in: .selection))
         XCTAssertTrue(FinderMenuAction.hideHiddenFiles.isAvailable(in: .folderBackground))
@@ -420,7 +429,7 @@ final class FinderMenuTests: XCTestCase {
         )
         let context = FinderMenuContext(
             location: .selection,
-            currentDirectory: nil,
+            currentDirectory: URL(fileURLWithPath: "/tmp", isDirectory: true),
             selectedURLs: [URL(fileURLWithPath: "/tmp/item")]
         )
 
@@ -435,7 +444,7 @@ final class FinderMenuTests: XCTestCase {
             ),
             [
                 .action(.copySelectedPaths),
-                .applicationSubmenu([.openSelection(app)]),
+                .applicationSubmenu([.openDirectory(app)]),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]
@@ -451,7 +460,7 @@ final class FinderMenuTests: XCTestCase {
             ),
             [
                 .action(.copySelectedPaths),
-                .action(.openSelection(app)),
+                .action(.openDirectory(app)),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]
@@ -547,7 +556,7 @@ final class FinderMenuTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: requestURL.path))
     }
 
-    func testOpenSelectionCommandPreservesEverySelectedPath() throws {
+    func testOpenDirectoryCommandPreservesOnlyTheCurrentFolder() throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -558,9 +567,9 @@ final class FinderMenuTests: XCTestCase {
             bundleIdentifier: "com.example.sample"
         )
         let request = FinderCommandEnvelope(
-            command: .openSelection(
+            command: .openDirectory(
                 shortcut: shortcut,
-                selectedDisplayPaths: ["/tmp/one.txt", "/tmp/two.txt"]
+                directoryDisplayPath: "/tmp"
             )
         )
 
@@ -1104,6 +1113,15 @@ final class FinderMenuTests: XCTestCase {
         XCTAssertEqual(
             FinderObservationRoots.folderURL(targetedURL: folder, homeDirectory: home),
             folder
+        )
+        let selectedFile = downloads.appendingPathComponent("Installer.dmg")
+        XCTAssertEqual(
+            FinderObservationRoots.folderURL(
+                targetedURL: selectedFile,
+                selectedURLs: [selectedFile],
+                homeDirectory: home
+            ),
+            downloads
         )
     }
 

@@ -133,14 +133,13 @@ final class FinderMenuExtension: FIFinderSync {
                 fileExtension: preset.fileExtension,
                 directoryDisplayPath: directory.path
             ))
-        case let .openSelection(shortcut):
-            let paths = binding.context.selectedURLs.map(\.path)
-            guard !paths.isEmpty else {
+        case let .openDirectory(shortcut):
+            guard let directory = binding.context.currentDirectory else {
                 return
             }
-            forward(.openSelection(
+            forward(.openDirectory(
                 shortcut: shortcut,
-                selectedDisplayPaths: paths
+                directoryDisplayPath: directory.path
             ))
         }
     }
@@ -160,7 +159,7 @@ final class FinderMenuExtension: FIFinderSync {
             action: action,
             context: context
         ))
-        if case let .openSelection(shortcut) = action,
+        if case let .openDirectory(shortcut) = action,
            let applicationURL = shortcut.bundleURL {
             let icon = NSWorkspace.shared.icon(forFile: applicationURL.path)
             icon.size = CGSize(width: 16, height: 16)
@@ -181,10 +180,14 @@ final class FinderMenuExtension: FIFinderSync {
                 selectedURLs: []
             )
         case .contextualMenuForItems:
+            let selectedURLs = controller.selectedItemURLs() ?? []
             return FinderMenuContext(
                 location: .selection,
-                currentDirectory: nil,
-                selectedURLs: controller.selectedItemURLs() ?? []
+                currentDirectory: FinderObservationRoots.folderURL(
+                    targetedURL: controller.targetedURL(),
+                    selectedURLs: selectedURLs
+                ),
+                selectedURLs: selectedURLs
             )
         default:
             return nil

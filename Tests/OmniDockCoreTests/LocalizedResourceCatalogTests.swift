@@ -154,6 +154,10 @@ final class LocalizedResourceCatalogTests: XCTestCase {
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderExtensionEnableTitle, language: .en), "Enable")
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderExtensionOpenSettings, language: .en), "Open Finder Extensions")
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenTitle, language: .en), "Quick Actions")
+        XCTAssertEqual(
+            LocalizedResourceCatalog.text(.finderQuickOpenDetail, language: .en),
+            "Open the current Finder folder with apps you choose."
+        )
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenLoading, language: .en), "Checking…")
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenInstalled, language: .en), "Installed")
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenNotInstalled, language: .en), "Not Installed")
@@ -162,6 +166,10 @@ final class LocalizedResourceCatalogTests: XCTestCase {
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderExtensionEnableTitle, language: .zhHans), "启用")
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderExtensionOpenSettings, language: .zhHans), "打开 Finder 扩展设置")
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenTitle, language: .zhHans), "快捷操作")
+        XCTAssertEqual(
+            LocalizedResourceCatalog.text(.finderQuickOpenDetail, language: .zhHans),
+            "使用选择的应用打开当前 Finder 文件夹。"
+        )
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenLoading, language: .zhHans), "正在检测…")
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenInstalled, language: .zhHans), "已安装")
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenNotInstalled, language: .zhHans), "未安装")
