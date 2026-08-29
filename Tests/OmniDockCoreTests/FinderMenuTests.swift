@@ -305,6 +305,104 @@ final class FinderMenuTests: XCTestCase {
         XCTAssertEqual(registry.consume(token: thirdToken), binding)
     }
 
+    func testMenuOffersAnApplicationFoundByBundleIdentifier() {
+        // The stored path is where the shortcut was created from. An
+        // application that moved must still be offered, because the command
+        // resolves it by bundle identifier when it runs.
+        let moved = FinderLaunchShortcut(
+            displayName: "Moved Editor",
+            bundleURLString: URL(fileURLWithPath: "/Applications/Gone.app").absoluteString,
+            bundleIdentifier: "com.example.moved"
+        )
+        let context = FinderMenuContext(
+            location: .folderBackground,
+            currentDirectory: URL(fileURLWithPath: "/tmp/OmniDock"),
+            selectedURLs: []
+        )
+        let preferences = FinderMenuPreferences(
+            isEnabled: true,
+            groupsLaunchShortcuts: false,
+            launchShortcuts: [moved],
+            documentPresets: [],
+            showsCopyPathCommand: false,
+            showsShowHiddenFilesCommand: false,
+            showsHideHiddenFilesCommand: false
+        )
+
+        for location in [FinderMenuLocation.folderBackground, .selection] {
+            let entries = FinderMenuCatalog.entries(
+                for: FinderMenuContext(
+                    location: location,
+                    currentDirectory: context.currentDirectory,
+                    selectedURLs: [URL(fileURLWithPath: "/tmp/OmniDock/file.txt")]
+                ),
+                preferences: preferences,
+                resolveApplication: { _ in URL(fileURLWithPath: "/Applications/Moved.app") },
+                acceptsDirectories: { _ in true }
+            )
+            XCTAssertEqual(entries, [.action(.openDirectory(moved))], "\(location)")
+        }
+    }
+
+    func testMenuLeavesOutApplicationsThatCannotOpenAFolder() {
+        let fileOnlyEditor = FinderLaunchShortcut(
+            displayName: "Single File Editor",
+            bundleURLString: URL(fileURLWithPath: "/Applications/Single.app").absoluteString,
+            bundleIdentifier: "com.example.single"
+        )
+        let context = FinderMenuContext(
+            location: .folderBackground,
+            currentDirectory: URL(fileURLWithPath: "/tmp/OmniDock"),
+            selectedURLs: []
+        )
+        let preferences = FinderMenuPreferences(
+            isEnabled: true,
+            groupsLaunchShortcuts: false,
+            launchShortcuts: [fileOnlyEditor],
+            documentPresets: [],
+            showsCopyPathCommand: false,
+            showsShowHiddenFilesCommand: false,
+            showsHideHiddenFilesCommand: false
+        )
+
+        let entries = FinderMenuCatalog.entries(
+            for: context,
+            preferences: preferences,
+            resolveApplication: { _ in URL(fileURLWithPath: "/Applications/Single.app") },
+            acceptsDirectories: { _ in false }
+        )
+
+        XCTAssertTrue(entries.isEmpty)
+    }
+
+    func testApplicationResolutionFallsBackToTheBundleIdentifier() {
+        let shortcut = FinderLaunchShortcut(
+            displayName: "Editor",
+            bundleURLString: URL(fileURLWithPath: "/Applications/Gone.app").absoluteString,
+            bundleIdentifier: "com.example.editor"
+        )
+        let installed = URL(fileURLWithPath: "/Applications/Editor.app")
+
+        XCTAssertEqual(
+            FinderApplicationTargetResolver.resolve(
+                shortcut: shortcut,
+                fileExists: { _ in false },
+                installedApplicationURL: { $0 == "com.example.editor" ? installed : nil }
+            ),
+            installed
+        )
+        // A stored path that still exists wins, so a shortcut keeps pointing at
+        // the copy it was created from.
+        XCTAssertEqual(
+            FinderApplicationTargetResolver.resolve(
+                shortcut: shortcut,
+                fileExists: { _ in true },
+                installedApplicationURL: { _ in installed }
+            ),
+            shortcut.bundleURL
+        )
+    }
+
     func testContainerMenuOffersNewFileAndCurrentPath() {
         let context = FinderMenuContext(
             location: .folderBackground,
@@ -315,7 +413,9 @@ final class FinderMenuTests: XCTestCase {
         XCTAssertEqual(
             FinderMenuCatalog.entries(
                 for: context,
-                preferences: FinderMenuPreferences(isEnabled: true)
+                preferences: FinderMenuPreferences(isEnabled: true),
+                resolveApplication: { _ in nil },
+                acceptsDirectories: { _ in true }
             ),
             [
                 .action(.copyCurrentDirectoryPath),
@@ -340,7 +440,9 @@ final class FinderMenuTests: XCTestCase {
         XCTAssertEqual(
             FinderMenuCatalog.entries(
                 for: context,
-                preferences: FinderMenuPreferences(isEnabled: true)
+                preferences: FinderMenuPreferences(isEnabled: true),
+                resolveApplication: { _ in nil },
+                acceptsDirectories: { _ in true }
             ),
             [
                 .action(.copyCurrentDirectoryPath),

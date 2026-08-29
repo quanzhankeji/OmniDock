@@ -337,12 +337,7 @@ final class FinderFileCommandCoordinator: NSObject {
 
         guard let applicationURL = FinderApplicationTargetResolver.resolve(
             shortcut: shortcut,
-            fileExists: fileManager.fileExists(atPath:),
-            installedApplicationURL: { bundleIdentifier in
-                NSWorkspace.shared.urlForApplication(
-                    withBundleIdentifier: bundleIdentifier
-                )
-            }
+            fileExists: fileManager.fileExists(atPath:)
         ) else {
             presentOpenFailure(
                 applicationName: shortcut.displayName,
@@ -532,22 +527,5 @@ final class FinderHiddenFilesController {
         keyDown.postToPid(finder.processIdentifier)
         keyUp.postToPid(finder.processIdentifier)
         return true
-    }
-}
-
-enum FinderApplicationTargetResolver {
-    static func resolve(
-        shortcut: FinderLaunchShortcut,
-        fileExists: (String) -> Bool,
-        installedApplicationURL: (String) -> URL?
-    ) -> URL? {
-        if let storedURL = shortcut.bundleURL,
-           fileExists(storedURL.path) {
-            return storedURL
-        }
-        guard let bundleIdentifier = shortcut.bundleIdentifier else {
-            return nil
-        }
-        return installedApplicationURL(bundleIdentifier)
     }
 }

@@ -8,6 +8,7 @@
 /* Begin PBXBuildFile section */
 		00E67EAF8D1F0480F1E0F8AA /* OmniDockMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E3B92A97B3D6988F4B42F5E /* OmniDockMain.swift */; };
 		0E7ADBE745AB6F60EE674170 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7A7DED8B7FC805B7B9D9624 /* AppDelegate.swift */; };
+		BFBFE25D3544381285CC98A8 /* FinderApplicationTargets.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE7A12D34DEDE6F86B76B8E /* FinderApplicationTargets.swift */; };
 		7DBE3DC77202C25B7CCFE215 /* FinderCommandTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52CD10A1601C5E9DDC60C8EF /* FinderCommandTransport.swift */; };
 		6245E267050CB0D3011E7D0C /* FinderMenuModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58239091F32F00B5095B417E /* FinderMenuModel.swift */; };
 		C74926C22DDD045B610E1B3F /* FinderMenuPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 026177AAAF388C828A163D1D /* FinderMenuPreferences.swift */; };
@@ -106,6 +107,7 @@
 		532523EC4B5D2D3B25E76E33 /* WindowPlacementSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F50771B3DC0D16851E07DE4D /* WindowPlacementSettingsView.swift */; };
 		1A2FA8FC769EDC4761A6A669 /* WindowPlacementSizeHUDController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D1FF25E426EB09B8802EB2 /* WindowPlacementSizeHUDController.swift */; };
 		F39A46ABDFFB4D66C30CCB96 /* FinderMenuExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = A18BD2DED7E1CE111A4BEDCA /* FinderMenuExtension.swift */; };
+		9D911175F92E7321EE00D1B2 /* FinderApplicationTargets.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEE7A12D34DEDE6F86B76B8E /* FinderApplicationTargets.swift */; };
 		1CD0553BB69B87377A2529AA /* FinderCommandTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52CD10A1601C5E9DDC60C8EF /* FinderCommandTransport.swift */; };
 		E200345E124E1120FB011361 /* FinderMenuModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58239091F32F00B5095B417E /* FinderMenuModel.swift */; };
 		325715F74BBCC3D3B6D60FBF /* FinderMenuPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 026177AAAF388C828A163D1D /* FinderMenuPreferences.swift */; };
@@ -134,6 +136,7 @@
 		2CC086129F826B3823CFAB65 /* OmniDockFinderSync.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.app-extension; includeInIndex = 0; path = "OmniDockFinderSync.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		3E3B92A97B3D6988F4B42F5E /* OmniDockMain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDock/OmniDockMain.swift"; sourceTree = SOURCE_ROOT; };
 		D7A7DED8B7FC805B7B9D9624 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/AppDelegate.swift"; sourceTree = SOURCE_ROOT; };
+		FEE7A12D34DEDE6F86B76B8E /* FinderApplicationTargets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/FinderExtensionShared/FinderApplicationTargets.swift"; sourceTree = SOURCE_ROOT; };
 		52CD10A1601C5E9DDC60C8EF /* FinderCommandTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/FinderExtensionShared/FinderCommandTransport.swift"; sourceTree = SOURCE_ROOT; };
 		58239091F32F00B5095B417E /* FinderMenuModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/FinderExtensionShared/FinderMenuModel.swift"; sourceTree = SOURCE_ROOT; };
 		026177AAAF388C828A163D1D /* FinderMenuPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/FinderExtensionShared/FinderMenuPreferences.swift"; sourceTree = SOURCE_ROOT; };
@@ -322,6 +325,7 @@
 			children = (
 				3E3B92A97B3D6988F4B42F5E /* OmniDockMain.swift */,
 				D7A7DED8B7FC805B7B9D9624 /* AppDelegate.swift */,
+				FEE7A12D34DEDE6F86B76B8E /* FinderApplicationTargets.swift */,
 				52CD10A1601C5E9DDC60C8EF /* FinderCommandTransport.swift */,
 				58239091F32F00B5095B417E /* FinderMenuModel.swift */,
 				026177AAAF388C828A163D1D /* FinderMenuPreferences.swift */,
@@ -633,6 +637,7 @@
 			files = (
 				00E67EAF8D1F0480F1E0F8AA /* OmniDockMain.swift in Sources */,
 				0E7ADBE745AB6F60EE674170 /* AppDelegate.swift in Sources */,
+				BFBFE25D3544381285CC98A8 /* FinderApplicationTargets.swift in Sources */,
 				7DBE3DC77202C25B7CCFE215 /* FinderCommandTransport.swift in Sources */,
 				6245E267050CB0D3011E7D0C /* FinderMenuModel.swift in Sources */,
 				C74926C22DDD045B610E1B3F /* FinderMenuPreferences.swift in Sources */,
@@ -738,6 +743,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				F39A46ABDFFB4D66C30CCB96 /* FinderMenuExtension.swift in Sources */,
+				9D911175F92E7321EE00D1B2 /* FinderApplicationTargets.swift in Sources */,
 				1CD0553BB69B87377A2529AA /* FinderCommandTransport.swift in Sources */,
 				E200345E124E1120FB011361 /* FinderMenuModel.swift in Sources */,
 				325715F74BBCC3D3B6D60FBF /* FinderMenuPreferences.swift in Sources */,

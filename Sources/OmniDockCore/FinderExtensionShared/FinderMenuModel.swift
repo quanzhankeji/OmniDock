@@ -88,9 +88,49 @@ enum FinderMenuEntry: Equatable {
 }
 
 enum FinderMenuCatalog {
+    // The application probes are injected so the menu can be built in tests
+    // without depending on what happens to be installed on the machine.
+    private static func applicationEntries(
+        for context: FinderMenuContext,
+        preferences: FinderMenuPreferences,
+        resolveApplication: (FinderLaunchShortcut) -> URL?,
+        acceptsDirectories: (URL) -> Bool
+    ) -> [FinderMenuEntry] {
+        guard context.currentDirectory != nil else {
+            return []
+        }
+        let actions = preferences.launchShortcuts
+            .filter { shortcut in
+                guard shortcut.isEnabled,
+                      let applicationURL = resolveApplication(shortcut)
+                else {
+                    return false
+                }
+                // The command hands over a folder, so an application that only
+                // takes single documents is left out rather than offered as a
+                // command that does nothing.
+                return acceptsDirectories(applicationURL)
+            }
+            .map(FinderMenuAction.openDirectory)
+        guard !actions.isEmpty else {
+            return []
+        }
+        return preferences.groupsLaunchShortcuts
+            ? [.applicationSubmenu(actions)]
+            : actions.map(FinderMenuEntry.action)
+    }
+
     static func entries(
         for context: FinderMenuContext,
-        preferences: FinderMenuPreferences
+        preferences: FinderMenuPreferences,
+        resolveApplication: (FinderLaunchShortcut) -> URL? = { shortcut in
+            FinderApplicationTargetResolver.resolve(shortcut: shortcut)
+        },
+        acceptsDirectories: (URL) -> Bool = { applicationURL in
+            FinderApplicationDirectorySupport.acceptsDirectories(
+                applicationURL: applicationURL
+            )
+        }
     ) -> [FinderMenuEntry] {
         guard preferences.isEnabled else {
             return []
@@ -111,6 +151,15 @@ enum FinderMenuCatalog {
                     enabledPresets.map(FinderMenuAction.createDocument)
                 ))
             }
+            // The command opens the folder the menu was invoked in, so it
+            // belongs here too. Requiring a selection first made the common
+            // case - open this folder in an editor - needlessly indirect.
+            entries.append(contentsOf: applicationEntries(
+                for: context,
+                preferences: preferences,
+                resolveApplication: resolveApplication,
+                acceptsDirectories: acceptsDirectories
+            ))
             entries.append(contentsOf: hiddenFileEntries(for: preferences))
             return entries
         case .selection:
@@ -118,32 +167,16 @@ enum FinderMenuCatalog {
                 return []
             }
 
-            let applicationActions: [FinderMenuAction]
-            if context.currentDirectory == nil {
-                applicationActions = []
-            } else {
-                applicationActions = preferences.launchShortcuts
-                    .filter { shortcut in
-                        guard shortcut.isEnabled else {
-                            return false
-                        }
-                        guard let url = shortcut.bundleURL else {
-                            return false
-                        }
-                        return FileManager.default.fileExists(atPath: url.path)
-                    }
-                    .map(FinderMenuAction.openDirectory)
-            }
-
             var entries: [FinderMenuEntry] = []
             if preferences.showsCopyPathCommand {
                 entries.append(.action(.copySelectedPaths))
             }
-            if preferences.groupsLaunchShortcuts, !applicationActions.isEmpty {
-                entries.append(.applicationSubmenu(applicationActions))
-            } else {
-                entries.append(contentsOf: applicationActions.map(FinderMenuEntry.action))
-            }
+            entries.append(contentsOf: applicationEntries(
+                for: context,
+                preferences: preferences,
+                resolveApplication: resolveApplication,
+                acceptsDirectories: acceptsDirectories
+            ))
             entries.append(contentsOf: hiddenFileEntries(for: preferences))
             return entries
         }
