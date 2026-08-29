@@ -96,7 +96,8 @@ final class ClipboardHistoryService {
 
     private let settings: SettingsStore
     private let permissionService: PermissionService
-    private let store: ClipboardHistoryPersisting
+    private let storeProvider: () -> ClipboardHistoryPersisting
+    private var store: ClipboardHistoryPersisting?
     private let panelController: ClipboardPaletteController
     private let registrationStatus: ClipboardHistoryRegistrationStatus
     private let hotkeyRegistry: ClipboardHistoryHotkeyRegistering
@@ -112,7 +113,7 @@ final class ClipboardHistoryService {
     private var captureGeneration = 0
     private var isStarted = false
     private var registeredShortcut: RecordedShortcut?
-    private var records: [ClipboardHistoryRecord]
+    private var records: [ClipboardHistoryRecord] = []
     private var recordsRevision: UInt64 = 0
 
     var isMonitoring: Bool {
@@ -126,7 +127,7 @@ final class ClipboardHistoryService {
     init(
         settings: SettingsStore,
         permissionService: PermissionService,
-        store: ClipboardHistoryPersisting,
+        storeProvider: @escaping () -> ClipboardHistoryPersisting,
         panelController: ClipboardPaletteController,
         registrationStatus: ClipboardHistoryRegistrationStatus,
         hotkeyRegistry: ClipboardHistoryHotkeyRegistering? = nil,
@@ -134,12 +135,11 @@ final class ClipboardHistoryService {
     ) {
         self.settings = settings
         self.permissionService = permissionService
-        self.store = store
+        self.storeProvider = storeProvider
         self.panelController = panelController
         self.registrationStatus = registrationStatus
         self.hotkeyRegistry = hotkeyRegistry ?? ClipboardHistoryHotkeyRegistry()
         self.pasteboard = pasteboard
-        records = store.records()
 
         self.hotkeyRegistry.onTrigger = { [weak self] in
             self?.togglePanel()
@@ -153,6 +153,26 @@ final class ClipboardHistoryService {
         panelController.onPreviewRequest = { [weak self] id in
             self?.previewContent(id: id)
         }
+    }
+
+    convenience init(
+        settings: SettingsStore,
+        permissionService: PermissionService,
+        store: ClipboardHistoryPersisting,
+        panelController: ClipboardPaletteController,
+        registrationStatus: ClipboardHistoryRegistrationStatus,
+        hotkeyRegistry: ClipboardHistoryHotkeyRegistering? = nil,
+        pasteboard: NSPasteboard = .general
+    ) {
+        self.init(
+            settings: settings,
+            permissionService: permissionService,
+            storeProvider: { store },
+            panelController: panelController,
+            registrationStatus: registrationStatus,
+            hotkeyRegistry: hotkeyRegistry,
+            pasteboard: pasteboard
+        )
     }
 
     func start() {
@@ -184,13 +204,14 @@ final class ClipboardHistoryService {
     func snapshot() -> ClipboardHistorySnapshot {
         ClipboardHistorySnapshot(
             records: records,
-            warning: store.warning ?? registrationStatus.warning,
+            warning: store?.warning ?? registrationStatus.warning,
             revision: recordsRevision
         )
     }
 
     func previewContent(id: UUID) -> ClipboardHistoryPreviewContent? {
-        guard let record = records.first(where: { $0.id == id }),
+        guard let store,
+              let record = records.first(where: { $0.id == id }),
               let payload = store.payload(for: id)
         else {
             return nil
@@ -203,11 +224,17 @@ final class ClipboardHistoryService {
     }
 
     func delete(id: UUID) {
+        guard let store else {
+            return
+        }
         store.delete(id: id)
         refreshRecords()
     }
 
     func clear() {
+        guard let store else {
+            return
+        }
         store.removeAll()
         refreshRecords()
     }
@@ -217,7 +244,7 @@ final class ClipboardHistoryService {
         guard change.affectsClipboardHistory || change == .hotkeyBindings else {
             return
         }
-        if change.affectsClipboardHistory {
+        if change.affectsClipboardHistory, let store {
             store.prune(
                 limit: settings.clipboardHistoryLimit,
                 maximumTotalBytes: Self.maximumTotalBytes
@@ -235,6 +262,8 @@ final class ClipboardHistoryService {
             panelController.hide()
             return
         }
+
+        loadStoreIfNeeded()
 
         let shortcut = settings.clipboardHistoryShortcut
         // Defensive guard: the recorder already enforces this, but a corrupted
@@ -342,7 +371,7 @@ final class ClipboardHistoryService {
         capturedAt: Date,
         generation: Int
     ) {
-        guard generation == captureGeneration else {
+        guard generation == captureGeneration, let store else {
             return
         }
         let candidate = ClipboardHistoryCodec.candidate(
@@ -359,6 +388,9 @@ final class ClipboardHistoryService {
     }
 
     private func togglePanel() {
+        guard let store else {
+            return
+        }
         panelController.toggle(
             records: records,
             warning: store.warning,
@@ -371,7 +403,8 @@ final class ClipboardHistoryService {
         autoPaste: Bool,
         sourceApplication: NSRunningApplication?
     ) {
-        guard let payload = store.payload(for: id),
+        guard let store,
+              let payload = store.payload(for: id),
               ClipboardHistoryCodec.write(
                   payload,
                   to: pasteboard,
@@ -463,6 +496,21 @@ final class ClipboardHistoryService {
     }
 
     private func refreshRecords() {
+        guard let store else {
+            return
+        }
+        records = store.records()
+        recordsRevision &+= 1
+        panelController.update(records: records, warning: store.warning)
+        NotificationCenter.default.post(name: Self.changedNotification, object: self)
+    }
+
+    private func loadStoreIfNeeded() {
+        guard store == nil else {
+            return
+        }
+        let store = storeProvider()
+        self.store = store
         records = store.records()
         recordsRevision &+= 1
         panelController.update(records: records, warning: store.warning)

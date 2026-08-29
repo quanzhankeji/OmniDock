@@ -55,12 +55,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     )
     private lazy var finderFileCommandCoordinator = FinderFileCommandCoordinator()
-    private lazy var clipboardHistoryStore = ClipboardHistoryStore()
     private lazy var clipboardHistoryPanelController = ClipboardPaletteController()
     private lazy var clipboardHistoryService = ClipboardHistoryService(
         settings: settings,
         permissionService: permissionService,
-        store: clipboardHistoryStore,
+        storeProvider: { ClipboardHistoryStore() },
         panelController: clipboardHistoryPanelController,
         registrationStatus: clipboardHistoryRegistrationStatus
     )

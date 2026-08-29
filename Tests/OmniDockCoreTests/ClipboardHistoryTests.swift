@@ -22,6 +22,79 @@ final class ClipboardHistoryTests: XCTestCase {
         XCTAssertEqual(reloaded.clipboardHistoryLimit, 350)
     }
 
+    func testDisabledClipboardHistoryDoesNotCreateStoreOrReadKey() {
+        let settings = SettingsStore(
+            defaults: isolatedDefaults(),
+            livePreviewLimitProvider: { 8 }
+        )
+        let keyStore = ClipboardHistoryKeyStoreSpy()
+        var storeCreationCount = 0
+        let service = ClipboardHistoryService(
+            settings: settings,
+            permissionService: PermissionService(),
+            storeProvider: {
+                storeCreationCount += 1
+                return ClipboardHistoryStore(
+                    storeURL: nil,
+                    inMemory: false,
+                    keyStore: keyStore
+                )
+            },
+            panelController: ClipboardPaletteController(),
+            registrationStatus: ClipboardHistoryRegistrationStatus(),
+            hotkeyRegistry: ClipboardHistoryHotkeyRegistrySpy()
+        )
+
+        service.start()
+
+        XCTAssertEqual(storeCreationCount, 0)
+        XCTAssertEqual(keyStore.loadCount, 0)
+        XCTAssertEqual(service.snapshot().records, [])
+        XCTAssertNil(service.snapshot().warning)
+        service.stop()
+    }
+
+    func testEnablingClipboardHistoryCreatesStoreOnlyOncePerRun() {
+        let settings = SettingsStore(
+            defaults: isolatedDefaults(),
+            livePreviewLimitProvider: { 8 }
+        )
+        let keyStore = ClipboardHistoryKeyStoreSpy(
+            failure: .storageUnavailable(EACCES)
+        )
+        var storeCreationCount = 0
+        let service = ClipboardHistoryService(
+            settings: settings,
+            permissionService: PermissionService(),
+            storeProvider: {
+                storeCreationCount += 1
+                return ClipboardHistoryStore(
+                    storeURL: nil,
+                    inMemory: false,
+                    keyStore: keyStore
+                )
+            },
+            panelController: ClipboardPaletteController(),
+            registrationStatus: ClipboardHistoryRegistrationStatus(),
+            hotkeyRegistry: ClipboardHistoryHotkeyRegistrySpy()
+        )
+        service.start()
+
+        settings.clipboardHistoryEnabled = true
+        XCTAssertEqual(storeCreationCount, 1)
+        XCTAssertEqual(keyStore.loadCount, 1)
+        XCTAssertEqual(
+            service.snapshot().warning,
+            AppStrings.text(.clipboardStorageUnavailable)
+        )
+
+        settings.clipboardHistoryEnabled = false
+        settings.clipboardHistoryEnabled = true
+        XCTAssertEqual(storeCreationCount, 1)
+        XCTAssertEqual(keyStore.loadCount, 1)
+        service.stop()
+    }
+
     func testSettingsExposeClipboardAndWindowPlacementTabs() {
         XCTAssertEqual(SettingsTab.allCases.count, 7)
         XCTAssertEqual(SettingsTab.allCases[4], .clipboardHistory)
@@ -125,17 +198,24 @@ final class ClipboardHistoryTests: XCTestCase {
             limit: 200,
             maximumTotalBytes: 1_000_000
         ))
+        let settings = SettingsStore(
+            defaults: isolatedDefaults(),
+            livePreviewLimitProvider: { 8 }
+        )
+        settings.clipboardHistoryEnabled = true
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
         let service = ClipboardHistoryService(
-            settings: SettingsStore(
-                defaults: isolatedDefaults(),
-                livePreviewLimitProvider: { 8 }
-            ),
+            settings: settings,
             permissionService: PermissionService(),
             store: store,
             panelController: ClipboardPaletteController(),
             registrationStatus: ClipboardHistoryRegistrationStatus(),
-            hotkeyRegistry: ClipboardHistoryHotkeyRegistrySpy()
+            hotkeyRegistry: ClipboardHistoryHotkeyRegistrySpy(),
+            pasteboard: pasteboard
         )
+        service.start()
+        defer { service.stop() }
         let initialRevision = service.snapshot().revision
 
         service.delete(id: record.id)
@@ -684,15 +764,103 @@ final class ClipboardHistoryTests: XCTestCase {
         XCTAssertTrue(reopened.records().isEmpty)
     }
 
-    func testUnavailableKeyKeepsHistoryOutOfTheStoreFile() throws {
+    func testLocalKeyStoreCreatesAPrivateKeyFileAndReusesIt() throws {
         let directory = try makeStoreDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let keyURL = directory.appendingPathComponent("ClipboardHistoryKey")
+        let keyStore = ClipboardHistoryLocalKeyStore(keyURL: keyURL)
+
+        let first = try keyStore.loadOrCreateKey()
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: keyURL.path))
+        XCTAssertEqual(try posixPermissions(of: keyURL), 0o600)
+        XCTAssertEqual(try Data(contentsOf: keyURL).count, 32)
+
+        // A second read must return the same key, or every relaunch would
+        // strand the archive written by the previous one.
+        let second = try ClipboardHistoryLocalKeyStore(keyURL: keyURL).loadOrCreateKey()
+        XCTAssertEqual(
+            first.withUnsafeBytes { Data($0) },
+            second.withUnsafeBytes { Data($0) }
+        )
+    }
+
+    func testLocalKeyStoreRestoresTightPermissionsOnRead() throws {
+        let directory = try makeStoreDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let keyURL = directory.appendingPathComponent("ClipboardHistoryKey")
+        let keyStore = ClipboardHistoryLocalKeyStore(keyURL: keyURL)
+        _ = try keyStore.loadOrCreateKey()
+
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o644],
+            ofItemAtPath: keyURL.path
+        )
+        _ = try keyStore.loadOrCreateKey()
+
+        XCTAssertEqual(try posixPermissions(of: keyURL), 0o600)
+    }
+
+    func testLocalKeyStoreRejectsATruncatedKeyFile() throws {
+        let directory = try makeStoreDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let keyURL = directory.appendingPathComponent("ClipboardHistoryKey")
+        try Data(repeating: 0, count: 8).write(to: keyURL)
+
+        XCTAssertThrowsError(
+            try ClipboardHistoryLocalKeyStore(keyURL: keyURL).loadOrCreateKey()
+        ) { error in
+            XCTAssertEqual(error as? ClipboardHistoryKeyError, .malformedKey)
+        }
+    }
+
+    func testArchiveSurvivesReopeningWithTheLocalKeyStore() throws {
+        let directory = try makeStoreDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("Clipboard.sqlite")
+        let keyStore = ClipboardHistoryLocalKeyStore(
+            keyURL: directory.appendingPathComponent("ClipboardHistoryKey")
+        )
+        let secret = "LocalKeyPersistence-\(UUID().uuidString)"
+
+        var store: ClipboardHistoryStore? = ClipboardHistoryStore(
+            storeURL: storeURL,
+            inMemory: false,
+            keyStore: keyStore
+        )
+        store?.store(
+            try candidate(text: secret, capturedAt: Date()),
+            limit: 200,
+            maximumTotalBytes: 1_000_000
+        )
+        XCTAssertNil(store?.warning)
+        store = nil
+
+        let reopened = ClipboardHistoryStore(
+            storeURL: storeURL,
+            inMemory: false,
+            keyStore: keyStore
+        )
+
+        XCTAssertEqual(reopened.records().map(\.summary), [secret])
+        // The key lives beside the archive, but the archive itself still holds
+        // no readable content.
+        XCTAssertFalse(try directoryContainsPlaintext(directory, needle: secret))
+    }
+
+    func testUnavailableKeyKeepsHistoryOutOfTheStoreFile() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "OmniDockClipboardUnavailable-\(UUID().uuidString)",
+                isDirectory: true
+            )
         let storeURL = directory.appendingPathComponent("Clipboard.sqlite")
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let store = ClipboardHistoryStore(
             storeURL: storeURL,
             inMemory: false,
-            keyStore: FailingClipboardKeyStore()
+            keyStore: FailingClipboardKeyStore(error: .storageUnavailable(EACCES))
         )
         store.store(
             try candidate(text: "Session only", capturedAt: Date()),
@@ -700,10 +868,24 @@ final class ClipboardHistoryTests: XCTestCase {
             maximumTotalBytes: 1_000_000
         )
 
-        // The entry is usable for this session but never reaches the disk.
+        // Usable for this session, but nothing reaches the disk unprotected.
         XCTAssertEqual(store.records().count, 1)
-        XCTAssertNotNil(store.warning)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: storeURL.path))
+        XCTAssertEqual(store.warning, AppStrings.text(.clipboardStorageUnavailable))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
+    }
+
+    func testUnexpectedKeyFailureUsesGenericMemoryOnlyWarning() {
+        let store = ClipboardHistoryStore(
+            storeURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("Clipboard-\(UUID().uuidString).sqlite"),
+            inMemory: false,
+            keyStore: FailingClipboardKeyStore(error: .malformedKey)
+        )
+
+        XCTAssertEqual(
+            store.warning,
+            AppStrings.text(.clipboardStorageUnavailable)
+        )
     }
 
     func testCipherRoundTripsAndBlindsTheDeduplicationIndex() throws {
@@ -1344,8 +1526,27 @@ final class ClipboardHistoryTests: XCTestCase {
 }
 
 private struct FailingClipboardKeyStore: ClipboardHistoryKeyStoring {
+    var error: ClipboardHistoryKeyError = .storageUnavailable(EACCES)
+
     func loadOrCreateKey() throws -> SymmetricKey {
-        throw ClipboardHistoryKeyError.keychainUnavailable(errSecAuthFailed)
+        throw error
+    }
+}
+
+private final class ClipboardHistoryKeyStoreSpy: ClipboardHistoryKeyStoring {
+    private let failure: ClipboardHistoryKeyError?
+    private(set) var loadCount = 0
+
+    init(failure: ClipboardHistoryKeyError? = nil) {
+        self.failure = failure
+    }
+
+    func loadOrCreateKey() throws -> SymmetricKey {
+        loadCount += 1
+        if let failure {
+            throw failure
+        }
+        return SymmetricKey(size: .bits256)
     }
 }
 

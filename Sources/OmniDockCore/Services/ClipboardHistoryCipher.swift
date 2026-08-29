@@ -1,16 +1,23 @@
 import CryptoKit
+import Darwin
 import Foundation
-import Security
 
 // Clipboard history is the densest personal data this app keeps: a rolling
 // record of everything the user copied, including material that no app marked
-// as concealed. In the Developer ID build it lives in Application Support,
-// which carries no TCC protection, so file permissions alone leave it readable
-// by anything running as this user and by anything that reads a backup or a
-// cloned disk. Entry contents are therefore sealed with a key kept in the
-// Keychain: reading the store file is no longer enough to read the history.
+// as concealed. The archive is therefore sealed with AES-256-GCM, so the store
+// file holds no readable content: nothing in it can be recovered with sqlite3,
+// strings, or a text editor, and a copy of the file — a backup, a clone, a disk
+// handed on to someone else — carries no readable history with it.
+//
+// The key is 32 random bytes kept beside the archive with 0600 permissions.
+// That is a deliberate trade: a process running as this user can read the key
+// as easily as the archive, so this does not defend against one. In exchange
+// the feature works on every Mac, with no Keychain in the picture — no
+// dependency on a login keychain that may not exist, no authorization prompts
+// when the app is re-signed, and no environment where history silently stops
+// persisting.
 enum ClipboardHistoryKeyError: Error, Equatable {
-    case keychainUnavailable(OSStatus)
+    case storageUnavailable(Int32)
     case malformedKey
 }
 
@@ -18,80 +25,98 @@ protocol ClipboardHistoryKeyStoring {
     func loadOrCreateKey() throws -> SymmetricKey
 }
 
-// The item is stored in the login keychain, whose ACL admits the creating
-// application and prompts the user for anything else. The data protection
-// keychain is deliberately not used: it needs a keychain access group
-// entitlement the Developer ID build does not carry.
-struct ClipboardHistoryKeychainKeyStore: ClipboardHistoryKeyStoring {
-    static let service = "com.quanzhankeji.OmniDock"
-    static let account = "clipboard-history-key"
+struct ClipboardHistoryLocalKeyStore: ClipboardHistoryKeyStoring {
     private static let keyByteCount = 32
 
+    private let keyURL: URL?
+    private let fileManager: FileManager
+
+    init(
+        keyURL: URL? = ClipboardHistoryLocalKeyStore.defaultKeyURL(),
+        fileManager: FileManager = .default
+    ) {
+        self.keyURL = keyURL
+        self.fileManager = fileManager
+    }
+
+    static func defaultKeyURL() -> URL? {
+        FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        ).first?
+            .appendingPathComponent("OmniDock", isDirectory: true)
+            .appendingPathComponent("ClipboardHistoryKey", isDirectory: false)
+    }
+
     func loadOrCreateKey() throws -> SymmetricKey {
-        if let key = try loadKey() {
+        guard let keyURL else {
+            throw ClipboardHistoryKeyError.storageUnavailable(ENOENT)
+        }
+        if let key = try loadKey(at: keyURL) {
             return key
         }
-        return try createKey()
+        return try createKey(at: keyURL)
     }
 
-    private func loadKey() throws -> SymmetricKey? {
-        var query = Self.baseQuery
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        switch status {
-        case errSecSuccess:
-            guard let data = item as? Data,
-                  data.count == Self.keyByteCount
-            else {
-                throw ClipboardHistoryKeyError.malformedKey
-            }
-            return SymmetricKey(data: data)
-        case errSecItemNotFound:
+    private func loadKey(at url: URL) throws -> SymmetricKey? {
+        guard let data = try? Data(contentsOf: url) else {
             return nil
-        default:
-            throw ClipboardHistoryKeyError.keychainUnavailable(status)
         }
+        guard data.count == Self.keyByteCount else {
+            throw ClipboardHistoryKeyError.malformedKey
+        }
+        // Re-assert the permissions in case the file was ever restored or
+        // copied back with something looser.
+        try? fileManager.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: url.path
+        )
+        return SymmetricKey(data: data)
     }
 
-    private func createKey() throws -> SymmetricKey {
-        var keyData = Data(count: Self.keyByteCount)
-        let result = keyData.withUnsafeMutableBytes { buffer -> Int32 in
+    private func createKey(at url: URL) throws -> SymmetricKey {
+        try? ClipboardStoreFileProtection.prepareDirectory(
+            url.deletingLastPathComponent(),
+            fileManager: fileManager
+        )
+
+        let key = SymmetricKey(size: .bits256)
+        let keyData = key.withUnsafeBytes { Data($0) }
+
+        // O_EXCL with mode 0600: the file is created atomically and is never
+        // readable by other accounts, not even for the instant between creating
+        // it and adjusting its permissions. A second instance that loses the
+        // race reads the key that won rather than overwriting it, which would
+        // strand the archive the winner is already encrypting.
+        let descriptor = url.withUnsafeFileSystemRepresentation { path -> Int32 in
+            guard let path else {
+                return -1
+            }
+            return open(path, O_WRONLY | O_CREAT | O_EXCL, 0o600)
+        }
+        guard descriptor >= 0 else {
+            let code = errno
+            if code == EEXIST, let existing = try loadKey(at: url) {
+                return existing
+            }
+            throw ClipboardHistoryKeyError.storageUnavailable(code)
+        }
+        defer { close(descriptor) }
+
+        let written = keyData.withUnsafeBytes { buffer -> Int in
             guard let baseAddress = buffer.baseAddress else {
-                return errSecAllocate
+                return -1
             }
-            return SecRandomCopyBytes(kSecRandomDefault, buffer.count, baseAddress)
+            return write(descriptor, baseAddress, buffer.count)
         }
-        guard result == errSecSuccess else {
-            throw ClipboardHistoryKeyError.keychainUnavailable(OSStatus(result))
+        guard written == Self.keyByteCount else {
+            let code = errno
+            // Never leave a short key behind; it would decrypt nothing and
+            // would be indistinguishable from a valid one on the next launch.
+            try? fileManager.removeItem(at: url)
+            throw ClipboardHistoryKeyError.storageUnavailable(code)
         }
-
-        var attributes = Self.baseQuery
-        attributes[kSecValueData as String] = keyData
-        let status = SecItemAdd(attributes as CFDictionary, nil)
-        switch status {
-        case errSecSuccess:
-            return SymmetricKey(data: keyData)
-        case errSecDuplicateItem:
-            // Another instance created the key between the read and the write.
-            guard let key = try loadKey() else {
-                throw ClipboardHistoryKeyError.keychainUnavailable(status)
-            }
-            return key
-        default:
-            throw ClipboardHistoryKeyError.keychainUnavailable(status)
-        }
-    }
-
-    private static var baseQuery: [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecAttrSynchronizable as String: false
-        ]
+        return key
     }
 }
 

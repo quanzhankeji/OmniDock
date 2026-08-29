@@ -1,6 +1,7 @@
 import CoreData
 import Darwin
 import Foundation
+import os.log
 
 enum ClipboardStoreFileProtection {
     static func prepareDirectory(
@@ -109,6 +110,11 @@ protocol ClipboardHistoryPersisting: AnyObject {
 
 
 final class ClipboardHistoryStore: ClipboardHistoryPersisting {
+    private static let log = OSLog(
+        subsystem: "com.quanzhankeji.OmniDock",
+        category: "ClipboardHistory"
+    )
+
     // Only structural columns stay readable. They order, deduplicate, and prune
     // the archive without revealing anything about what was copied; everything
     // carrying content or provenance is stored as an AES-GCM box.
@@ -134,7 +140,7 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
     // convenience cache, not a document, so an incompatible or unreadable file
     // is discarded and rebuilt instead of migrated: there is no migration code
     // to go wrong, and a schema change can never strand someone's install.
-    private static let schemaVersion = "2"
+    private static let schemaVersion = "2-local"
 
     private static let storeOptions: [String: Any] = [
         // Zero freed cells instead of leaving them in the file, so a pruned or
@@ -155,7 +161,7 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
         storeURL: URL?,
         inMemory: Bool,
         cipher: ClipboardHistoryCipher? = nil,
-        keyStore: ClipboardHistoryKeyStoring = ClipboardHistoryKeychainKeyStore()
+        keyStore: ClipboardHistoryKeyStoring = ClipboardHistoryLocalKeyStore()
     ) {
         let coordinator = NSPersistentStoreCoordinator(
             managedObjectModel: Self.makeModel()
@@ -169,7 +175,7 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
         // Without a key there is no safe way to persist: writing plaintext
         // instead would quietly hand back the exposure encryption is here to
         // remove. The archive then stays in memory for the session, and the
-        // file on disk is left untouched for a later launch that can unlock it.
+        // file on disk is left untouched for a later launch that can read it.
         var keyWarning: String?
         var resolvedCipher = cipher
         if resolvedCipher == nil {
@@ -180,8 +186,30 @@ final class ClipboardHistoryStore: ClipboardHistoryPersisting {
                     resolvedCipher = ClipboardHistoryCipher(
                         key: try keyStore.loadOrCreateKey()
                     )
+                } catch let error as ClipboardHistoryKeyError {
+                    resolvedCipher = .ephemeral()
+                    switch error {
+                    case let .storageUnavailable(code):
+                        os_log(
+                            "Clipboard history is memory-only because its key file is unavailable (errno %{public}d).",
+                            log: Self.log,
+                            type: .error,
+                            code
+                        )
+                    case .malformedKey:
+                        os_log(
+                            "Clipboard history key file is malformed.",
+                            log: Self.log,
+                            type: .error
+                        )
+                    }
+                    keyWarning = AppStrings.text(.clipboardStorageUnavailable)
                 } catch {
-                    NSLog("OmniDock clipboard history key unavailable: \(error)")
+                    os_log(
+                        "Clipboard history key loading failed unexpectedly.",
+                        log: Self.log,
+                        type: .error
+                    )
                     resolvedCipher = .ephemeral()
                     keyWarning = AppStrings.text(.clipboardStorageUnavailable)
                 }
