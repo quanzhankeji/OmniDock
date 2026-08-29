@@ -9,7 +9,6 @@ final class FinderFileCommandCoordinator: NSObject {
     private let directoryGrantStore: FinderDirectoryGrantStore
     private let fileManager: FileManager
     private let hiddenFilesController: FinderHiddenFilesController
-    private let homeDirectory: URL
     private let revealFiles: ([URL]) -> Void
     private let requestDirectoryAccess: @MainActor (URL) -> URL?
     private let openApplication: (
@@ -25,7 +24,6 @@ final class FinderFileCommandCoordinator: NSObject {
         directoryGrantStore: FinderDirectoryGrantStore = FinderDirectoryGrantStore(),
         fileManager: FileManager = .default,
         hiddenFilesController: FinderHiddenFilesController? = nil,
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         revealFiles: @escaping ([URL]) -> Void = {
             NSWorkspace.shared.activateFileViewerSelecting($0)
         },
@@ -52,7 +50,6 @@ final class FinderFileCommandCoordinator: NSObject {
         self.directoryGrantStore = directoryGrantStore
         self.fileManager = fileManager
         self.hiddenFilesController = hiddenFilesController ?? FinderHiddenFilesController()
-        self.homeDirectory = homeDirectory
         self.revealFiles = revealFiles
         self.requestDirectoryAccess = requestDirectoryAccess
         self.openApplication = openApplication
@@ -124,13 +121,6 @@ final class FinderFileCommandCoordinator: NSObject {
             ) != nil else {
                 return
             }
-            let directory = URL(
-                fileURLWithPath: directoryDisplayPath,
-                isDirectory: true
-            )
-            guard isAuthorized(directory) || grantAccess(to: directory) else {
-                return
-            }
             createFile(
                 fileExtension: fileExtension,
                 directoryDisplayPath: directoryDisplayPath
@@ -154,14 +144,6 @@ final class FinderFileCommandCoordinator: NSObject {
                 fileURLWithPath: directoryDisplayPath,
                 isDirectory: true
             ).standardizedFileURL
-            // The menu is offered in every folder, but commands only act on
-            // folders the user has granted. Rather than doing nothing in the
-            // project directories people actually right-click - anything
-            // outside Desktop, Documents, and Downloads - ask for the folder
-            // once and remember it.
-            guard isAuthorized(directory) || grantAccess(to: directory) else {
-                return
-            }
             openDirectory(
                 directory,
                 with: shortcut
@@ -253,14 +235,6 @@ final class FinderFileCommandCoordinator: NSObject {
             return nil
         }
         return panel.url?.standardizedFileURL
-    }
-
-    private func isAuthorized(_ directory: URL) -> Bool {
-        FinderCommandAuthorizationPolicy.isAllowedTarget(
-            directory,
-            authorizedDirectoryPaths: directoryGrantStore.authorizedDirectoryPaths(),
-            homeDirectory: homeDirectory
-        )
     }
 
     @discardableResult
@@ -395,27 +369,6 @@ final class FinderFileCommandCoordinator: NSObject {
 }
 
 enum FinderCommandAuthorizationPolicy {
-    // The authorized directories must come from the app's own security-scoped
-    // bookmarks, never from the path list published into the shared app-group
-    // defaults: that list is only a hint for the Finder extension's observation
-    // roots, and it is writable by any process running as this user.
-    static func isAllowedTarget(
-        _ target: URL,
-        authorizedDirectoryPaths: [String],
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
-    ) -> Bool {
-        let resolvedTarget = target.standardizedFileURL.resolvingSymlinksInPath()
-        return FinderObservationRoots.commandTargetURLs(
-            homeDirectory: homeDirectory,
-            authorizedDirectoryPaths: authorizedDirectoryPaths
-        ).contains { root in
-            FinderDirectoryGrantStore.contains(
-                resolvedTarget,
-                in: root.resolvingSymlinksInPath()
-            )
-        }
-    }
-
     static func documentPreset(
         for fileExtension: String,
         preferences: FinderMenuPreferences

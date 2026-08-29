@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 struct FinderLaunchShortcut: Codable, Equatable, Hashable, Identifiable, Sendable {
@@ -645,8 +646,25 @@ struct FinderMenuPreferences: Codable, Equatable {
 }
 
 enum FinderObservationRoots {
+    // A sandboxed process - the extension always, and the App Store build of
+    // the app - gets its container back from homeDirectoryForCurrentUser, so
+    // the standard folders below would resolve to paths inside the container
+    // and match nothing the user ever sees. Ask the password database for the
+    // account's real home instead.
+    static var userHomeDirectory: URL {
+        guard let entry = getpwuid(getuid()),
+              let directory = entry.pointee.pw_dir
+        else {
+            return FileManager.default.homeDirectoryForCurrentUser
+        }
+        return URL(
+            fileURLWithPath: String(cString: directory),
+            isDirectory: true
+        )
+    }
+
     static func registeredURLs(
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        homeDirectory: URL = FinderObservationRoots.userHomeDirectory,
         authorizedDirectoryPaths: [String] = []
     ) -> Set<URL> {
         // Finder routes the desktop layer through the filesystem root on some systems.
@@ -661,7 +679,7 @@ enum FinderObservationRoots {
     }
 
     static func commandTargetURLs(
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        homeDirectory: URL = FinderObservationRoots.userHomeDirectory,
         authorizedDirectoryPaths: [String] = []
     ) -> [URL] {
         let standardDirectories = [
@@ -689,7 +707,7 @@ enum FinderObservationRoots {
     static func folderURL(
         targetedURL: URL?,
         selectedURLs: [URL] = [],
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+        homeDirectory: URL = FinderObservationRoots.userHomeDirectory
     ) -> URL {
         if let selectedURL = selectedURLs.first {
             return selectedURL.standardizedFileURL.deletingLastPathComponent()
@@ -701,7 +719,7 @@ enum FinderObservationRoots {
     }
 
     static func desktopURL(
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+        homeDirectory: URL = FinderObservationRoots.userHomeDirectory
     ) -> URL {
         homeDirectory.appendingPathComponent("Desktop", isDirectory: true)
     }
