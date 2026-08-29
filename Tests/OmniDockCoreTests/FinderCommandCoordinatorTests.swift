@@ -80,7 +80,8 @@ final class FinderCommandCoordinatorTests: XCTestCase {
             preferencesStore: preferences,
             directoryGrantStore: grantStore,
             homeDirectory: root.appendingPathComponent("Home", isDirectory: true),
-            revealFiles: { _ in didReveal = true }
+            revealFiles: { _ in didReveal = true },
+            requestDirectoryAccess: { _ in nil }
         ).handle(requestID: request.id)
 
         XCTAssertFalse(
@@ -122,7 +123,8 @@ final class FinderCommandCoordinatorTests: XCTestCase {
             preferencesStore: preferences,
             directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
             homeDirectory: root.appendingPathComponent("Home", isDirectory: true),
-            revealFiles: { _ in didReveal = true }
+            revealFiles: { _ in didReveal = true },
+            requestDirectoryAccess: { _ in nil }
         ).handle(requestID: request.id)
 
         XCTAssertFalse(
@@ -294,6 +296,140 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         ).handle(requestID: request.id)
 
         XCTAssertFalse(didOpenApplication)
+    }
+
+    func testUngrantedFolderAsksForAccessThenOpens() throws {
+        let home = try makeTemporaryDirectory()
+        // Deliberately outside Desktop/Documents/Downloads: the project folders
+        // people right-click are usually somewhere else entirely.
+        let project = home.appendingPathComponent("Developer/demo", isDirectory: true)
+        let application = home.appendingPathComponent("Sample.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: application, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        let shortcut = FinderLaunchShortcut(
+            displayName: "Sample App",
+            bundleURLString: application.absoluteString,
+            bundleIdentifier: "com.example.sample"
+        )
+        let preferences = makePreferencesStore(FinderMenuPreferences(
+            isEnabled: true,
+            launchShortcuts: [shortcut]
+        ))
+        let grantStore = FinderDirectoryGrantStore(defaults: isolatedDefaults())
+        let mailbox = FinderCommandMailbox(directoryProvider: { home })
+
+        var promptCount = 0
+        var openedDirectory: URL?
+        func run() throws {
+            let request = FinderCommandEnvelope(command: .openDirectory(
+                shortcut: shortcut,
+                directoryDisplayPath: project.path
+            ))
+            try mailbox.enqueue(request)
+            FinderFileCommandCoordinator(
+                requestMailbox: mailbox,
+                preferencesStore: preferences,
+                directoryGrantStore: grantStore,
+                homeDirectory: home,
+                requestDirectoryAccess: { directory in
+                    promptCount += 1
+                    return directory
+                },
+                openApplication: { directoryURL, _, completion in
+                    openedDirectory = directoryURL
+                    completion(nil)
+                }
+            ).handle(requestID: request.id)
+        }
+
+        try run()
+        XCTAssertEqual(promptCount, 1)
+        XCTAssertEqual(openedDirectory, project)
+
+        // The grant is remembered, so the folder is not asked for again.
+        openedDirectory = nil
+        try run()
+        XCTAssertEqual(promptCount, 1)
+        XCTAssertEqual(openedDirectory, project)
+    }
+
+    func testDecliningTheAccessPanelOpensNothing() throws {
+        let home = try makeTemporaryDirectory()
+        let project = home.appendingPathComponent("Developer/demo", isDirectory: true)
+        let application = home.appendingPathComponent("Sample.app", isDirectory: true)
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: application, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        let shortcut = FinderLaunchShortcut(
+            displayName: "Sample App",
+            bundleURLString: application.absoluteString,
+            bundleIdentifier: "com.example.sample"
+        )
+        let preferences = makePreferencesStore(FinderMenuPreferences(
+            isEnabled: true,
+            launchShortcuts: [shortcut]
+        ))
+        let mailbox = FinderCommandMailbox(directoryProvider: { home })
+        let request = FinderCommandEnvelope(command: .openDirectory(
+            shortcut: shortcut,
+            directoryDisplayPath: project.path
+        ))
+        try mailbox.enqueue(request)
+
+        var didOpen = false
+        FinderFileCommandCoordinator(
+            requestMailbox: mailbox,
+            preferencesStore: preferences,
+            directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            homeDirectory: home,
+            requestDirectoryAccess: { _ in nil },
+            openApplication: { _, _, _ in didOpen = true }
+        ).handle(requestID: request.id)
+
+        XCTAssertFalse(didOpen)
+    }
+
+    func testAccessPanelGrantMustCoverTheRequestedFolder() throws {
+        let home = try makeTemporaryDirectory()
+        let project = home.appendingPathComponent("Developer/demo", isDirectory: true)
+        let unrelated = home.appendingPathComponent("Elsewhere", isDirectory: true)
+        let application = home.appendingPathComponent("Sample.app", isDirectory: true)
+        for url in [project, unrelated, application] {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        let shortcut = FinderLaunchShortcut(
+            displayName: "Sample App",
+            bundleURLString: application.absoluteString,
+            bundleIdentifier: "com.example.sample"
+        )
+        let preferences = makePreferencesStore(FinderMenuPreferences(
+            isEnabled: true,
+            launchShortcuts: [shortcut]
+        ))
+        let mailbox = FinderCommandMailbox(directoryProvider: { home })
+        let request = FinderCommandEnvelope(command: .openDirectory(
+            shortcut: shortcut,
+            directoryDisplayPath: project.path
+        ))
+        try mailbox.enqueue(request)
+
+        var didOpen = false
+        FinderFileCommandCoordinator(
+            requestMailbox: mailbox,
+            preferencesStore: preferences,
+            directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            homeDirectory: home,
+            // Approving some other folder must not authorize this one.
+            requestDirectoryAccess: { _ in unrelated },
+            openApplication: { _, _, _ in didOpen = true }
+        ).handle(requestID: request.id)
+
+        XCTAssertFalse(didOpen)
     }
 
     private func makeTemporaryDirectory() throws -> URL {

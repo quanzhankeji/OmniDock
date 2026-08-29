@@ -11,6 +11,7 @@ final class FinderFileCommandCoordinator: NSObject {
     private let hiddenFilesController: FinderHiddenFilesController
     private let homeDirectory: URL
     private let revealFiles: ([URL]) -> Void
+    private let requestDirectoryAccess: @MainActor (URL) -> URL?
     private let openApplication: (
         _ directoryURL: URL,
         _ applicationURL: URL,
@@ -28,6 +29,8 @@ final class FinderFileCommandCoordinator: NSObject {
         revealFiles: @escaping ([URL]) -> Void = {
             NSWorkspace.shared.activateFileViewerSelecting($0)
         },
+        requestDirectoryAccess: @escaping @MainActor (URL) -> URL? =
+            FinderFileCommandCoordinator.presentDirectoryAccessPanel,
         openApplication: @escaping (
             _ directoryURL: URL,
             _ applicationURL: URL,
@@ -51,6 +54,7 @@ final class FinderFileCommandCoordinator: NSObject {
         self.hiddenFilesController = hiddenFilesController ?? FinderHiddenFilesController()
         self.homeDirectory = homeDirectory
         self.revealFiles = revealFiles
+        self.requestDirectoryAccess = requestDirectoryAccess
         self.openApplication = openApplication
         super.init()
     }
@@ -124,11 +128,7 @@ final class FinderFileCommandCoordinator: NSObject {
                 fileURLWithPath: directoryDisplayPath,
                 isDirectory: true
             )
-            guard FinderCommandAuthorizationPolicy.isAllowedTarget(
-                directory,
-                authorizedDirectoryPaths: directoryGrantStore.authorizedDirectoryPaths(),
-                homeDirectory: homeDirectory
-            ) else {
+            guard isAuthorized(directory) || grantAccess(to: directory) else {
                 return
             }
             createFile(
@@ -154,12 +154,12 @@ final class FinderFileCommandCoordinator: NSObject {
                 fileURLWithPath: directoryDisplayPath,
                 isDirectory: true
             ).standardizedFileURL
-            let authorizedDirectoryPaths = directoryGrantStore.authorizedDirectoryPaths()
-            guard FinderCommandAuthorizationPolicy.isAllowedTarget(
-                directory,
-                authorizedDirectoryPaths: authorizedDirectoryPaths,
-                homeDirectory: homeDirectory
-            ) else {
+            // The menu is offered in every folder, but commands only act on
+            // folders the user has granted. Rather than doing nothing in the
+            // project directories people actually right-click - anything
+            // outside Desktop, Documents, and Downloads - ask for the folder
+            // once and remember it.
+            guard isAuthorized(directory) || grantAccess(to: directory) else {
                 return
             }
             openDirectory(
@@ -226,12 +226,16 @@ final class FinderFileCommandCoordinator: NSObject {
         }
     }
 
-    private func requestAccessAndCreateFile(
-        fileExtension: String,
-        directoryDisplayPath: String,
-        directory: URL
-    ) {
-        NSApp.activate(ignoringOtherApps: true)
+    // Asks the user to grant a folder OmniDock has no access to yet, and
+    // records the grant. Shared by every command that needs one, so a folder
+    // approved for one is approved for the rest.
+    static func presentDirectoryAccessPanel(for directory: URL) -> URL? {
+        // There is no panel to present without a running application, and
+        // asking for one would be worse than declining the grant.
+        guard let application = NSApp else {
+            return nil
+        }
+        application.activate(ignoringOtherApps: true)
 
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
@@ -245,15 +249,45 @@ final class FinderFileCommandCoordinator: NSObject {
         )
         panel.prompt = AppStrings.text(.finderExtensionAccessButton)
 
-        guard panel.runModal() == .OK,
-              let authorizedDirectory = panel.url?.standardizedFileURL,
+        guard panel.runModal() == .OK else {
+            return nil
+        }
+        return panel.url?.standardizedFileURL
+    }
+
+    private func isAuthorized(_ directory: URL) -> Bool {
+        FinderCommandAuthorizationPolicy.isAllowedTarget(
+            directory,
+            authorizedDirectoryPaths: directoryGrantStore.authorizedDirectoryPaths(),
+            homeDirectory: homeDirectory
+        )
+    }
+
+    @discardableResult
+    private func grantAccess(to directory: URL) -> Bool {
+        guard let authorizedDirectory = requestDirectoryAccess(directory),
               FinderDirectoryGrantStore.contains(directory, in: authorizedDirectory)
         else {
+            return false
+        }
+        do {
+            try directoryGrantStore.remember(directory: authorizedDirectory)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func requestAccessAndCreateFile(
+        fileExtension: String,
+        directoryDisplayPath: String,
+        directory: URL
+    ) {
+        guard grantAccess(to: directory) else {
             return
         }
 
         do {
-            try directoryGrantStore.remember(directory: authorizedDirectory)
             guard let file = try directoryGrantStore.performWithSavedAccess(
                 to: directory,
                 operation: { targetDirectory in
