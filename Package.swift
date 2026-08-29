@@ -30,7 +30,8 @@ let package = Package(
                 .linkedFramework("ImageIO"),
                 .linkedFramework("IOKit"),
                 .linkedFramework("Security"),
-                .linkedFramework("ScreenCaptureKit")
+                .linkedFramework("ScreenCaptureKit"),
+                .linkedFramework("ServiceManagement")
             ]
         ),
         .executableTarget(

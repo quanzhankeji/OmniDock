@@ -1,3 +1,14 @@
+"launchAtLoginTitle" = "开机启动";
+"launchAtLoginDetail" = "登录 Mac 后自动启动 OmniDock。";
+"launchAtLoginApprovalTitle" = "需要系统允许";
+"launchAtLoginApprovalDetail" = "请在“系统设置”>“通用”>“登录项与扩展”中允许 OmniDock 登录时打开。";
+"launchAtLoginOpenSettings" = "打开系统设置";
+"launchAtLoginCancel" = "取消";
+"launchAtLoginFailedTitle" = "无法更改开机启动设置";
+"launchAtLoginFailedDetail" = "macOS 无法更新登录项：%@";
+"launchAtLoginUnsupportedDetail" = "开机启动需要 macOS 13 或更高版本。";
+"launchAtLoginUnavailableDetail" = "macOS 无法找到 OmniDock 的登录项。";
+
 "languageTitle" = "语言";
 "languageDetail" = "选择 OmniDock 的界面语言。";
 "languageSystem" = "跟随系统";

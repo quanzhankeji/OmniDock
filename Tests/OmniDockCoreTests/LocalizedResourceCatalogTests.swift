@@ -140,6 +140,8 @@ final class LocalizedResourceCatalogTests: XCTestCase {
     }
 
     func testAppearanceLabelsAreLocalized() {
+        XCTAssertEqual(LocalizedResourceCatalog.text(.launchAtLoginTitle, language: .en), "Launch at Login")
+        XCTAssertEqual(LocalizedResourceCatalog.text(.launchAtLoginTitle, language: .zhHans), "开机启动")
         XCTAssertEqual(LocalizedResourceCatalog.text(.appearanceTitle, language: .en), "Appearance")
         XCTAssertEqual(LocalizedResourceCatalog.text(.appearanceDark, language: .en), "Dark")
         XCTAssertEqual(LocalizedResourceCatalog.text(.appearanceTitle, language: .zhHans), "外观")

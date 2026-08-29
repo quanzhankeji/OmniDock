@@ -46,6 +46,7 @@
 		0B19992E92105B7803FF2F39 /* GitHubReleaseClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0FCF9E3C1CB96CAAB073B35 /* GitHubReleaseClient.swift */; };
 		92136C573348886F35F18726 /* HotkeyShortcutPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D765A2CAC69408FD0D02DE75 /* HotkeyShortcutPolicy.swift */; };
 		5E50495DFD801F094898630B /* IndependentWindowIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30D41B0DCA3A55E6E103BA1 /* IndependentWindowIdentity.swift */; };
+		FF52D7D04C2D63D0189DAE62 /* LaunchAtLoginService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A347BA749177AC98E517847E /* LaunchAtLoginService.swift */; };
 		8FECE3B5E53FD8392CB4303F /* LivePreviewCaptureSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAFFA2BCCC66961497DCE50 /* LivePreviewCaptureSession.swift */; };
 		340A3DD220433F342BECFA72 /* LocalizedResourceCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3033C62D64E624BFF8B5B231 /* LocalizedResourceCatalog.swift */; };
 		0BA483CE02665B663606AEAB /* MenuBarShelfService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B396AE9113FDF2E5F6BD8FB /* MenuBarShelfService.swift */; };
@@ -121,6 +122,7 @@
 		88881090E765C6BA7C7B0F76 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 20530C1F3D99DF1367A53B4B /* IOKit.framework */; };
 		07619482CBD9855E08D688A7 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0FCE4AC6F91EF4CABB1B10FC /* Security.framework */; };
 		2315E02A7D31A3AF943E2C42 /* ScreenCaptureKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 00705383266DD4C2CCC5547B /* ScreenCaptureKit.framework */; };
+		D28011B1FBB236EFA3B488C7 /* ServiceManagement.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 21DE7DF99A7D121405B3F8E4 /* ServiceManagement.framework */; };
 		34E4FFF5A89CC5A0784C2BB0 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9694B95F4FBF087BF05D19FB /* AppKit.framework */; };
 		3F016137D06EB2B97289E64C /* FinderSync.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 64C86E046410F4E6C6D059AB /* FinderSync.framework */; };
 		FFF89EDA05E92CC52DD1D5C7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E0E27618A2D2A8FEBDD49F35 /* Assets.xcassets */; };
@@ -170,6 +172,7 @@
 		D0FCF9E3C1CB96CAAB073B35 /* GitHubReleaseClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/GitHubReleaseClient.swift"; sourceTree = SOURCE_ROOT; };
 		D765A2CAC69408FD0D02DE75 /* HotkeyShortcutPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/HotkeyShortcutPolicy.swift"; sourceTree = SOURCE_ROOT; };
 		D30D41B0DCA3A55E6E103BA1 /* IndependentWindowIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/IndependentWindowIdentity.swift"; sourceTree = SOURCE_ROOT; };
+		A347BA749177AC98E517847E /* LaunchAtLoginService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/LaunchAtLoginService.swift"; sourceTree = SOURCE_ROOT; };
 		2AAFFA2BCCC66961497DCE50 /* LivePreviewCaptureSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/LivePreviewCaptureSession.swift"; sourceTree = SOURCE_ROOT; };
 		3033C62D64E624BFF8B5B231 /* LocalizedResourceCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/LocalizedResourceCatalog.swift"; sourceTree = SOURCE_ROOT; };
 		1B396AE9113FDF2E5F6BD8FB /* MenuBarShelfService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/MenuBarShelfService.swift"; sourceTree = SOURCE_ROOT; };
@@ -253,6 +256,7 @@
 		EB39B728C5245B18A16FE690 /* ImageIO.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "ImageIO.framework"; path = "System/Library/Frameworks/ImageIO.framework"; sourceTree = SDKROOT; };
 		00705383266DD4C2CCC5547B /* ScreenCaptureKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "ScreenCaptureKit.framework"; path = "System/Library/Frameworks/ScreenCaptureKit.framework"; sourceTree = SDKROOT; };
 		0FCE4AC6F91EF4CABB1B10FC /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "Security.framework"; path = "System/Library/Frameworks/Security.framework"; sourceTree = SDKROOT; };
+		21DE7DF99A7D121405B3F8E4 /* ServiceManagement.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = "ServiceManagement.framework"; path = "System/Library/Frameworks/ServiceManagement.framework"; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -287,6 +291,7 @@
 				88881090E765C6BA7C7B0F76 /* IOKit.framework in Frameworks */,
 				07619482CBD9855E08D688A7 /* Security.framework in Frameworks */,
 				2315E02A7D31A3AF943E2C42 /* ScreenCaptureKit.framework in Frameworks */,
+				D28011B1FBB236EFA3B488C7 /* ServiceManagement.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -355,6 +360,7 @@
 				D0FCF9E3C1CB96CAAB073B35 /* GitHubReleaseClient.swift */,
 				D765A2CAC69408FD0D02DE75 /* HotkeyShortcutPolicy.swift */,
 				D30D41B0DCA3A55E6E103BA1 /* IndependentWindowIdentity.swift */,
+				A347BA749177AC98E517847E /* LaunchAtLoginService.swift */,
 				2AAFFA2BCCC66961497DCE50 /* LivePreviewCaptureSession.swift */,
 				3033C62D64E624BFF8B5B231 /* LocalizedResourceCatalog.swift */,
 				1B396AE9113FDF2E5F6BD8FB /* MenuBarShelfService.swift */,
@@ -452,6 +458,7 @@
 				EB39B728C5245B18A16FE690 /* ImageIO.framework */,
 				00705383266DD4C2CCC5547B /* ScreenCaptureKit.framework */,
 				0FCE4AC6F91EF4CABB1B10FC /* Security.framework */,
+				21DE7DF99A7D121405B3F8E4 /* ServiceManagement.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -664,6 +671,7 @@
 				0B19992E92105B7803FF2F39 /* GitHubReleaseClient.swift in Sources */,
 				92136C573348886F35F18726 /* HotkeyShortcutPolicy.swift in Sources */,
 				5E50495DFD801F094898630B /* IndependentWindowIdentity.swift in Sources */,
+				FF52D7D04C2D63D0189DAE62 /* LaunchAtLoginService.swift in Sources */,
 				8FECE3B5E53FD8392CB4303F /* LivePreviewCaptureSession.swift in Sources */,
 				340A3DD220433F342BECFA72 /* LocalizedResourceCatalog.swift in Sources */,
 				0BA483CE02665B663606AEAB /* MenuBarShelfService.swift in Sources */,

@@ -32,6 +32,7 @@ FRAMEWORKS = [
     "IOKit",
     "Security",
     "ScreenCaptureKit",
+    "ServiceManagement",
 ]
 FINDER_EXTENSION_FRAMEWORKS = ["AppKit", "FinderSync"]
 

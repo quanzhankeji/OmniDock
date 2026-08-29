@@ -1,3 +1,14 @@
+"launchAtLoginTitle" = "Launch at Login";
+"launchAtLoginDetail" = "Open OmniDock automatically when you log in.";
+"launchAtLoginApprovalTitle" = "Approval Required";
+"launchAtLoginApprovalDetail" = "Allow OmniDock to open at login in System Settings > General > Login Items & Extensions.";
+"launchAtLoginOpenSettings" = "Open System Settings";
+"launchAtLoginCancel" = "Cancel";
+"launchAtLoginFailedTitle" = "Unable to Change Login Item";
+"launchAtLoginFailedDetail" = "macOS could not update the login item: %@";
+"launchAtLoginUnsupportedDetail" = "Launch at Login requires macOS 13 or later.";
+"launchAtLoginUnavailableDetail" = "macOS could not find OmniDock's login item.";
+
 "languageTitle" = "Language";
 "languageDetail" = "Choose OmniDock's display language.";
 "languageSystem" = "Follow System";

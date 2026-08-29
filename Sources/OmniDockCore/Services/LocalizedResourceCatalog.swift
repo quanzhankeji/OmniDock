@@ -1,6 +1,16 @@
 import Foundation
 
 enum AppStringKey: String, CaseIterable {
+    case launchAtLoginTitle
+    case launchAtLoginDetail
+    case launchAtLoginApprovalTitle
+    case launchAtLoginApprovalDetail
+    case launchAtLoginOpenSettings
+    case launchAtLoginCancel
+    case launchAtLoginFailedTitle
+    case launchAtLoginFailedDetail
+    case launchAtLoginUnsupportedDetail
+    case launchAtLoginUnavailableDetail
     case languageTitle
     case languageDetail
     case languageSystem

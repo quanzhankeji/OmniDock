@@ -69,6 +69,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     private let clipboardHistoryService: ClipboardHistoryService?
     private let clipboardHistoryRegistrationStatus: ClipboardHistoryRegistrationStatus
     private let windowPlacementRegistrationStatus: WindowPlacementRegistrationStatusStore
+    private let launchAtLoginService: LaunchAtLoginService
     private let applicationUpdateService: ApplicationUpdateService?
     private let presentationCoordinator: ApplicationPresentationCoordinator
     private let onPermissionGateRequired: (PermissionFeature) -> Void
@@ -87,6 +88,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     private var windowPlacementSettingsView: WindowPlacementSettingsView?
     private var finderExtensionSettingsView: FinderExtensionSettingsView?
     private var menuBarShelfSettingsView: MenuBarShelfSettingsView?
+    private var launchAtLoginSwitch: NSSwitch?
     private var languagePopupButton: NSPopUpButton?
     private var appearancePopupButton: NSPopUpButton?
     private var updateVersionField: NSTextField?
@@ -105,6 +107,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     private var hotkeysEnabledSwitch: NSSwitch?
     private var hotkeyHideOnRepeatedTriggerSwitch: NSSwitch?
     private var hotkeyHideOnRepeatedTriggerRow: NSView?
+    private var hotkeyChooseApplicationButton: NSButton?
     private var clipboardHistorySwitch: NSSwitch?
     private var clipboardHistoryLimitField: NSTextField?
     private var clipboardHistoryLimitStepper: NSStepper?
@@ -142,6 +145,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         clipboardHistoryService: ClipboardHistoryService? = nil,
         clipboardHistoryRegistrationStatus: ClipboardHistoryRegistrationStatus? = nil,
         windowPlacementRegistrationStatus: WindowPlacementRegistrationStatusStore? = nil,
+        launchAtLoginService: LaunchAtLoginService = LaunchAtLoginService(),
         applicationUpdateService: ApplicationUpdateService? = nil,
         onPermissionGateRequired: @escaping (PermissionFeature) -> Void,
         onOpenPermissionOnboarding: @escaping () -> Void = {}
@@ -158,6 +162,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
                 ?? ClipboardHistoryRegistrationStatus(),
             windowPlacementRegistrationStatus: windowPlacementRegistrationStatus
                 ?? WindowPlacementRegistrationStatusStore(),
+            launchAtLoginService: launchAtLoginService,
             applicationUpdateService: applicationUpdateService,
             presentationCoordinator: ApplicationPresentationCoordinator(),
             onPermissionGateRequired: onPermissionGateRequired,
@@ -174,6 +179,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         clipboardHistoryService: ClipboardHistoryService? = nil,
         clipboardHistoryRegistrationStatus: ClipboardHistoryRegistrationStatus? = nil,
         windowPlacementRegistrationStatus: WindowPlacementRegistrationStatusStore? = nil,
+        launchAtLoginService: LaunchAtLoginService = LaunchAtLoginService(),
         applicationUpdateService: ApplicationUpdateService? = nil,
         presentationCoordinator: ApplicationPresentationCoordinator,
         onPermissionGateRequired: @escaping (PermissionFeature) -> Void,
@@ -189,6 +195,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             ?? ClipboardHistoryRegistrationStatus()
         self.windowPlacementRegistrationStatus = windowPlacementRegistrationStatus
             ?? WindowPlacementRegistrationStatusStore()
+        self.launchAtLoginService = launchAtLoginService
         self.applicationUpdateService = applicationUpdateService
         self.presentationCoordinator = presentationCoordinator
         self.onPermissionGateRequired = onPermissionGateRequired
@@ -235,6 +242,12 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             selector: #selector(windowPlacementStatusChanged),
             name: WindowPlacementRegistrationStatusStore.changedNotification,
             object: self.windowPlacementRegistrationStatus
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(applicationDidBecomeActive),
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
         )
         if let applicationUpdateService {
             NotificationCenter.default.addObserver(
@@ -291,6 +304,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         }
         refreshLanguageControl()
         refreshAppearanceControl()
+        refreshLaunchAtLoginControl()
         refreshUpdateControls()
         previewSwitch?.state = settings.showDockPreviews ? .on : .off
         commandTabPreviewSwitch?.state = settings.showCommandTabPreviews ? .on : .off
@@ -360,6 +374,21 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             return
         }
         settings.appLanguage = language
+    }
+
+    @objc private func toggleLaunchAtLogin(_ sender: NSSwitch) {
+        do {
+            try launchAtLoginService.setEnabled(sender.state == .on)
+        } catch let error as LaunchAtLoginServiceError {
+            presentLaunchAtLoginError(error)
+        } catch {
+            presentLaunchAtLoginError(.operationFailed(error.localizedDescription))
+        }
+        refreshLaunchAtLoginControl()
+    }
+
+    @objc private func applicationDidBecomeActive() {
+        refreshLaunchAtLoginControl()
     }
 
     @objc private func togglePreview(_ sender: NSSwitch) {
@@ -529,6 +558,55 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             return
         }
         popup.select(item)
+    }
+
+    private func refreshLaunchAtLoginControl() {
+        guard let launchAtLoginSwitch else {
+            return
+        }
+
+        switch launchAtLoginService.status {
+        case .enabled:
+            launchAtLoginSwitch.state = .on
+            launchAtLoginSwitch.isEnabled = true
+        case .disabled, .requiresApproval:
+            launchAtLoginSwitch.state = .off
+            launchAtLoginSwitch.isEnabled = true
+        case .unsupported, .unavailable:
+            launchAtLoginSwitch.state = .off
+            launchAtLoginSwitch.isEnabled = false
+        }
+    }
+
+    private func presentLaunchAtLoginError(_ error: LaunchAtLoginServiceError) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+
+        switch error {
+        case .requiresApproval:
+            alert.messageText = AppStrings.text(.launchAtLoginApprovalTitle)
+            alert.informativeText = AppStrings.text(.launchAtLoginApprovalDetail)
+            alert.addButton(withTitle: AppStrings.text(.launchAtLoginOpenSettings))
+            alert.addButton(withTitle: AppStrings.text(.launchAtLoginCancel))
+            if alert.runModal() == .alertFirstButtonReturn {
+                launchAtLoginService.openSystemSettings()
+            }
+        case .unsupported:
+            alert.messageText = AppStrings.text(.launchAtLoginFailedTitle)
+            alert.informativeText = AppStrings.text(.launchAtLoginUnsupportedDetail)
+            alert.addButton(withTitle: AppStrings.text(.updateOK))
+            alert.runModal()
+        case .unavailable:
+            alert.messageText = AppStrings.text(.launchAtLoginFailedTitle)
+            alert.informativeText = AppStrings.text(.launchAtLoginUnavailableDetail)
+            alert.addButton(withTitle: AppStrings.text(.updateOK))
+            alert.runModal()
+        case let .operationFailed(message):
+            alert.messageText = AppStrings.text(.launchAtLoginFailedTitle)
+            alert.informativeText = AppStrings.format(.launchAtLoginFailedDetail, message)
+            alert.addButton(withTitle: AppStrings.text(.updateOK))
+            alert.runModal()
+        }
     }
 
     private func refreshAppearanceControl() {
@@ -815,6 +893,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         clipboardHistoryContentView = nil
         windowPlacementContentView = nil
         hiddenBarContentView = nil
+        launchAtLoginSwitch = nil
         languagePopupButton = nil
         appearancePopupButton = nil
         previewSwitch = nil
@@ -830,6 +909,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         hotkeysEnabledSwitch = nil
         hotkeyHideOnRepeatedTriggerSwitch = nil
         hotkeyHideOnRepeatedTriggerRow = nil
+        hotkeyChooseApplicationButton = nil
         finderExtensionSettingsView = nil
         clipboardHistorySwitch = nil
         clipboardHistoryLimitField = nil
@@ -920,6 +1000,12 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         settings.alignment = .leading
         settings.spacing = 12
         stack.addArrangedSubview(settings)
+
+        settings.addArrangedSubview(makeSettingRow(
+            title: AppStrings.text(.launchAtLoginTitle),
+            detail: AppStrings.text(.launchAtLoginDetail),
+            control: makeLaunchAtLoginControl()
+        ))
 
         settings.addArrangedSubview(makeSettingRow(
             title: AppStrings.text(.languageTitle),
@@ -1153,10 +1239,10 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         let addButton = NSButton(title: AppStrings.text(.hotkeysChooseApp), target: self, action: #selector(addApplication(_:)))
         addButton.bezelStyle = .rounded
         addButton.translatesAutoresizingMaskIntoConstraints = false
+        self.hotkeyChooseApplicationButton = addButton
         toolbar.addSubview(enabledRow)
         toolbar.addSubview(hideOnRepeatedTriggerRow)
         toolbar.addSubview(guidanceField)
-        toolbar.addSubview(addButton)
         stack.addArrangedSubview(toolbar)
 
         let scrollView = NSScrollView()
@@ -1171,6 +1257,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         let listHeader = NSStackView()
         listHeader.orientation = .horizontal
         listHeader.alignment = .centerY
+        listHeader.spacing = 10
         listHeader.translatesAutoresizingMaskIntoConstraints = false
 
         let listSpacer = NSView()
@@ -1181,6 +1268,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         bindingCountField.translatesAutoresizingMaskIntoConstraints = false
         hotkeyBindingCountField = bindingCountField
         listHeader.addArrangedSubview(listSpacer)
+        listHeader.addArrangedSubview(addButton)
         listHeader.addArrangedSubview(bindingCountField)
         stack.addArrangedSubview(listHeader)
 
@@ -1214,15 +1302,13 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             headerHeightConstraint,
             enabledRow.leadingAnchor.constraint(equalTo: toolbar.leadingAnchor),
             enabledRow.topAnchor.constraint(equalTo: toolbar.topAnchor),
-            enabledRow.trailingAnchor.constraint(lessThanOrEqualTo: addButton.leadingAnchor, constant: -16),
+            enabledRow.trailingAnchor.constraint(lessThanOrEqualTo: toolbar.trailingAnchor),
             hideOnRepeatedTriggerRow.leadingAnchor.constraint(equalTo: toolbar.leadingAnchor),
             hideOnRepeatedTriggerRow.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor),
             hideOnRepeatedTriggerRow.topAnchor.constraint(equalTo: enabledRow.bottomAnchor, constant: 6),
             guidanceField.leadingAnchor.constraint(equalTo: enabledRow.leadingAnchor),
-            guidanceField.trailingAnchor.constraint(lessThanOrEqualTo: addButton.leadingAnchor, constant: -16),
+            guidanceField.trailingAnchor.constraint(lessThanOrEqualTo: toolbar.trailingAnchor),
             guidanceField.topAnchor.constraint(equalTo: hideOnRepeatedTriggerRow.bottomAnchor, constant: 4),
-            addButton.trailingAnchor.constraint(equalTo: toolbar.trailingAnchor),
-            addButton.centerYAnchor.constraint(equalTo: enabledRow.centerYAnchor),
 
             listHeader.widthAnchor.constraint(equalTo: stack.widthAnchor),
             scrollView.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -1376,6 +1462,15 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         self.languagePopupButton = popup
         refreshLanguageControl()
         return popup
+    }
+
+    private func makeLaunchAtLoginControl() -> NSView {
+        let toggle = NSSwitch()
+        toggle.target = self
+        toggle.action = #selector(toggleLaunchAtLogin(_:))
+        launchAtLoginSwitch = toggle
+        refreshLaunchAtLoginControl()
+        return toggle
     }
 
     private func makeAppearanceControl() -> NSView {
@@ -1987,6 +2082,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         let isVisible = HotkeyGuidancePresentation.isVisible(hotkeysEnabled: settings.hotkeysEnabled)
         hotkeyGuidanceField?.isHidden = !isVisible
         hotkeyHideOnRepeatedTriggerRow?.isHidden = !isVisible
+        hotkeyChooseApplicationButton?.isHidden = !isVisible
         hotkeyHeaderHeightConstraint?.constant = HotkeyGuidancePresentation.headerHeight(
             hotkeysEnabled: settings.hotkeysEnabled
         )
