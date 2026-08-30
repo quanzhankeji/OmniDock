@@ -11,6 +11,17 @@ enum FinderMenuAction: Equatable {
     case hideHiddenFiles
     case openDirectory(FinderLaunchShortcut)
 
+    // Whether the command can run right now, as opposed to whether it belongs
+    // in this menu at all.
+    func isEnabled(in context: FinderMenuContext) -> Bool {
+        switch self {
+        case .pasteItems:
+            return context.pasteboardHasFiles
+        default:
+            return true
+        }
+    }
+
     func isAvailable(in location: FinderMenuLocation) -> Bool {
         switch self {
         case .createDocument, .copyCurrentDirectoryPath:
@@ -18,7 +29,7 @@ enum FinderMenuAction: Equatable {
         case .copySelectedPaths, .copySelectedItems, .cutSelectedItems, .openDirectory:
             return location == .selection
         case .pasteItems:
-            return location == .folderBackground
+            return true
         case .showHiddenFiles, .hideHiddenFiles:
             return true
         }
@@ -216,9 +227,10 @@ enum FinderMenuCatalog {
         if context.location == .selection, preferences.showsCutItemsCommand {
             actions.append(.cutSelectedItems)
         }
-        if context.location == .folderBackground,
-           preferences.showsPasteItemsCommand,
-           context.pasteboardHasFiles {
+        // Offered in both menus and kept visible with nothing to paste, the
+        // way every other desktop does it. A command that vanishes when the
+        // clipboard is empty reads as a missing feature.
+        if preferences.showsPasteItemsCommand {
             actions.append(.pasteItems)
         }
         if preferences.showsShowHiddenFilesCommand {

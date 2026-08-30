@@ -25,6 +25,7 @@ final class FinderMenuExtension: FIFinderSync {
             name: FinderMenuPreferencesStore.didChangeNotification,
             object: nil
         )
+        warmUp()
     }
 
     deinit {
@@ -65,6 +66,9 @@ final class FinderMenuExtension: FIFinderSync {
         }
 
         let menu = NSMenu(title: "OmniDock")
+        // Required for a disabled item to stay disabled: AppKit would
+        // otherwise re-enable anything with a valid target and action.
+        menu.autoenablesItems = false
         for entry in entries {
             switch entry {
             case let .action(action):
@@ -83,6 +87,7 @@ final class FinderMenuExtension: FIFinderSync {
                 )
                 parent.image = Self.symbol("plus.rectangle.on.folder")
                 let submenu = NSMenu(title: parent.title)
+                submenu.autoenablesItems = false
                 for action in actions {
                     submenu.addItem(menuItem(
                         for: action,
@@ -102,6 +107,7 @@ final class FinderMenuExtension: FIFinderSync {
                 )
                 parent.image = Self.symbol("list.bullet")
                 let submenu = NSMenu(title: parent.title)
+                submenu.autoenablesItems = false
                 for action in actions {
                     submenu.addItem(menuItem(
                         for: action,
@@ -121,6 +127,7 @@ final class FinderMenuExtension: FIFinderSync {
                 )
                 parent.image = Self.symbol("square.grid.2x2")
                 let submenu = NSMenu(title: parent.title)
+                submenu.autoenablesItems = false
                 for action in actions {
                     submenu.addItem(menuItem(
                         for: action,
@@ -235,6 +242,7 @@ final class FinderMenuExtension: FIFinderSync {
             context: context
         ))
         item.image = icon(for: action)
+        item.isEnabled = action.isEnabled(in: context)
         return item
     }
 
@@ -273,6 +281,36 @@ final class FinderMenuExtension: FIFinderSync {
         menuCache.invalidate()
         DispatchQueue.main.async { [weak self] in
             self?.configureObservationRoots()
+            self?.warmUp()
+        }
+    }
+
+    // Finder blocks while the first menu is built, and that first build is the
+    // expensive one: the preferences file, every configured application's
+    // location, whether it takes a folder, and an icon for each. Doing it when
+    // the extension starts - well before anyone right-clicks - is what removes
+    // the pause people notice on the first menu.
+    private func warmUp() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else {
+                return
+            }
+            let preferences = self.menuCache.preferences {
+                self.preferencesStore.snapshot()
+            }
+            guard preferences.isEnabled else {
+                return
+            }
+            for shortcut in preferences.launchShortcuts where shortcut.isEnabled {
+                guard let applicationURL = self.menuCache.applicationURL(for: shortcut) else {
+                    continue
+                }
+                _ = self.menuCache.acceptsDirectories(applicationURL)
+                _ = self.menuCache.applicationIcon(at: applicationURL)
+            }
+            for preset in preferences.documentPresets where preset.isEnabled {
+                _ = self.menuCache.documentIcon(forFileExtension: preset.fileExtension)
+            }
         }
     }
 

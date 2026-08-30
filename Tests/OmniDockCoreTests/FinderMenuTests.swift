@@ -327,6 +327,7 @@ final class FinderMenuTests: XCTestCase {
             showsCopyPathCommand: false,
             showsCopyItemsCommand: false,
             showsCutItemsCommand: false,
+            showsPasteItemsCommand: false,
             showsShowHiddenFilesCommand: false,
             showsHideHiddenFilesCommand: false
         )
@@ -363,6 +364,7 @@ final class FinderMenuTests: XCTestCase {
             launchShortcuts: [fileOnlyEditor],
             documentPresets: [],
             showsCopyPathCommand: false,
+            showsPasteItemsCommand: false,
             showsShowHiddenFilesCommand: false,
             showsHideHiddenFilesCommand: false
         )
@@ -417,6 +419,7 @@ final class FinderMenuTests: XCTestCase {
             var preferences = FinderMenuPreferences(isEnabled: true)
             preferences.groupsDocumentPresets = grouped
             preferences.showsCopyPathCommand = false
+            preferences.showsPasteItemsCommand = false
             preferences.showsShowHiddenFilesCommand = false
             preferences.showsHideHiddenFilesCommand = false
 
@@ -445,6 +448,7 @@ final class FinderMenuTests: XCTestCase {
             preferences.groupsQuickCommands = grouped
             preferences.documentPresets = []
             preferences.showsCopyPathCommand = false
+            preferences.showsPasteItemsCommand = false
 
             let entries = FinderMenuCatalog.entries(
                 for: context,
@@ -467,30 +471,40 @@ final class FinderMenuTests: XCTestCase {
         XCTAssertTrue(preferences.groupsLaunchShortcuts)
     }
 
-    func testPasteAppearsOnlyWhenThePasteboardHasFiles() {
+    func testPasteStaysVisibleButDisabledWithNothingToPaste() {
         var preferences = FinderMenuPreferences(isEnabled: true)
         preferences.documentPresets = []
         preferences.showsCopyPathCommand = false
+        preferences.showsCopyItemsCommand = false
+        preferences.showsCutItemsCommand = false
         preferences.showsShowHiddenFilesCommand = false
         preferences.showsHideHiddenFilesCommand = false
 
         for hasFiles in [true, false] {
+            let context = FinderMenuContext(
+                location: .folderBackground,
+                currentDirectory: URL(fileURLWithPath: "/tmp/OmniDock"),
+                selectedURLs: [],
+                pasteboardHasFiles: hasFiles
+            )
             let entries = FinderMenuCatalog.entries(
-                for: FinderMenuContext(
-                    location: .folderBackground,
-                    currentDirectory: URL(fileURLWithPath: "/tmp/OmniDock"),
-                    selectedURLs: [],
-                    pasteboardHasFiles: hasFiles
-                ),
+                for: context,
                 preferences: preferences,
                 resolveApplication: { _ in nil },
                 acceptsDirectories: { _ in true }
             )
-            XCTAssertEqual(entries, hasFiles ? [.action(.pasteItems)] : [], "hasFiles: \(hasFiles)")
+            // Present either way; an empty clipboard greys it out rather than
+            // making the command disappear.
+            XCTAssertEqual(entries, [.action(.pasteItems)], "hasFiles: \(hasFiles)")
+            XCTAssertEqual(
+                FinderMenuAction.pasteItems.isEnabled(in: context),
+                hasFiles,
+                "hasFiles: \(hasFiles)"
+            )
         }
     }
 
-    func testCopyIsOfferedForASelectionAndPasteIsNot() {
+    func testSelectionOffersCopyCutAndPaste() {
         var preferences = FinderMenuPreferences(isEnabled: true)
         preferences.showsCopyPathCommand = false
         preferences.showsShowHiddenFilesCommand = false
@@ -508,7 +522,13 @@ final class FinderMenuTests: XCTestCase {
             acceptsDirectories: { _ in true }
         )
 
-        XCTAssertEqual(entries, [.action(.copySelectedItems), .action(.cutSelectedItems)])
+        // Pasting from a file's menu targets the folder that contains it,
+        // which is what people expect coming from other desktops.
+        XCTAssertEqual(entries, [
+            .action(.copySelectedItems),
+            .action(.cutSelectedItems),
+            .action(.pasteItems)
+        ])
     }
 
     func testContainerMenuOffersNewFileAndCurrentPath() {
@@ -532,6 +552,7 @@ final class FinderMenuTests: XCTestCase {
                         .filter(\.isEnabled)
                         .map(FinderMenuAction.createDocument)
                 ),
+                .action(.pasteItems),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]
@@ -559,6 +580,7 @@ final class FinderMenuTests: XCTestCase {
                         .filter(\.isEnabled)
                         .map(FinderMenuAction.createDocument)
                 ),
+                .action(.pasteItems),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]
@@ -570,6 +592,7 @@ final class FinderMenuTests: XCTestCase {
                 preferences: FinderMenuPreferences(
                     isEnabled: true,
                     showsCopyPathCommand: false,
+                    showsPasteItemsCommand: false,
                     showsShowHiddenFilesCommand: false,
                     showsHideHiddenFilesCommand: false
                 )
@@ -623,6 +646,7 @@ final class FinderMenuTests: XCTestCase {
                 .action(.copySelectedPaths),
                 .action(.copySelectedItems),
                 .action(.cutSelectedItems),
+                .action(.pasteItems),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]
@@ -659,6 +683,7 @@ final class FinderMenuTests: XCTestCase {
                 .applicationSubmenu([.openDirectory(app)]),
                 .action(.copySelectedItems),
                 .action(.cutSelectedItems),
+                .action(.pasteItems),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]
@@ -677,6 +702,7 @@ final class FinderMenuTests: XCTestCase {
                 .action(.openDirectory(app)),
                 .action(.copySelectedItems),
                 .action(.cutSelectedItems),
+                .action(.pasteItems),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]
@@ -875,6 +901,7 @@ final class FinderMenuTests: XCTestCase {
             ),
             [
                 .action(.copyCurrentDirectoryPath),
+                .action(.pasteItems),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]
@@ -1054,6 +1081,7 @@ final class FinderMenuTests: XCTestCase {
             [
                 .action(.copyCurrentDirectoryPath),
                 .documentSubmenu([.createDocument(enabled)]),
+                .action(.pasteItems),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]
@@ -1294,6 +1322,7 @@ final class FinderMenuTests: XCTestCase {
                 .action(.copySelectedPaths),
                 .action(.copySelectedItems),
                 .action(.cutSelectedItems),
+                .action(.pasteItems),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]
