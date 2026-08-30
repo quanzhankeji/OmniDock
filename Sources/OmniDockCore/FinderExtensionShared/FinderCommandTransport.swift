@@ -85,11 +85,14 @@ enum FinderItemPasteboard {
         return (urls, pasteboard.data(forType: cutType) != nil)
     }
 
+    // Asked on every right-click in a folder background, while Finder blocks
+    // waiting for the menu. Reading NSURL objects would make the pasteboard
+    // resolve every item into a URL and, inside the sandboxed extension, mint
+    // file access for each one - none of which is needed to decide whether the
+    // paste item should be enabled. The type list answers that without touching
+    // a single file.
     static func hasFiles(_ pasteboard: NSPasteboard = .general) -> Bool {
-        pasteboard.canReadObject(
-            forClasses: [NSURL.self],
-            options: [.urlReadingFileURLsOnly: true]
-        )
+        pasteboard.types?.contains(.fileURL) ?? false
     }
 }
 

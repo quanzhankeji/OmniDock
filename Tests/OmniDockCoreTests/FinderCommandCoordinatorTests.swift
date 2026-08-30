@@ -323,6 +323,29 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: existing), "original")
     }
 
+    func testTextOnThePasteboardDoesNotOfferAPaste() {
+        // The check reads the type list rather than resolving pasteboard items
+        // into URLs, so it has to stay narrow enough to ignore ordinary copied
+        // text.
+        let pasteboard = makePasteboard()
+        pasteboard.clearContents()
+        pasteboard.setString("Report.txt", forType: .string)
+
+        XCTAssertFalse(FinderItemPasteboard.hasFiles(pasteboard))
+    }
+
+    func testFileUrlsOnThePasteboardOfferAPaste() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("Report.txt")
+        try Data("payload".utf8).write(to: file)
+
+        let pasteboard = makePasteboard()
+        XCTAssertTrue(FinderItemPasteboard.write([file], isCut: false, to: pasteboard))
+
+        XCTAssertTrue(FinderItemPasteboard.hasFiles(pasteboard))
+    }
+
     func testPasteMovesTheItemsWhenTheyWereCut() throws {
         let root = try makeTemporaryDirectory()
         let source = root.appendingPathComponent("Source", isDirectory: true)
