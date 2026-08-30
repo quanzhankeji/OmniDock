@@ -23,6 +23,7 @@ final class FinderFileCommandCoordinator: NSObject {
     private let requestDirectoryAccess: @MainActor (URL) -> URL?
     private let resolvePasteConflicts: @MainActor ([URL]) -> FinderPasteConflictResolution
     private let announceDirectoryChange: (URL) -> Void
+    private let beginInlineRename: () -> Void
     private let openApplication: (
         _ directoryURL: URL,
         _ applicationURL: URL,
@@ -46,6 +47,9 @@ final class FinderFileCommandCoordinator: NSObject {
             FinderFileCommandCoordinator.presentPasteConflictAlert,
         announceDirectoryChange: @escaping (URL) -> Void = { directory in
             NSWorkspace.shared.noteFileSystemChanged(directory.path)
+        },
+        beginInlineRename: @escaping () -> Void = {
+            FinderInlineRenameActivator().begin()
         },
         openApplication: @escaping (
             _ directoryURL: URL,
@@ -73,6 +77,7 @@ final class FinderFileCommandCoordinator: NSObject {
         self.requestDirectoryAccess = requestDirectoryAccess
         self.resolvePasteConflicts = resolvePasteConflicts
         self.announceDirectoryChange = announceDirectoryChange
+        self.beginInlineRename = beginInlineRename
         self.openApplication = openApplication
         super.init()
     }
@@ -533,8 +538,12 @@ final class FinderFileCommandCoordinator: NSObject {
         return candidate
     }
 
+    // Only the new-document commands land here; a paste reveals its own items
+    // without arming the rename, because a pasted file already has the name the
+    // user chose for it.
     private func reveal(_ file: URL) {
         revealFiles([file])
+        beginInlineRename()
     }
 
     nonisolated static func isPermissionFailure(_ error: Error) -> Bool {

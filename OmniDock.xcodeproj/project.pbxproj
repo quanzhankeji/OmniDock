@@ -44,6 +44,7 @@
 		FDD785A3EF81BD86191BDB4F /* FinderDirectoryGrantStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CEEE1BF3694D33D5614D1F25 /* FinderDirectoryGrantStore.swift */; };
 		0732EEB2DA9FE442A84877E3 /* FinderExtensionActivation.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF8C87A8360ACFFBADB6F802 /* FinderExtensionActivation.swift */; };
 		1324A0E128D0D7A43A3F5A45 /* FinderFileCommandCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 214697259348D1357DD4E957 /* FinderFileCommandCoordinator.swift */; };
+		CD4D693595D8E188EA65AEB7 /* FinderInlineRename.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88282BD6CA2FA40724CF0323 /* FinderInlineRename.swift */; };
 		0B19992E92105B7803FF2F39 /* GitHubReleaseClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0FCF9E3C1CB96CAAB073B35 /* GitHubReleaseClient.swift */; };
 		92136C573348886F35F18726 /* HotkeyShortcutPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = D765A2CAC69408FD0D02DE75 /* HotkeyShortcutPolicy.swift */; };
 		5E50495DFD801F094898630B /* IndependentWindowIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = D30D41B0DCA3A55E6E103BA1 /* IndependentWindowIdentity.swift */; };
@@ -172,6 +173,7 @@
 		CEEE1BF3694D33D5614D1F25 /* FinderDirectoryGrantStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/FinderDirectoryGrantStore.swift"; sourceTree = SOURCE_ROOT; };
 		EF8C87A8360ACFFBADB6F802 /* FinderExtensionActivation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/FinderExtensionActivation.swift"; sourceTree = SOURCE_ROOT; };
 		214697259348D1357DD4E957 /* FinderFileCommandCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/FinderFileCommandCoordinator.swift"; sourceTree = SOURCE_ROOT; };
+		88282BD6CA2FA40724CF0323 /* FinderInlineRename.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/FinderInlineRename.swift"; sourceTree = SOURCE_ROOT; };
 		D0FCF9E3C1CB96CAAB073B35 /* GitHubReleaseClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/GitHubReleaseClient.swift"; sourceTree = SOURCE_ROOT; };
 		D765A2CAC69408FD0D02DE75 /* HotkeyShortcutPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/HotkeyShortcutPolicy.swift"; sourceTree = SOURCE_ROOT; };
 		D30D41B0DCA3A55E6E103BA1 /* IndependentWindowIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/IndependentWindowIdentity.swift"; sourceTree = SOURCE_ROOT; };
@@ -361,6 +363,7 @@
 				CEEE1BF3694D33D5614D1F25 /* FinderDirectoryGrantStore.swift */,
 				EF8C87A8360ACFFBADB6F802 /* FinderExtensionActivation.swift */,
 				214697259348D1357DD4E957 /* FinderFileCommandCoordinator.swift */,
+				88282BD6CA2FA40724CF0323 /* FinderInlineRename.swift */,
 				D0FCF9E3C1CB96CAAB073B35 /* GitHubReleaseClient.swift */,
 				D765A2CAC69408FD0D02DE75 /* HotkeyShortcutPolicy.swift */,
 				D30D41B0DCA3A55E6E103BA1 /* IndependentWindowIdentity.swift */,
@@ -673,6 +676,7 @@
 				FDD785A3EF81BD86191BDB4F /* FinderDirectoryGrantStore.swift in Sources */,
 				0732EEB2DA9FE442A84877E3 /* FinderExtensionActivation.swift in Sources */,
 				1324A0E128D0D7A43A3F5A45 /* FinderFileCommandCoordinator.swift in Sources */,
+				CD4D693595D8E188EA65AEB7 /* FinderInlineRename.swift in Sources */,
 				0B19992E92105B7803FF2F39 /* GitHubReleaseClient.swift in Sources */,
 				92136C573348886F35F18726 /* HotkeyShortcutPolicy.swift in Sources */,
 				5E50495DFD801F094898630B /* IndependentWindowIdentity.swift in Sources */,
