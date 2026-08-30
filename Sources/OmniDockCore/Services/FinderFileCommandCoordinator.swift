@@ -8,6 +8,7 @@ final class FinderFileCommandCoordinator: NSObject {
     private let preferencesStore: FinderMenuPreferencesStore
     private let directoryGrantStore: FinderDirectoryGrantStore
     private let fileManager: FileManager
+    private let itemPasteboard: NSPasteboard
     private let hiddenFilesController: FinderHiddenFilesController
     private let revealFiles: ([URL]) -> Void
     private let requestDirectoryAccess: @MainActor (URL) -> URL?
@@ -23,6 +24,7 @@ final class FinderFileCommandCoordinator: NSObject {
         preferencesStore: FinderMenuPreferencesStore = FinderMenuPreferencesStore(),
         directoryGrantStore: FinderDirectoryGrantStore = FinderDirectoryGrantStore(),
         fileManager: FileManager = .default,
+        itemPasteboard: NSPasteboard = .general,
         hiddenFilesController: FinderHiddenFilesController? = nil,
         revealFiles: @escaping ([URL]) -> Void = {
             NSWorkspace.shared.activateFileViewerSelecting($0)
@@ -49,6 +51,7 @@ final class FinderFileCommandCoordinator: NSObject {
         self.preferencesStore = preferencesStore
         self.directoryGrantStore = directoryGrantStore
         self.fileManager = fileManager
+        self.itemPasteboard = itemPasteboard
         self.hiddenFilesController = hiddenFilesController ?? FinderHiddenFilesController()
         self.revealFiles = revealFiles
         self.requestDirectoryAccess = requestDirectoryAccess
@@ -296,7 +299,7 @@ final class FinderFileCommandCoordinator: NSObject {
     // The sources come from the pasteboard at the moment the command runs, the
     // same thing Finder pastes, so nothing about them travels in the request.
     private func pasteItems(into directory: URL) {
-        let (sources, isCut) = FinderItemPasteboard.read()
+        let (sources, isCut) = FinderItemPasteboard.read(from: itemPasteboard)
         guard !sources.isEmpty else {
             return
         }
@@ -383,7 +386,7 @@ final class FinderFileCommandCoordinator: NSObject {
         if isCut {
             // The sources are gone, so leaving them on the pasteboard would
             // offer a second paste that could only fail.
-            NSPasteboard.general.clearContents()
+            itemPasteboard.clearContents()
         }
         guard !pasted.isEmpty else {
             return

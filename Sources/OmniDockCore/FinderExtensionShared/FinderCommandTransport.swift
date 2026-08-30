@@ -44,18 +44,22 @@ enum FinderItemPasteboard {
         "com.quanzhankeji.OmniDock.finder-cut"
     )
 
+    @discardableResult
     static func write(
         _ urls: [URL],
         isCut: Bool,
         to pasteboard: NSPasteboard = .general
-    ) {
+    ) -> Bool {
         pasteboard.clearContents()
         // File URLs rather than their paths: that is what makes Finder and
         // other applications treat this as files instead of pasted text.
-        pasteboard.writeObjects(urls as [NSPasteboardWriting])
-        if isCut {
-            pasteboard.setData(Data(), forType: cutType)
+        guard pasteboard.writeObjects(urls as [NSPasteboardWriting]) else {
+            return false
         }
+        if isCut {
+            return pasteboard.setData(Data(), forType: cutType)
+        }
+        return true
     }
 
     static func read(

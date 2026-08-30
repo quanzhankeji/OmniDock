@@ -283,9 +283,8 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         let file = source.appendingPathComponent("Report.txt")
         try Data("payload".utf8).write(to: file)
 
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.writeObjects([file as NSURL])
+        let pasteboard = makePasteboard()
+        XCTAssertTrue(FinderItemPasteboard.write([file], isCut: false, to: pasteboard))
 
         let preferences = makePreferencesStore(FinderMenuPreferences(isEnabled: true))
         let mailbox = FinderCommandMailbox(directoryProvider: { root })
@@ -299,6 +298,7 @@ final class FinderCommandCoordinatorTests: XCTestCase {
             requestMailbox: mailbox,
             preferencesStore: preferences,
             directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            itemPasteboard: pasteboard,
             revealFiles: { revealed = $0 },
             requestDirectoryAccess: { _ in nil }
         ).handle(requestID: request.id)
@@ -334,7 +334,8 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         let file = source.appendingPathComponent("Report.txt")
         try Data("payload".utf8).write(to: file)
 
-        FinderItemPasteboard.write([file], isCut: true)
+        let pasteboard = makePasteboard()
+        XCTAssertTrue(FinderItemPasteboard.write([file], isCut: true, to: pasteboard))
 
         let preferences = makePreferencesStore(FinderMenuPreferences(isEnabled: true))
         let mailbox = FinderCommandMailbox(directoryProvider: { root })
@@ -347,6 +348,7 @@ final class FinderCommandCoordinatorTests: XCTestCase {
             requestMailbox: mailbox,
             preferencesStore: preferences,
             directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            itemPasteboard: pasteboard,
             revealFiles: { _ in },
             requestDirectoryAccess: { _ in nil }
         ).handle(requestID: request.id)
@@ -357,7 +359,7 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         )
         XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
         // The sources are gone, so a second paste must not be offered.
-        XCTAssertFalse(FinderItemPasteboard.hasFiles())
+        XCTAssertFalse(FinderItemPasteboard.hasFiles(pasteboard))
     }
 
     func testCuttingIntoTheSameFolderLeavesTheItemAlone() throws {
@@ -366,7 +368,8 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         let file = root.appendingPathComponent("Report.txt")
         try Data("payload".utf8).write(to: file)
 
-        FinderItemPasteboard.write([file], isCut: true)
+        let pasteboard = makePasteboard()
+        XCTAssertTrue(FinderItemPasteboard.write([file], isCut: true, to: pasteboard))
 
         let preferences = makePreferencesStore(FinderMenuPreferences(isEnabled: true))
         let mailbox = FinderCommandMailbox(directoryProvider: { root })
@@ -379,6 +382,7 @@ final class FinderCommandCoordinatorTests: XCTestCase {
             requestMailbox: mailbox,
             preferencesStore: preferences,
             directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            itemPasteboard: pasteboard,
             revealFiles: { _ in },
             requestDirectoryAccess: { _ in nil }
         ).handle(requestID: request.id)
@@ -395,17 +399,18 @@ final class FinderCommandCoordinatorTests: XCTestCase {
 
     func testPasteboardCarriesTheCutIntentOnlyWhenCut() {
         let file = URL(fileURLWithPath: "/tmp/OmniDock/Report.txt")
+        let pasteboard = makePasteboard()
 
-        FinderItemPasteboard.write([file], isCut: false)
-        XCTAssertFalse(FinderItemPasteboard.read().isCut)
+        XCTAssertTrue(FinderItemPasteboard.write([file], isCut: false, to: pasteboard))
+        XCTAssertFalse(FinderItemPasteboard.read(from: pasteboard).isCut)
 
-        FinderItemPasteboard.write([file], isCut: true)
-        XCTAssertTrue(FinderItemPasteboard.read().isCut)
+        XCTAssertTrue(FinderItemPasteboard.write([file], isCut: true, to: pasteboard))
+        XCTAssertTrue(FinderItemPasteboard.read(from: pasteboard).isCut)
 
         // Anyone else writing to the pasteboard retires the intent.
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString("plain text", forType: .string)
-        XCTAssertFalse(FinderItemPasteboard.read().isCut)
+        pasteboard.clearContents()
+        pasteboard.setString("plain text", forType: .string)
+        XCTAssertFalse(FinderItemPasteboard.read(from: pasteboard).isCut)
     }
 
     private func makeTemporaryDirectory() throws -> URL {
@@ -413,6 +418,13 @@ final class FinderCommandCoordinatorTests: XCTestCase {
             .appendingPathComponent("OmniDockFinderCommandTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
+    }
+
+    private func makePasteboard() -> NSPasteboard {
+        let name = NSPasteboard.Name("OmniDockTests.\(UUID().uuidString)")
+        let pasteboard = NSPasteboard(name: name)
+        pasteboard.clearContents()
+        return pasteboard
     }
 
     private func isolatedDefaults() -> UserDefaults {
