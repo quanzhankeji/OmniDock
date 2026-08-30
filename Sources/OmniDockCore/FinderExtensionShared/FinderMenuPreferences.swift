@@ -745,6 +745,26 @@ enum FinderObservationRoots {
     }
 }
 
+private final class ResolvedContainerURL: @unchecked Sendable {
+    private let lock = NSLock()
+    private var resolved: URL??
+
+    func value() -> URL? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let resolved {
+            return resolved
+        }
+        let url = FinderMenuPreferencesStore.appGroupIdentifier.flatMap {
+            FileManager.default.containerURL(
+                forSecurityApplicationGroupIdentifier: $0
+            )
+        }
+        resolved = .some(url)
+        return url
+    }
+}
+
 final class FinderMenuPreferencesStore {
     static let didChangeNotification = Notification.Name(
         "com.quanzhankeji.OmniDock.finder-menu-preferences-changed"
@@ -771,16 +791,12 @@ final class FinderMenuPreferencesStore {
     private let containerProvider: () -> URL?
 
     convenience init() {
-        self.init(
-            containerProvider: {
-                guard let identifier = Self.appGroupIdentifier else {
-                    return nil
-                }
-                return FileManager.default.containerURL(
-                    forSecurityApplicationGroupIdentifier: identifier
-                )
-            }
-        )
+        // containerURL(forSecurityApplicationGroupIdentifier:) is an XPC round
+        // trip to containermanagerd and Apple documents it as expensive. The
+        // group container does not move while the process is alive, so it is
+        // resolved once instead of on every menu Finder asks for.
+        let cachedContainer = ResolvedContainerURL()
+        self.init(containerProvider: { cachedContainer.value() })
     }
 
     init(

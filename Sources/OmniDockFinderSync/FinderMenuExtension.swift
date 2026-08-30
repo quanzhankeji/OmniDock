@@ -11,6 +11,7 @@ final class FinderMenuExtension: FIFinderSync {
     private let preferencesStore = FinderMenuPreferencesStore()
     private let commandMailbox = FinderCommandMailbox()
     private let actionRegistry = FinderMenuActionRegistry()
+    private let menuCache = FinderMenuBuildCache()
     private var configuredObservationRoots: Set<URL> = []
 
     override init() {
@@ -42,7 +43,7 @@ final class FinderMenuExtension: FIFinderSync {
     }
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu? {
-        let preferences = preferencesStore.snapshot()
+        let preferences = menuCache.preferences { self.preferencesStore.snapshot() }
         Self.logger.debug(
             "Finder requested \(Self.menuKindName(menuKind), privacy: .public); enabled: \(preferences.isEnabled)"
         )
@@ -52,7 +53,12 @@ final class FinderMenuExtension: FIFinderSync {
             return nil
         }
 
-        let entries = FinderMenuCatalog.entries(for: context, preferences: preferences)
+        let entries = FinderMenuCatalog.entries(
+            for: context,
+            preferences: preferences,
+            resolveApplication: { self.menuCache.applicationURL(for: $0) },
+            acceptsDirectories: { self.menuCache.acceptsDirectories($0) }
+        )
         guard !entries.isEmpty else {
             return nil
         }
@@ -108,7 +114,7 @@ final class FinderMenuExtension: FIFinderSync {
     }
 
     @objc private func performAction(_ sender: NSMenuItem) {
-        guard preferencesStore.snapshot().isEnabled,
+        guard menuCache.preferences({ self.preferencesStore.snapshot() }).isEnabled,
               let binding = actionRegistry.consume(token: sender.tag)
         else {
             return
@@ -195,13 +201,14 @@ final class FinderMenuExtension: FIFinderSync {
     }
 
     @objc private func preferencesDidChange() {
+        menuCache.invalidate()
         DispatchQueue.main.async { [weak self] in
             self?.configureObservationRoots()
         }
     }
 
     private func configureObservationRoots() {
-        let preferences = preferencesStore.snapshot()
+        let preferences = menuCache.preferences { self.preferencesStore.snapshot() }
         let roots = FinderObservationRoots.registeredURLs(
             authorizedDirectoryPaths: preferences.observationRootPaths
         )
@@ -268,5 +275,75 @@ final class FinderMenuExtension: FIFinderSync {
         @unknown default:
             return "unknown-menu"
         }
+    }
+}
+
+// Finder blocks while it waits for the menu, and everything needed to build one
+// is stable between changes: the preferences file, where each configured
+// application lives, and whether it takes a folder. Reading and resolving all of
+// it on every right-click is what made the menu appear late. The cache is
+// dropped whenever the containing app reports a change.
+private final class FinderMenuBuildCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cachedPreferences: FinderMenuPreferences?
+    private var applicationURLs: [UUID: URL?] = [:]
+    private var directorySupport: [String: Bool] = [:]
+
+    func preferences(_ load: () -> FinderMenuPreferences) -> FinderMenuPreferences {
+        lock.lock()
+        if let cachedPreferences {
+            lock.unlock()
+            return cachedPreferences
+        }
+        lock.unlock()
+
+        // Loading outside the lock keeps a slow read from blocking a concurrent
+        // menu request; both would produce the same value.
+        let loaded = load()
+        lock.lock()
+        cachedPreferences = loaded
+        lock.unlock()
+        return loaded
+    }
+
+    func applicationURL(for shortcut: FinderLaunchShortcut) -> URL? {
+        lock.lock()
+        if let cached = applicationURLs[shortcut.id] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+
+        let resolved = FinderApplicationTargetResolver.resolve(shortcut: shortcut)
+        lock.lock()
+        applicationURLs[shortcut.id] = resolved
+        lock.unlock()
+        return resolved
+    }
+
+    func acceptsDirectories(_ applicationURL: URL) -> Bool {
+        let key = applicationURL.path
+        lock.lock()
+        if let cached = directorySupport[key] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+
+        let accepts = FinderApplicationDirectorySupport.acceptsDirectories(
+            applicationURL: applicationURL
+        )
+        lock.lock()
+        directorySupport[key] = accepts
+        lock.unlock()
+        return accepts
+    }
+
+    func invalidate() {
+        lock.lock()
+        cachedPreferences = nil
+        applicationURLs.removeAll()
+        directorySupport.removeAll()
+        lock.unlock()
     }
 }
