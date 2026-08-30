@@ -85,6 +85,7 @@ enum FinderMenuEntry: Equatable {
     case action(FinderMenuAction)
     case documentSubmenu([FinderMenuAction])
     case applicationSubmenu([FinderMenuAction])
+    case commandSubmenu([FinderMenuAction])
 }
 
 enum FinderMenuCatalog {
@@ -145,11 +146,13 @@ enum FinderMenuCatalog {
             if preferences.showsCopyPathCommand {
                 entries.append(.action(.copyCurrentDirectoryPath))
             }
-            let enabledPresets = preferences.documentPresets.filter(\.isEnabled)
-            if !enabledPresets.isEmpty {
-                entries.append(.documentSubmenu(
-                    enabledPresets.map(FinderMenuAction.createDocument)
-                ))
+            let documentActions = preferences.documentPresets
+                .filter(\.isEnabled)
+                .map(FinderMenuAction.createDocument)
+            if !documentActions.isEmpty {
+                entries.append(contentsOf: preferences.groupsDocumentPresets
+                    ? [.documentSubmenu(documentActions)]
+                    : documentActions.map(FinderMenuEntry.action))
             }
             // The command opens the folder the menu was invoked in, so it
             // belongs here too. Requiring a selection first made the common
@@ -185,14 +188,19 @@ enum FinderMenuCatalog {
     private static func hiddenFileEntries(
         for preferences: FinderMenuPreferences
     ) -> [FinderMenuEntry] {
-        var entries: [FinderMenuEntry] = []
+        var actions: [FinderMenuAction] = []
         if preferences.showsShowHiddenFilesCommand {
-            entries.append(.action(.showHiddenFiles))
+            actions.append(.showHiddenFiles)
         }
         if preferences.showsHideHiddenFilesCommand {
-            entries.append(.action(.hideHiddenFiles))
+            actions.append(.hideHiddenFiles)
         }
-        return entries
+        guard !actions.isEmpty else {
+            return []
+        }
+        return preferences.groupsQuickCommands
+            ? [.commandSubmenu(actions)]
+            : actions.map(FinderMenuEntry.action)
     }
 }
 
@@ -231,6 +239,10 @@ enum FinderMenuLabels {
 
     static func documentSubmenuTitle(languageIdentifier: String) -> String {
         usesChinese(languageIdentifier) ? "新建文件" : "New File"
+    }
+
+    static func commandSubmenuTitle(languageIdentifier: String) -> String {
+        usesChinese(languageIdentifier) ? "快捷指令" : "Quick Commands"
     }
 
     static func applicationSubmenuTitle(languageIdentifier: String) -> String {

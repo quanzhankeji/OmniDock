@@ -120,6 +120,10 @@
 "finderQuickOpenDetail" = "Open the current Finder folder with apps you choose.";
 "finderQuickOpenGroupedTitle" = "Group Apps in a Submenu";
 "finderQuickOpenGroupedDetail" = "Place selected apps under one Open With submenu.";
+"finderDocumentTypesGroupedTitle" = "Group File Types in a Submenu";
+"finderDocumentTypesGroupedDetail" = "Place the New File types under one submenu.";
+"finderQuickCommandsGroupedTitle" = "Group Commands in a Submenu";
+"finderQuickCommandsGroupedDetail" = "Place the hidden-file commands under one submenu.";
 "finderQuickOpenAdd" = "Choose App";
 "finderQuickOpenEmpty" = "No quick actions configured.";
 "finderQuickOpenEnabled" = "Enabled";

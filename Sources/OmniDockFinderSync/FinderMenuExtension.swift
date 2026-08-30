@@ -92,6 +92,25 @@ final class FinderMenuExtension: FIFinderSync {
                 }
                 parent.submenu = submenu
                 menu.addItem(parent)
+            case let .commandSubmenu(actions):
+                let parent = NSMenuItem(
+                    title: FinderMenuLabels.commandSubmenuTitle(
+                        languageIdentifier: preferences.languageIdentifier
+                    ),
+                    action: nil,
+                    keyEquivalent: ""
+                )
+                parent.image = Self.symbol("list.bullet")
+                let submenu = NSMenu(title: parent.title)
+                for action in actions {
+                    submenu.addItem(menuItem(
+                        for: action,
+                        context: context,
+                        preferences: preferences
+                    ))
+                }
+                parent.submenu = submenu
+                menu.addItem(parent)
             case let .applicationSubmenu(actions):
                 let parent = NSMenuItem(
                     title: FinderMenuLabels.applicationSubmenuTitle(

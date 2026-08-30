@@ -120,6 +120,10 @@
 "finderQuickOpenDetail" = "使用选择的应用打开当前 Finder 文件夹。";
 "finderQuickOpenGroupedTitle" = "折叠应用菜单";
 "finderQuickOpenGroupedDetail" = "将所选应用收纳到一个“打开方式”子菜单中。";
+"finderDocumentTypesGroupedTitle" = "合并文件列表";
+"finderDocumentTypesGroupedDetail" = "将新建文件的类型收纳到一个子菜单中。";
+"finderQuickCommandsGroupedTitle" = "合并指令";
+"finderQuickCommandsGroupedDetail" = "将隐藏文件相关指令收纳到一个子菜单中。";
 "finderQuickOpenAdd" = "选择应用";
 "finderQuickOpenEmpty" = "还没有添加快捷操作。";
 "finderQuickOpenEnabled" = "启用";

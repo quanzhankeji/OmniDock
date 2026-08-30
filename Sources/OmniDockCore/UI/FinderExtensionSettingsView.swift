@@ -58,6 +58,9 @@ final class FinderExtensionSettingsView: NSView {
     private let isExtensionEnabledInFinder: () -> Bool
     private let masterSwitch = FinderSettingsSwitch()
     private let groupingSwitch = FinderSettingsSwitch()
+    private var groupingRow: NSView?
+    private var groupingTitleLabel: NSTextField?
+    private var groupingDetailLabel: NSTextField?
     private let copyPathCommandSwitch = FinderSettingsSwitch()
     private let showHiddenFilesCommandSwitch = FinderSettingsSwitch()
     private let hideHiddenFilesCommandSwitch = FinderSettingsSwitch()
@@ -99,7 +102,6 @@ final class FinderExtensionSettingsView: NSView {
 
     func reload() {
         masterSwitch.state = settings.finderExtensionEnabled ? .on : .off
-        groupingSwitch.state = settings.finderLaunchShortcutsGrouped ? .on : .off
         copyPathCommandSwitch.state = settings.finderCopyPathCommand ? .on : .off
         showHiddenFilesCommandSwitch.state = settings.finderShowHiddenFilesCommand ? .on : .off
         hideHiddenFilesCommandSwitch.state = settings.finderHideHiddenFilesCommand ? .on : .off
@@ -108,6 +110,7 @@ final class FinderExtensionSettingsView: NSView {
             isExtensionEnabledInFinder: isExtensionEnabledInFinder()
         )
         updateSectionSelection()
+        updateGroupingRow()
         rebuildDetailIfNeeded()
     }
 
@@ -263,12 +266,16 @@ final class FinderExtensionSettingsView: NSView {
 
         groupingSwitch.target = self
         groupingSwitch.action = #selector(toggleGrouping(_:))
-        let groupingRow = makeSettingRow(
+        // One row, retitled per section: each list can be collapsed into its
+        // own submenu, and the wording says which list it is about.
+        groupingRow = makeSettingRow(
             title: AppStrings.text(.finderQuickOpenGroupedTitle),
             detail: AppStrings.text(.finderQuickOpenGroupedDetail),
-            control: groupingSwitch
+            control: groupingSwitch,
+            titleLabel: &groupingTitleLabel,
+            detailLabel: &groupingDetailLabel
         )
-        detailStack.addArrangedSubview(groupingRow)
+        detailStack.addArrangedSubview(groupingRow!)
 
         let scrollView = makeItemList()
         detailStack.addArrangedSubview(scrollView)
@@ -368,7 +375,7 @@ final class FinderExtensionSettingsView: NSView {
             ? AppStrings.text(.finderDocumentTypeAdd)
             : AppStrings.text(.finderQuickOpenAdd)
         addButton.isHidden = selectedSection == .quickCommands
-        detailStack.arrangedSubviews[1].isHidden = selectedSection != .quickActions
+        updateGroupingRow()
 
         itemRows.removeAllArrangedSubviews()
         switch selectedSection {
@@ -705,7 +712,13 @@ final class FinderExtensionSettingsView: NSView {
         }
     }
 
-    private func makeSettingRow(title: String, detail: String, control: NSView) -> NSView {
+    private func makeSettingRow(
+        title: String,
+        detail: String,
+        control: NSView,
+        titleLabel: UnsafeMutablePointer<NSTextField?>? = nil,
+        detailLabel: UnsafeMutablePointer<NSTextField?>? = nil
+    ) -> NSView {
         let row = FinderSettingsSurfaceView(style: .setting)
         row.translatesAutoresizingMaskIntoConstraints = false
         row.heightAnchor.constraint(equalToConstant: 68).isActive = true
@@ -726,6 +739,8 @@ final class FinderExtensionSettingsView: NSView {
         )
         labels.addArrangedSubview(titleField)
         labels.addArrangedSubview(detailField)
+        titleLabel?.pointee = titleField
+        detailLabel?.pointee = detailField
         labels.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         control.setContentCompressionResistancePriority(.required, for: .horizontal)
 
@@ -773,7 +788,39 @@ final class FinderExtensionSettingsView: NSView {
     }
 
     @objc private func toggleGrouping(_ sender: NSSwitch) {
-        settings.finderLaunchShortcutsGrouped = sender.state == .on
+        let isOn = sender.state == .on
+        switch selectedSection {
+        case .documentTypes:
+            settings.finderDocumentPresetsGrouped = isOn
+        case .quickActions:
+            settings.finderLaunchShortcutsGrouped = isOn
+        case .quickCommands:
+            settings.finderQuickCommandsGrouped = isOn
+        }
+    }
+
+    private func updateGroupingRow() {
+        let title: String
+        let detail: String
+        let isOn: Bool
+        switch selectedSection {
+        case .documentTypes:
+            title = AppStrings.text(.finderDocumentTypesGroupedTitle)
+            detail = AppStrings.text(.finderDocumentTypesGroupedDetail)
+            isOn = settings.finderDocumentPresetsGrouped
+        case .quickActions:
+            title = AppStrings.text(.finderQuickOpenGroupedTitle)
+            detail = AppStrings.text(.finderQuickOpenGroupedDetail)
+            isOn = settings.finderLaunchShortcutsGrouped
+        case .quickCommands:
+            title = AppStrings.text(.finderQuickCommandsGroupedTitle)
+            detail = AppStrings.text(.finderQuickCommandsGroupedDetail)
+            isOn = settings.finderQuickCommandsGrouped
+        }
+        groupingTitleLabel?.stringValue = title
+        groupingDetailLabel?.stringValue = detail
+        groupingSwitch.state = isOn ? .on : .off
+        groupingRow?.isHidden = false
     }
 
     @objc private func toggleCopyPathCommand(_ sender: NSSwitch) {

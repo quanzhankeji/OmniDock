@@ -403,6 +403,68 @@ final class FinderMenuTests: XCTestCase {
         )
     }
 
+    func testFileTypesCollapseIntoASubmenuOnlyWhenGrouped() {
+        let context = FinderMenuContext(
+            location: .folderBackground,
+            currentDirectory: URL(fileURLWithPath: "/tmp/OmniDock"),
+            selectedURLs: []
+        )
+        let presets = FinderDocumentPreset.defaultPresets.filter(\.isEnabled)
+
+        for grouped in [true, false] {
+            var preferences = FinderMenuPreferences(isEnabled: true)
+            preferences.groupsDocumentPresets = grouped
+            preferences.showsCopyPathCommand = false
+            preferences.showsShowHiddenFilesCommand = false
+            preferences.showsHideHiddenFilesCommand = false
+
+            let entries = FinderMenuCatalog.entries(
+                for: context,
+                preferences: preferences,
+                resolveApplication: { _ in nil },
+                acceptsDirectories: { _ in true }
+            )
+            let expected: [FinderMenuEntry] = grouped
+                ? [.documentSubmenu(presets.map(FinderMenuAction.createDocument))]
+                : presets.map { .action(.createDocument($0)) }
+            XCTAssertEqual(entries, expected, "grouped: \(grouped)")
+        }
+    }
+
+    func testHiddenFileCommandsCollapseIntoASubmenuOnlyWhenGrouped() {
+        let context = FinderMenuContext(
+            location: .folderBackground,
+            currentDirectory: URL(fileURLWithPath: "/tmp/OmniDock"),
+            selectedURLs: []
+        )
+
+        for grouped in [true, false] {
+            var preferences = FinderMenuPreferences(isEnabled: true)
+            preferences.groupsQuickCommands = grouped
+            preferences.documentPresets = []
+            preferences.showsCopyPathCommand = false
+
+            let entries = FinderMenuCatalog.entries(
+                for: context,
+                preferences: preferences,
+                resolveApplication: { _ in nil },
+                acceptsDirectories: { _ in true }
+            )
+            let expected: [FinderMenuEntry] = grouped
+                ? [.commandSubmenu([.showHiddenFiles, .hideHiddenFiles])]
+                : [.action(.showHiddenFiles), .action(.hideHiddenFiles)]
+            XCTAssertEqual(entries, expected, "grouped: \(grouped)")
+        }
+    }
+
+    func testGroupingDefaultsMatchTheMenuPeopleAlreadyHave() {
+        // New switches must not silently rearrange an existing install's menu.
+        let preferences = FinderMenuPreferences()
+        XCTAssertTrue(preferences.groupsDocumentPresets)
+        XCTAssertFalse(preferences.groupsQuickCommands)
+        XCTAssertTrue(preferences.groupsLaunchShortcuts)
+    }
+
     func testContainerMenuOffersNewFileAndCurrentPath() {
         let context = FinderMenuContext(
             location: .folderBackground,

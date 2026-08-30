@@ -549,6 +549,8 @@ struct FinderMenuPreferences: Codable, Equatable {
     var isEnabled: Bool
     var languageIdentifier: String
     var groupsLaunchShortcuts: Bool
+    var groupsDocumentPresets: Bool
+    var groupsQuickCommands: Bool
     var launchShortcuts: [FinderLaunchShortcut]
     var documentPresets: [FinderDocumentPreset]
     var showsCopyPathCommand: Bool
@@ -560,6 +562,8 @@ struct FinderMenuPreferences: Codable, Equatable {
         isEnabled: Bool = false,
         languageIdentifier: String = "system",
         groupsLaunchShortcuts: Bool = true,
+        groupsDocumentPresets: Bool = true,
+        groupsQuickCommands: Bool = false,
         launchShortcuts: [FinderLaunchShortcut] = FinderLaunchShortcut.defaultShortcuts,
         documentPresets: [FinderDocumentPreset] = FinderDocumentPreset.defaultPresets,
         showsCopyPathCommand: Bool = true,
@@ -570,6 +574,8 @@ struct FinderMenuPreferences: Codable, Equatable {
         self.isEnabled = isEnabled
         self.languageIdentifier = languageIdentifier
         self.groupsLaunchShortcuts = groupsLaunchShortcuts
+        self.groupsDocumentPresets = groupsDocumentPresets
+        self.groupsQuickCommands = groupsQuickCommands
         self.launchShortcuts = FinderLaunchShortcut.catalog(
             merging: launchShortcuts,
             missingBuiltInsUseDefaults: true
@@ -585,6 +591,8 @@ struct FinderMenuPreferences: Codable, Equatable {
         case isEnabled
         case languageIdentifier
         case groupsLaunchShortcuts
+        case groupsDocumentPresets
+        case groupsQuickCommands
         case launchShortcuts
         case documentPresets
         case showsCopyPathCommand
@@ -604,6 +612,15 @@ struct FinderMenuPreferences: Codable, Equatable {
             Bool.self,
             forKey: .groupsLaunchShortcuts
         ) ?? true
+        // Older archives predate both switches; keep what they already did.
+        groupsDocumentPresets = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .groupsDocumentPresets
+        ) ?? true
+        groupsQuickCommands = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .groupsQuickCommands
+        ) ?? false
         if let savedShortcuts = try container.decodeIfPresent(
             [FinderLaunchShortcut].self,
             forKey: .launchShortcuts
@@ -778,6 +795,8 @@ final class FinderMenuPreferencesStore {
         static let isEnabled = "finderExtensionEnabled"
         static let languageIdentifier = "finderExtensionLanguage"
         static let groupsLaunchShortcuts = "finderExtensionGroupsLaunchShortcuts"
+        static let groupsDocumentPresets = "finderExtensionGroupsDocumentPresets"
+        static let groupsQuickCommands = "finderExtensionGroupsQuickCommands"
         static let launchShortcuts = "finderExtensionLaunchShortcuts"
         static let documentPresets = "finderExtensionDocumentPresets"
         static let showsCopyPathCommand = "finderExtensionCopyPathCommand"
@@ -823,6 +842,12 @@ final class FinderMenuPreferencesStore {
                 groupsLaunchShortcuts: defaults.object(
                     forKey: Key.groupsLaunchShortcuts
                 ) as? Bool ?? true,
+                groupsDocumentPresets: defaults.object(
+                    forKey: Key.groupsDocumentPresets
+                ) as? Bool ?? true,
+                groupsQuickCommands: defaults.object(
+                    forKey: Key.groupsQuickCommands
+                ) as? Bool ?? false,
                 launchShortcuts: decoded(
                     [FinderLaunchShortcut].self,
                     from: defaults.data(forKey: Key.launchShortcuts)
@@ -866,6 +891,8 @@ final class FinderMenuPreferencesStore {
             defaults.set(preferences.isEnabled, forKey: Key.isEnabled)
             defaults.set(preferences.languageIdentifier, forKey: Key.languageIdentifier)
             defaults.set(preferences.groupsLaunchShortcuts, forKey: Key.groupsLaunchShortcuts)
+            defaults.set(preferences.groupsDocumentPresets, forKey: Key.groupsDocumentPresets)
+            defaults.set(preferences.groupsQuickCommands, forKey: Key.groupsQuickCommands)
             defaults.set(encoded(preferences.launchShortcuts), forKey: Key.launchShortcuts)
             defaults.set(encoded(preferences.documentPresets), forKey: Key.documentPresets)
             defaults.set(preferences.showsCopyPathCommand, forKey: Key.showsCopyPathCommand)

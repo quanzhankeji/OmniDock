@@ -120,6 +120,10 @@ enum AppStringKey: String, CaseIterable {
     case finderQuickOpenTitle
     case finderQuickOpenDetail
     case finderQuickOpenGroupedTitle
+    case finderDocumentTypesGroupedTitle
+    case finderDocumentTypesGroupedDetail
+    case finderQuickCommandsGroupedTitle
+    case finderQuickCommandsGroupedDetail
     case finderQuickOpenGroupedDetail
     case finderQuickOpenAdd
     case finderQuickOpenEmpty

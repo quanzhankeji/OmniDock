@@ -98,6 +98,8 @@ public final class SettingsStore {
         case windowCycleEnabled = "independentWindowSwitcherEnabled"
         case finderExtensionEnabled = "finderExtensionEnabled"
         case finderLaunchShortcutsGrouped = "finderLaunchShortcutsGrouped"
+        case finderDocumentPresetsGrouped = "finderDocumentPresetsGrouped"
+        case finderQuickCommandsGrouped = "finderQuickCommandsGrouped"
         case finderLaunchShortcuts = "finderLaunchShortcuts"
         case finderDocumentPresets = "finderDocumentPresets"
         case finderExtensionCopyPathCommand = "finderExtensionCopyPathCommand"
@@ -196,6 +198,8 @@ public final class SettingsStore {
             Key.windowCycleEnabled.rawValue: false,
             Key.finderExtensionEnabled.rawValue: false,
             Key.finderLaunchShortcutsGrouped.rawValue: true,
+            Key.finderDocumentPresetsGrouped.rawValue: true,
+            Key.finderQuickCommandsGrouped.rawValue: false,
             Key.finderExtensionCopyPathCommand.rawValue: true,
             Key.finderExtensionShowHiddenFilesCommand.rawValue: true,
             Key.finderExtensionHideHiddenFilesCommand.rawValue: true,
@@ -253,6 +257,28 @@ public final class SettingsStore {
         }
         set {
             defaults.set(newValue, forKey: Key.finderLaunchShortcutsGrouped.rawValue)
+            syncFinderExtensionSettings()
+            postChange(.finderExtension)
+        }
+    }
+
+    public var finderDocumentPresetsGrouped: Bool {
+        get {
+            defaults.object(forKey: Key.finderDocumentPresetsGrouped.rawValue) as? Bool ?? true
+        }
+        set {
+            defaults.set(newValue, forKey: Key.finderDocumentPresetsGrouped.rawValue)
+            syncFinderExtensionSettings()
+            postChange(.finderExtension)
+        }
+    }
+
+    public var finderQuickCommandsGrouped: Bool {
+        get {
+            defaults.object(forKey: Key.finderQuickCommandsGrouped.rawValue) as? Bool ?? false
+        }
+        set {
+            defaults.set(newValue, forKey: Key.finderQuickCommandsGrouped.rawValue)
             syncFinderExtensionSettings()
             postChange(.finderExtension)
         }
@@ -747,7 +773,8 @@ public final class SettingsStore {
             return .windowCycle
         case .finderExtensionEnabled:
             return .finderExtension
-        case .finderLaunchShortcutsGrouped, .finderLaunchShortcuts, .finderDocumentPresets,
+        case .finderLaunchShortcutsGrouped, .finderDocumentPresetsGrouped,
+             .finderQuickCommandsGrouped, .finderLaunchShortcuts, .finderDocumentPresets,
              .finderExtensionCopyPathCommand, .finderExtensionShowHiddenFilesCommand,
              .finderExtensionHideHiddenFilesCommand:
             return .finderExtension
@@ -791,6 +818,8 @@ public final class SettingsStore {
             isEnabled: finderExtensionEnabled,
             languageIdentifier: appLanguage.rawValue,
             groupsLaunchShortcuts: finderLaunchShortcutsGrouped,
+            groupsDocumentPresets: finderDocumentPresetsGrouped,
+            groupsQuickCommands: finderQuickCommandsGrouped,
             launchShortcuts: finderLaunchShortcuts,
             documentPresets: finderDocumentPresets,
             showsCopyPathCommand: finderCopyPathCommand,
