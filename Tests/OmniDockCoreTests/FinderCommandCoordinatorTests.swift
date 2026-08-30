@@ -413,6 +413,30 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         XCTAssertFalse(FinderItemPasteboard.read(from: pasteboard).isCut)
     }
 
+    func testWritingNoItemsLeavesThePasteboardUntouched() {
+        let pasteboard = makePasteboard()
+        // An empty write must not produce a pasteboard that claims a cut but
+        // carries nothing to paste.
+        XCTAssertFalse(FinderItemPasteboard.write([], isCut: true, to: pasteboard))
+        XCTAssertFalse(FinderItemPasteboard.read(from: pasteboard).isCut)
+        XCTAssertTrue(FinderItemPasteboard.read(from: pasteboard).urls.isEmpty)
+    }
+
+    func testWrittenItemsAreReadableAsFileURLs() {
+        let pasteboard = makePasteboard()
+        let urls = [
+            URL(fileURLWithPath: "/tmp/OmniDock/first file.txt"),
+            URL(fileURLWithPath: "/tmp/OmniDock/second.txt")
+        ]
+
+        XCTAssertTrue(FinderItemPasteboard.write(urls, isCut: false, to: pasteboard))
+
+        // Round-tripping through the pasteboard must preserve every item,
+        // including names that need escaping.
+        XCTAssertEqual(FinderItemPasteboard.read(from: pasteboard).urls, urls)
+        XCTAssertTrue(FinderItemPasteboard.hasFiles(pasteboard))
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("OmniDockFinderCommandTests-\(UUID().uuidString)", isDirectory: true)

@@ -50,16 +50,29 @@ enum FinderItemPasteboard {
         isCut: Bool,
         to pasteboard: NSPasteboard = .general
     ) -> Bool {
-        pasteboard.clearContents()
-        // File URLs rather than their paths: that is what makes Finder and
-        // other applications treat this as files instead of pasted text.
-        guard pasteboard.writeObjects(urls as [NSPasteboardWriting]) else {
+        // writeObjects reports success for an empty list, which would leave a
+        // pasteboard carrying a cut marker and no files - a paste that can only
+        // do nothing.
+        guard !urls.isEmpty else {
             return false
         }
-        if isCut {
-            return pasteboard.setData(Data(), forType: cutType)
+
+        // The items are built by hand rather than by handing NSURL to the
+        // pasteboard. Writing an NSURL asks it to describe the file, which the
+        // sandboxed extension cannot always do for the item that was
+        // right-clicked; a public.file-url string needs no such access and is
+        // what Finder and other applications read to treat this as files
+        // rather than pasted text.
+        let items = urls.map { url -> NSPasteboardItem in
+            let item = NSPasteboardItem()
+            item.setString(url.absoluteString, forType: .fileURL)
+            return item
         }
-        return true
+        if isCut {
+            items[0].setData(Data(), forType: cutType)
+        }
+        pasteboard.clearContents()
+        return pasteboard.writeObjects(items)
     }
 
     static func read(
