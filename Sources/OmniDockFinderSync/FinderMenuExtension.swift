@@ -157,9 +157,9 @@ final class FinderMenuExtension: FIFinderSync {
         case .copySelectedPaths:
             copy(FinderPathList.text(for: binding.context.selectedURLs))
         case .copySelectedItems:
-            writeItems(binding.context.selectedURLs, isCut: false)
+            forwardItems(binding.context.selectedURLs, isCut: false)
         case .cutSelectedItems:
-            writeItems(binding.context.selectedURLs, isCut: true)
+            forwardItems(binding.context.selectedURLs, isCut: true)
         case .pasteItems:
             guard let directory = binding.context.currentDirectory else {
                 return
@@ -328,20 +328,11 @@ final class FinderMenuExtension: FIFinderSync {
         Self.logger.info("Configured \(roots.count) Finder observation roots")
     }
 
-    private func writeItems(_ urls: [URL], isCut: Bool) {
+    private func forwardItems(_ urls: [URL], isCut: Bool) {
         guard !urls.isEmpty else {
-            Self.logger.error("Copy or cut ran with nothing selected")
             return
         }
-        // A silent no-op here is indistinguishable from a broken menu, and the
-        // pasteboard is the one place this can fail without anything to show
-        // the user, so a failure is worth an entry that survives in the log.
-        guard FinderItemPasteboard.write(urls, isCut: isCut) else {
-            Self.logger.error(
-                "Failed to put \(urls.count, privacy: .public) item(s) on the pasteboard"
-            )
-            return
-        }
+        forward(.copyItems(displayPaths: urls.map(\.path), isCut: isCut))
     }
 
     private func copy(_ string: String) {

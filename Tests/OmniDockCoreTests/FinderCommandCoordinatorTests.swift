@@ -437,6 +437,90 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         XCTAssertTrue(FinderItemPasteboard.hasFiles(pasteboard))
     }
 
+    func testCopyCommandPutsTheSelectionOnThePasteboard() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let first = root.appendingPathComponent("First.txt")
+        let second = root.appendingPathComponent("Second.txt")
+        for url in [first, second] {
+            try Data("payload".utf8).write(to: url)
+        }
+
+        let pasteboard = makePasteboard()
+        let preferences = makePreferencesStore(FinderMenuPreferences(isEnabled: true))
+        let mailbox = FinderCommandMailbox(directoryProvider: { root })
+        let request = FinderCommandEnvelope(command: .copyItems(
+            displayPaths: [first.path, second.path],
+            isCut: false
+        ))
+        try mailbox.enqueue(request)
+
+        FinderFileCommandCoordinator(
+            requestMailbox: mailbox,
+            preferencesStore: preferences,
+            directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            itemPasteboard: pasteboard,
+            requestDirectoryAccess: { _ in nil }
+        ).handle(requestID: request.id)
+
+        let written = FinderItemPasteboard.read(from: pasteboard)
+        XCTAssertEqual(written.urls, [first, second])
+        XCTAssertFalse(written.isCut)
+    }
+
+    func testCutCommandMarksThePasteboardAsAMove() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("Report.txt")
+        try Data("payload".utf8).write(to: file)
+
+        let pasteboard = makePasteboard()
+        let preferences = makePreferencesStore(FinderMenuPreferences(isEnabled: true))
+        let mailbox = FinderCommandMailbox(directoryProvider: { root })
+        let request = FinderCommandEnvelope(command: .copyItems(
+            displayPaths: [file.path],
+            isCut: true
+        ))
+        try mailbox.enqueue(request)
+
+        FinderFileCommandCoordinator(
+            requestMailbox: mailbox,
+            preferencesStore: preferences,
+            directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            itemPasteboard: pasteboard,
+            requestDirectoryAccess: { _ in nil }
+        ).handle(requestID: request.id)
+
+        XCTAssertTrue(FinderItemPasteboard.read(from: pasteboard).isCut)
+    }
+
+    func testCopyCommandIsIgnoredWhenTheCommandIsSwitchedOff() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("Report.txt")
+        try Data("payload".utf8).write(to: file)
+
+        let pasteboard = makePasteboard()
+        var preferences = FinderMenuPreferences(isEnabled: true)
+        preferences.showsCopyItemsCommand = false
+        let mailbox = FinderCommandMailbox(directoryProvider: { root })
+        let request = FinderCommandEnvelope(command: .copyItems(
+            displayPaths: [file.path],
+            isCut: false
+        ))
+        try mailbox.enqueue(request)
+
+        FinderFileCommandCoordinator(
+            requestMailbox: mailbox,
+            preferencesStore: makePreferencesStore(preferences),
+            directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            itemPasteboard: pasteboard,
+            requestDirectoryAccess: { _ in nil }
+        ).handle(requestID: request.id)
+
+        XCTAssertTrue(FinderItemPasteboard.read(from: pasteboard).urls.isEmpty)
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("OmniDockFinderCommandTests-\(UUID().uuidString)", isDirectory: true)

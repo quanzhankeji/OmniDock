@@ -138,6 +138,16 @@ final class FinderFileCommandCoordinator: NSObject {
                     isDirectory: true
                 ).standardizedFileURL
             )
+        case let .copyItems(displayPaths, isCut):
+            guard isCut ? preferences.showsCutItemsCommand
+                        : preferences.showsCopyItemsCommand
+            else {
+                return
+            }
+            let urls = displayPaths.map {
+                URL(fileURLWithPath: $0).standardizedFileURL
+            }
+            FinderItemPasteboard.write(urls, isCut: isCut, to: itemPasteboard)
         case let .setHiddenFilesVisible(isVisible):
             guard FinderCommandAuthorizationPolicy.allowsHiddenFilesCommand(
                 isVisible: isVisible,

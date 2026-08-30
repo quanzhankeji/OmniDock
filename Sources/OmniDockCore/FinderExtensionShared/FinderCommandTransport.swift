@@ -99,6 +99,10 @@ enum FinderCommand: Codable, Equatable {
         directoryDisplayPath: String
     )
     case setHiddenFilesVisible(Bool)
+    // The selection is copied by the containing app rather than the extension:
+    // a sandboxed extension cannot put a file URL on the pasteboard for an item
+    // it has no access to, and the write is dropped without an error.
+    case copyItems(displayPaths: [String], isCut: Bool)
     // Only the destination travels. What to paste is read from the pasteboard
     // when the command runs, so the request cannot name files of its own.
     case pasteItems(directoryDisplayPath: String)
