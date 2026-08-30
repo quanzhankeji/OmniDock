@@ -296,17 +296,14 @@ final class FinderFileCommandCoordinator: NSObject {
     // The sources come from the pasteboard at the moment the command runs, the
     // same thing Finder pastes, so nothing about them travels in the request.
     private func pasteItems(into directory: URL) {
-        let sources = (NSPasteboard.general.readObjects(
-            forClasses: [NSURL.self],
-            options: [.urlReadingFileURLsOnly: true]
-        ) as? [URL]) ?? []
+        let (sources, isCut) = FinderItemPasteboard.read()
         guard !sources.isEmpty else {
             return
         }
 
         do {
-            let pasted = try paste(sources, into: directory)
-            revealFiles(pasted)
+            let pasted = try paste(sources, into: directory, isCut: isCut)
+            finishPaste(pasted, isCut: isCut)
         } catch {
             guard Self.isPermissionFailure(error) else {
                 presentCreateFailure(
@@ -318,9 +315,9 @@ final class FinderFileCommandCoordinator: NSObject {
             do {
                 if let pasted = try directoryGrantStore.performWithSavedAccess(
                     to: directory,
-                    operation: { try paste(sources, into: $0) }
+                    operation: { try paste(sources, into: $0, isCut: isCut) }
                 ) {
-                    revealFiles(pasted)
+                    finishPaste(pasted, isCut: isCut)
                     return
                 }
             } catch {
@@ -338,11 +335,11 @@ final class FinderFileCommandCoordinator: NSObject {
             do {
                 guard let pasted = try directoryGrantStore.performWithSavedAccess(
                     to: directory,
-                    operation: { try paste(sources, into: $0) }
+                    operation: { try paste(sources, into: $0, isCut: isCut) }
                 ) else {
                     throw CocoaError(.fileWriteNoPermission)
                 }
-                revealFiles(pasted)
+                finishPaste(pasted, isCut: isCut)
             } catch {
                 presentCreateFailure(
                     directoryDisplayPath: directory.path,
@@ -352,20 +349,46 @@ final class FinderFileCommandCoordinator: NSObject {
         }
     }
 
-    private func paste(_ sources: [URL], into directory: URL) throws -> [URL] {
+    private func paste(
+        _ sources: [URL],
+        into directory: URL,
+        isCut: Bool
+    ) throws -> [URL] {
         var pasted: [URL] = []
         for source in sources {
-            // Pasting into the folder an item already lives in would otherwise
-            // fail; Finder makes a copy beside it, and so do we.
+            // Moving an item into the folder it already sits in is a no-op, not
+            // a rename to "Report 2.txt".
+            if isCut,
+               source.deletingLastPathComponent().standardizedFileURL == directory {
+                continue
+            }
+            // Pasting a copy into that same folder does need a free name, the
+            // way Finder puts a copy beside the original.
             let destination = Self.availableDestination(
                 for: source,
                 in: directory,
                 fileManager: fileManager
             )
-            try fileManager.copyItem(at: source, to: destination)
+            if isCut {
+                try fileManager.moveItem(at: source, to: destination)
+            } else {
+                try fileManager.copyItem(at: source, to: destination)
+            }
             pasted.append(destination)
         }
         return pasted
+    }
+
+    private func finishPaste(_ pasted: [URL], isCut: Bool) {
+        if isCut {
+            // The sources are gone, so leaving them on the pasteboard would
+            // offer a second paste that could only fail.
+            NSPasteboard.general.clearContents()
+        }
+        guard !pasted.isEmpty else {
+            return
+        }
+        revealFiles(pasted)
     }
 
     // "Report.txt" becomes "Report 2.txt" rather than overwriting anything.

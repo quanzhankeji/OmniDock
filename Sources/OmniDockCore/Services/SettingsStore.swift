@@ -104,6 +104,7 @@ public final class SettingsStore {
         case finderDocumentPresets = "finderDocumentPresets"
         case finderExtensionCopyPathCommand = "finderExtensionCopyPathCommand"
         case finderExtensionCopyItemsCommand = "finderExtensionCopyItemsCommand"
+        case finderExtensionCutItemsCommand = "finderExtensionCutItemsCommand"
         case finderExtensionPasteItemsCommand = "finderExtensionPasteItemsCommand"
         case finderExtensionShowHiddenFilesCommand = "finderExtensionShowHiddenFilesCommand"
         case finderExtensionHideHiddenFilesCommand = "finderExtensionHideHiddenFilesCommand"
@@ -204,6 +205,7 @@ public final class SettingsStore {
             Key.finderQuickCommandsGrouped.rawValue: false,
             Key.finderExtensionCopyPathCommand.rawValue: true,
             Key.finderExtensionCopyItemsCommand.rawValue: true,
+            Key.finderExtensionCutItemsCommand.rawValue: true,
             Key.finderExtensionPasteItemsCommand.rawValue: true,
             Key.finderExtensionShowHiddenFilesCommand.rawValue: true,
             Key.finderExtensionHideHiddenFilesCommand.rawValue: true,
@@ -305,6 +307,17 @@ public final class SettingsStore {
         }
         set {
             defaults.set(newValue, forKey: Key.finderExtensionCopyItemsCommand.rawValue)
+            syncFinderExtensionSettings()
+            postChange(.finderExtension)
+        }
+    }
+
+    public var finderCutItemsCommand: Bool {
+        get {
+            defaults.object(forKey: Key.finderExtensionCutItemsCommand.rawValue) as? Bool ?? true
+        }
+        set {
+            defaults.set(newValue, forKey: Key.finderExtensionCutItemsCommand.rawValue)
             syncFinderExtensionSettings()
             postChange(.finderExtension)
         }
@@ -801,7 +814,7 @@ public final class SettingsStore {
             return .finderExtension
         case .finderLaunchShortcutsGrouped, .finderDocumentPresetsGrouped,
              .finderQuickCommandsGrouped, .finderLaunchShortcuts, .finderDocumentPresets,
-             .finderExtensionCopyPathCommand, .finderExtensionCopyItemsCommand,
+             .finderExtensionCopyPathCommand, .finderExtensionCopyItemsCommand, .finderExtensionCutItemsCommand,
              .finderExtensionPasteItemsCommand, .finderExtensionShowHiddenFilesCommand,
              .finderExtensionHideHiddenFilesCommand:
             return .finderExtension
@@ -851,6 +864,7 @@ public final class SettingsStore {
             documentPresets: finderDocumentPresets,
             showsCopyPathCommand: finderCopyPathCommand,
             showsCopyItemsCommand: finderCopyItemsCommand,
+            showsCutItemsCommand: finderCutItemsCommand,
             showsPasteItemsCommand: finderPasteItemsCommand,
             showsShowHiddenFilesCommand: finderShowHiddenFilesCommand,
             showsHideHiddenFilesCommand: finderHideHiddenFilesCommand,

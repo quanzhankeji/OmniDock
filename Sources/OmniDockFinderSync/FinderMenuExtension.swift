@@ -150,7 +150,9 @@ final class FinderMenuExtension: FIFinderSync {
         case .copySelectedPaths:
             copy(FinderPathList.text(for: binding.context.selectedURLs))
         case .copySelectedItems:
-            copyItems(binding.context.selectedURLs)
+            writeItems(binding.context.selectedURLs, isCut: false)
+        case .cutSelectedItems:
+            writeItems(binding.context.selectedURLs, isCut: true)
         case .pasteItems:
             guard let directory = binding.context.currentDirectory else {
                 return
@@ -194,6 +196,8 @@ final class FinderMenuExtension: FIFinderSync {
             return Self.symbol("doc.on.doc")
         case .copySelectedItems:
             return Self.symbol("square.on.square")
+        case .cutSelectedItems:
+            return Self.symbol("scissors")
         case .pasteItems:
             return Self.symbol("doc.on.clipboard")
         case .showHiddenFiles:
@@ -235,10 +239,7 @@ final class FinderMenuExtension: FIFinderSync {
     }
 
     private static func pasteboardHasFiles() -> Bool {
-        NSPasteboard.general.canReadObject(
-            forClasses: [NSURL.self],
-            options: [.urlReadingFileURLsOnly: true]
-        )
+        FinderItemPasteboard.hasFiles()
     }
 
     private func context(for menuKind: FIMenuKind) -> FinderMenuContext? {
@@ -289,15 +290,11 @@ final class FinderMenuExtension: FIFinderSync {
         Self.logger.info("Configured \(roots.count) Finder observation roots")
     }
 
-    // Writing the URLs themselves, not their paths, is what lets Finder and
-    // other applications treat this as a file copy rather than pasted text.
-    private func copyItems(_ urls: [URL]) {
+    private func writeItems(_ urls: [URL], isCut: Bool) {
         guard !urls.isEmpty else {
             return
         }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.writeObjects(urls as [NSPasteboardWriting])
+        FinderItemPasteboard.write(urls, isCut: isCut)
     }
 
     private func copy(_ string: String) {

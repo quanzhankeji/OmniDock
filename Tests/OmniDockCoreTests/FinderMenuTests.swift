@@ -326,6 +326,7 @@ final class FinderMenuTests: XCTestCase {
             documentPresets: [],
             showsCopyPathCommand: false,
             showsCopyItemsCommand: false,
+            showsCutItemsCommand: false,
             showsShowHiddenFilesCommand: false,
             showsHideHiddenFilesCommand: false
         )
@@ -507,7 +508,7 @@ final class FinderMenuTests: XCTestCase {
             acceptsDirectories: { _ in true }
         )
 
-        XCTAssertEqual(entries, [.action(.copySelectedItems)])
+        XCTAssertEqual(entries, [.action(.copySelectedItems), .action(.cutSelectedItems)])
     }
 
     func testContainerMenuOffersNewFileAndCurrentPath() {
@@ -621,6 +622,7 @@ final class FinderMenuTests: XCTestCase {
             [
                 .action(.copySelectedPaths),
                 .action(.copySelectedItems),
+                .action(.cutSelectedItems),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]
@@ -656,6 +658,7 @@ final class FinderMenuTests: XCTestCase {
                 .action(.copySelectedPaths),
                 .applicationSubmenu([.openDirectory(app)]),
                 .action(.copySelectedItems),
+                .action(.cutSelectedItems),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]
@@ -673,6 +676,7 @@ final class FinderMenuTests: XCTestCase {
                 .action(.copySelectedPaths),
                 .action(.openDirectory(app)),
                 .action(.copySelectedItems),
+                .action(.cutSelectedItems),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]
@@ -1289,6 +1293,7 @@ final class FinderMenuTests: XCTestCase {
             [
                 .action(.copySelectedPaths),
                 .action(.copySelectedItems),
+                .action(.cutSelectedItems),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]

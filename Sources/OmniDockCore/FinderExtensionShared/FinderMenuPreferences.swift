@@ -555,6 +555,7 @@ struct FinderMenuPreferences: Codable, Equatable {
     var documentPresets: [FinderDocumentPreset]
     var showsCopyPathCommand: Bool
     var showsCopyItemsCommand: Bool
+    var showsCutItemsCommand: Bool
     var showsPasteItemsCommand: Bool
     var showsShowHiddenFilesCommand: Bool
     var showsHideHiddenFilesCommand: Bool
@@ -570,6 +571,7 @@ struct FinderMenuPreferences: Codable, Equatable {
         documentPresets: [FinderDocumentPreset] = FinderDocumentPreset.defaultPresets,
         showsCopyPathCommand: Bool = true,
         showsCopyItemsCommand: Bool = true,
+        showsCutItemsCommand: Bool = true,
         showsPasteItemsCommand: Bool = true,
         showsShowHiddenFilesCommand: Bool = true,
         showsHideHiddenFilesCommand: Bool = true,
@@ -587,6 +589,7 @@ struct FinderMenuPreferences: Codable, Equatable {
         self.documentPresets = documentPresets
         self.showsCopyPathCommand = showsCopyPathCommand
         self.showsCopyItemsCommand = showsCopyItemsCommand
+        self.showsCutItemsCommand = showsCutItemsCommand
         self.showsPasteItemsCommand = showsPasteItemsCommand
         self.showsShowHiddenFilesCommand = showsShowHiddenFilesCommand
         self.showsHideHiddenFilesCommand = showsHideHiddenFilesCommand
@@ -603,6 +606,7 @@ struct FinderMenuPreferences: Codable, Equatable {
         case documentPresets
         case showsCopyPathCommand
         case showsCopyItemsCommand
+        case showsCutItemsCommand
         case showsPasteItemsCommand
         case showsShowHiddenFilesCommand
         case showsHideHiddenFilesCommand
@@ -658,6 +662,10 @@ struct FinderMenuPreferences: Codable, Equatable {
         showsCopyItemsCommand = try container.decodeIfPresent(
             Bool.self,
             forKey: .showsCopyItemsCommand
+        ) ?? true
+        showsCutItemsCommand = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .showsCutItemsCommand
         ) ?? true
         showsPasteItemsCommand = try container.decodeIfPresent(
             Bool.self,
@@ -817,6 +825,7 @@ final class FinderMenuPreferencesStore {
         static let documentPresets = "finderExtensionDocumentPresets"
         static let showsCopyPathCommand = "finderExtensionCopyPathCommand"
         static let showsCopyItemsCommand = "finderExtensionCopyItemsCommand"
+        static let showsCutItemsCommand = "finderExtensionCutItemsCommand"
         static let showsPasteItemsCommand = "finderExtensionPasteItemsCommand"
         static let showsShowHiddenFilesCommand = "finderExtensionShowHiddenFilesCommand"
         static let showsHideHiddenFilesCommand = "finderExtensionHideHiddenFilesCommand"
@@ -880,6 +889,9 @@ final class FinderMenuPreferencesStore {
                 showsCopyItemsCommand: defaults.object(
                     forKey: Key.showsCopyItemsCommand
                 ) as? Bool ?? true,
+                showsCutItemsCommand: defaults.object(
+                    forKey: Key.showsCutItemsCommand
+                ) as? Bool ?? true,
                 showsPasteItemsCommand: defaults.object(
                     forKey: Key.showsPasteItemsCommand
                 ) as? Bool ?? true,
@@ -921,6 +933,7 @@ final class FinderMenuPreferencesStore {
             defaults.set(encoded(preferences.documentPresets), forKey: Key.documentPresets)
             defaults.set(preferences.showsCopyPathCommand, forKey: Key.showsCopyPathCommand)
             defaults.set(preferences.showsCopyItemsCommand, forKey: Key.showsCopyItemsCommand)
+            defaults.set(preferences.showsCutItemsCommand, forKey: Key.showsCutItemsCommand)
             defaults.set(preferences.showsPasteItemsCommand, forKey: Key.showsPasteItemsCommand)
             defaults.set(
                 preferences.showsShowHiddenFilesCommand,

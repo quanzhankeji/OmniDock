@@ -1,5 +1,6 @@
-import Foundation
+import AppKit
 import Darwin
+import Foundation
 
 enum BlankDocumentFactory {
     static func create(
@@ -32,6 +33,46 @@ enum BlankDocumentFactory {
         }
 
         throw CocoaError(.fileWriteUnknown)
+    }
+}
+
+// macOS has no system-wide notion of a cut, so the intent rides along with the
+// URLs in a private type. Anything else that writes to the pasteboard clears
+// it, which is exactly when a pending cut should stop applying.
+enum FinderItemPasteboard {
+    static let cutType = NSPasteboard.PasteboardType(
+        "com.quanzhankeji.OmniDock.finder-cut"
+    )
+
+    static func write(
+        _ urls: [URL],
+        isCut: Bool,
+        to pasteboard: NSPasteboard = .general
+    ) {
+        pasteboard.clearContents()
+        // File URLs rather than their paths: that is what makes Finder and
+        // other applications treat this as files instead of pasted text.
+        pasteboard.writeObjects(urls as [NSPasteboardWriting])
+        if isCut {
+            pasteboard.setData(Data(), forType: cutType)
+        }
+    }
+
+    static func read(
+        from pasteboard: NSPasteboard = .general
+    ) -> (urls: [URL], isCut: Bool) {
+        let urls = (pasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) as? [URL]) ?? []
+        return (urls, pasteboard.data(forType: cutType) != nil)
+    }
+
+    static func hasFiles(_ pasteboard: NSPasteboard = .general) -> Bool {
+        pasteboard.canReadObject(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        )
     }
 }
 

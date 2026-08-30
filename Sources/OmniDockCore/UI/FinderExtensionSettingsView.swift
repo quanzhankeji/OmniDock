@@ -63,6 +63,7 @@ final class FinderExtensionSettingsView: NSView {
     private var groupingDetailLabel: NSTextField?
     private let copyPathCommandSwitch = FinderSettingsSwitch()
     private let copyItemsCommandSwitch = FinderSettingsSwitch()
+    private let cutItemsCommandSwitch = FinderSettingsSwitch()
     private let pasteItemsCommandSwitch = FinderSettingsSwitch()
     private let showHiddenFilesCommandSwitch = FinderSettingsSwitch()
     private let hideHiddenFilesCommandSwitch = FinderSettingsSwitch()
@@ -106,6 +107,7 @@ final class FinderExtensionSettingsView: NSView {
         masterSwitch.state = settings.finderExtensionEnabled ? .on : .off
         copyPathCommandSwitch.state = settings.finderCopyPathCommand ? .on : .off
         copyItemsCommandSwitch.state = settings.finderCopyItemsCommand ? .on : .off
+        cutItemsCommandSwitch.state = settings.finderCutItemsCommand ? .on : .off
         pasteItemsCommandSwitch.state = settings.finderPasteItemsCommand ? .on : .off
         showHiddenFilesCommandSwitch.state = settings.finderShowHiddenFilesCommand ? .on : .off
         hideHiddenFilesCommandSwitch.state = settings.finderHideHiddenFilesCommand ? .on : .off
@@ -146,6 +148,8 @@ final class FinderExtensionSettingsView: NSView {
         copyPathCommandSwitch.action = #selector(toggleCopyPathCommand(_:))
         copyItemsCommandSwitch.target = self
         copyItemsCommandSwitch.action = #selector(toggleCopyItemsCommand(_:))
+        cutItemsCommandSwitch.target = self
+        cutItemsCommandSwitch.action = #selector(toggleCutItemsCommand(_:))
         pasteItemsCommandSwitch.target = self
         pasteItemsCommandSwitch.action = #selector(togglePasteItemsCommand(_:))
         showHiddenFilesCommandSwitch.target = self
@@ -559,6 +563,11 @@ final class FinderExtensionSettingsView: NSView {
             control: copyItemsCommandSwitch
         ))
         itemRows.addArrangedSubview(makeSettingRow(
+            title: AppStrings.text(.finderQuickCommandCutItemsTitle),
+            detail: AppStrings.text(.finderQuickCommandCutItemsDetail),
+            control: cutItemsCommandSwitch
+        ))
+        itemRows.addArrangedSubview(makeSettingRow(
             title: AppStrings.text(.finderQuickCommandPasteItemsTitle),
             detail: AppStrings.text(.finderQuickCommandPasteItemsDetail),
             control: pasteItemsCommandSwitch
@@ -847,6 +856,10 @@ final class FinderExtensionSettingsView: NSView {
 
     @objc private func toggleCopyItemsCommand(_ sender: NSSwitch) {
         settings.finderCopyItemsCommand = sender.state == .on
+    }
+
+    @objc private func toggleCutItemsCommand(_ sender: NSSwitch) {
+        settings.finderCutItemsCommand = sender.state == .on
     }
 
     @objc private func togglePasteItemsCommand(_ sender: NSSwitch) {

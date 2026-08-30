@@ -323,6 +323,91 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: existing), "original")
     }
 
+    func testPasteMovesTheItemsWhenTheyWereCut() throws {
+        let root = try makeTemporaryDirectory()
+        let source = root.appendingPathComponent("Source", isDirectory: true)
+        let destination = root.appendingPathComponent("Destination", isDirectory: true)
+        for url in [source, destination] {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = source.appendingPathComponent("Report.txt")
+        try Data("payload".utf8).write(to: file)
+
+        FinderItemPasteboard.write([file], isCut: true)
+
+        let preferences = makePreferencesStore(FinderMenuPreferences(isEnabled: true))
+        let mailbox = FinderCommandMailbox(directoryProvider: { root })
+        let request = FinderCommandEnvelope(
+            command: .pasteItems(directoryDisplayPath: destination.path)
+        )
+        try mailbox.enqueue(request)
+
+        FinderFileCommandCoordinator(
+            requestMailbox: mailbox,
+            preferencesStore: preferences,
+            directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            revealFiles: { _ in },
+            requestDirectoryAccess: { _ in nil }
+        ).handle(requestID: request.id)
+
+        XCTAssertEqual(
+            try String(contentsOf: destination.appendingPathComponent("Report.txt")),
+            "payload"
+        )
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        // The sources are gone, so a second paste must not be offered.
+        XCTAssertFalse(FinderItemPasteboard.hasFiles())
+    }
+
+    func testCuttingIntoTheSameFolderLeavesTheItemAlone() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("Report.txt")
+        try Data("payload".utf8).write(to: file)
+
+        FinderItemPasteboard.write([file], isCut: true)
+
+        let preferences = makePreferencesStore(FinderMenuPreferences(isEnabled: true))
+        let mailbox = FinderCommandMailbox(directoryProvider: { root })
+        let request = FinderCommandEnvelope(
+            command: .pasteItems(directoryDisplayPath: root.path)
+        )
+        try mailbox.enqueue(request)
+
+        FinderFileCommandCoordinator(
+            requestMailbox: mailbox,
+            preferencesStore: preferences,
+            directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            revealFiles: { _ in },
+            requestDirectoryAccess: { _ in nil }
+        ).handle(requestID: request.id)
+
+        // Not renamed to "Report 2.txt", and not duplicated. (The mailbox keeps
+        // its own directory alongside, so only the pasted names are compared.)
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(atPath: root.path)
+                .filter { $0.hasSuffix(".txt") }
+                .sorted(),
+            ["Report.txt"]
+        )
+    }
+
+    func testPasteboardCarriesTheCutIntentOnlyWhenCut() {
+        let file = URL(fileURLWithPath: "/tmp/OmniDock/Report.txt")
+
+        FinderItemPasteboard.write([file], isCut: false)
+        XCTAssertFalse(FinderItemPasteboard.read().isCut)
+
+        FinderItemPasteboard.write([file], isCut: true)
+        XCTAssertTrue(FinderItemPasteboard.read().isCut)
+
+        // Anyone else writing to the pasteboard retires the intent.
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("plain text", forType: .string)
+        XCTAssertFalse(FinderItemPasteboard.read().isCut)
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("OmniDockFinderCommandTests-\(UUID().uuidString)", isDirectory: true)

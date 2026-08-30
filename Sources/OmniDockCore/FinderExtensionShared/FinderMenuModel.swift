@@ -5,6 +5,7 @@ enum FinderMenuAction: Equatable {
     case copyCurrentDirectoryPath
     case copySelectedPaths
     case copySelectedItems
+    case cutSelectedItems
     case pasteItems
     case showHiddenFiles
     case hideHiddenFiles
@@ -14,7 +15,7 @@ enum FinderMenuAction: Equatable {
         switch self {
         case .createDocument, .copyCurrentDirectoryPath:
             return location == .folderBackground
-        case .copySelectedPaths, .copySelectedItems, .openDirectory:
+        case .copySelectedPaths, .copySelectedItems, .cutSelectedItems, .openDirectory:
             return location == .selection
         case .pasteItems:
             return location == .folderBackground
@@ -212,6 +213,9 @@ enum FinderMenuCatalog {
         if context.location == .selection, preferences.showsCopyItemsCommand {
             actions.append(.copySelectedItems)
         }
+        if context.location == .selection, preferences.showsCutItemsCommand {
+            actions.append(.cutSelectedItems)
+        }
         if context.location == .folderBackground,
            preferences.showsPasteItemsCommand,
            context.pasteboardHasFiles {
@@ -243,6 +247,10 @@ enum FinderMenuLabels {
             return "复制"
         case (.copySelectedItems, false):
             return "Copy"
+        case (.cutSelectedItems, true):
+            return "剪切"
+        case (.cutSelectedItems, false):
+            return "Cut"
         case (.pasteItems, true):
             return "粘贴"
         case (.pasteItems, false):
