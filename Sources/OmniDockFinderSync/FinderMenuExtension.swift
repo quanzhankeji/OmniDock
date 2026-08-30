@@ -1,5 +1,6 @@
 import AppKit
 import FinderSync
+import UniformTypeIdentifiers
 import OSLog
 
 final class FinderMenuExtension: FIFinderSync {
@@ -80,6 +81,7 @@ final class FinderMenuExtension: FIFinderSync {
                     action: nil,
                     keyEquivalent: ""
                 )
+                parent.image = Self.symbol("plus.rectangle.on.folder")
                 let submenu = NSMenu(title: parent.title)
                 for action in actions {
                     submenu.addItem(menuItem(
@@ -98,6 +100,7 @@ final class FinderMenuExtension: FIFinderSync {
                     action: nil,
                     keyEquivalent: ""
                 )
+                parent.image = Self.symbol("square.grid.2x2")
                 let submenu = NSMenu(title: parent.title)
                 for action in actions {
                     submenu.addItem(menuItem(
@@ -150,6 +153,38 @@ final class FinderMenuExtension: FIFinderSync {
         }
     }
 
+    fileprivate static let menuIconSize = CGSize(width: 16, height: 16)
+
+    private static func symbol(_ name: String) -> NSImage? {
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)
+        image?.isTemplate = true
+        image?.size = menuIconSize
+        return image
+    }
+
+    private func icon(for action: FinderMenuAction) -> NSImage? {
+        switch action {
+        case .copyCurrentDirectoryPath, .copySelectedPaths:
+            return Self.symbol("doc.on.doc")
+        case .showHiddenFiles:
+            return Self.symbol("eye")
+        case .hideHiddenFiles:
+            return Self.symbol("eye.slash")
+        case let .createDocument(preset):
+            // The real document icon for the type reads faster than a generic
+            // symbol when a dozen of them are listed together.
+            return menuCache.documentIcon(forFileExtension: preset.fileExtension)
+                ?? Self.symbol("doc")
+        case let .openDirectory(shortcut):
+            // Resolved, not the stored path: an application that moved still
+            // shows its own icon.
+            guard let applicationURL = menuCache.applicationURL(for: shortcut) else {
+                return Self.symbol("app")
+            }
+            return menuCache.applicationIcon(at: applicationURL)
+        }
+    }
+
     private func menuItem(
         for action: FinderMenuAction,
         context: FinderMenuContext,
@@ -165,12 +200,7 @@ final class FinderMenuExtension: FIFinderSync {
             action: action,
             context: context
         ))
-        if case let .openDirectory(shortcut) = action,
-           let applicationURL = shortcut.bundleURL {
-            let icon = NSWorkspace.shared.icon(forFile: applicationURL.path)
-            icon.size = CGSize(width: 16, height: 16)
-            item.image = icon
-        }
+        item.image = icon(for: action)
         return item
     }
 
@@ -288,6 +318,7 @@ private final class FinderMenuBuildCache: @unchecked Sendable {
     private var cachedPreferences: FinderMenuPreferences?
     private var applicationURLs: [UUID: URL?] = [:]
     private var directorySupport: [String: Bool] = [:]
+    private var icons: [String: NSImage] = [:]
 
     func preferences(_ load: () -> FinderMenuPreferences) -> FinderMenuPreferences {
         lock.lock()
@@ -339,11 +370,49 @@ private final class FinderMenuBuildCache: @unchecked Sendable {
         return accepts
     }
 
+    func applicationIcon(at applicationURL: URL) -> NSImage {
+        let key = applicationURL.path
+        lock.lock()
+        if let cached = icons[key] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+
+        let icon = NSWorkspace.shared.icon(forFile: key)
+        icon.size = FinderMenuExtension.menuIconSize
+        lock.lock()
+        icons[key] = icon
+        lock.unlock()
+        return icon
+    }
+
+    func documentIcon(forFileExtension fileExtension: String) -> NSImage? {
+        let key = "ext:\(fileExtension)"
+        lock.lock()
+        if let cached = icons[key] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+
+        guard let type = UTType(filenameExtension: fileExtension) else {
+            return nil
+        }
+        let icon = NSWorkspace.shared.icon(for: type)
+        icon.size = FinderMenuExtension.menuIconSize
+        lock.lock()
+        icons[key] = icon
+        lock.unlock()
+        return icon
+    }
+
     func invalidate() {
         lock.lock()
         cachedPreferences = nil
         applicationURLs.removeAll()
         directorySupport.removeAll()
+        icons.removeAll()
         lock.unlock()
     }
 }
