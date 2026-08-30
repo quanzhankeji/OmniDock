@@ -22,6 +22,7 @@ final class FinderFileCommandCoordinator: NSObject {
     private let revealFiles: ([URL]) -> Void
     private let requestDirectoryAccess: @MainActor (URL) -> URL?
     private let resolvePasteConflicts: @MainActor ([URL]) -> FinderPasteConflictResolution
+    private let announceDirectoryChange: (URL) -> Void
     private let openApplication: (
         _ directoryURL: URL,
         _ applicationURL: URL,
@@ -43,6 +44,9 @@ final class FinderFileCommandCoordinator: NSObject {
             FinderFileCommandCoordinator.presentDirectoryAccessPanel,
         resolvePasteConflicts: @escaping @MainActor ([URL]) -> FinderPasteConflictResolution =
             FinderFileCommandCoordinator.presentPasteConflictAlert,
+        announceDirectoryChange: @escaping (URL) -> Void = { directory in
+            NSWorkspace.shared.noteFileSystemChanged(directory.path)
+        },
         openApplication: @escaping (
             _ directoryURL: URL,
             _ applicationURL: URL,
@@ -68,6 +72,7 @@ final class FinderFileCommandCoordinator: NSObject {
         self.revealFiles = revealFiles
         self.requestDirectoryAccess = requestDirectoryAccess
         self.resolvePasteConflicts = resolvePasteConflicts
+        self.announceDirectoryChange = announceDirectoryChange
         self.openApplication = openApplication
         super.init()
     }
@@ -329,7 +334,7 @@ final class FinderFileCommandCoordinator: NSObject {
 
         do {
             let pasted = try paste(sources, into: directory, isCut: isCut)
-            finishPaste(pasted, isCut: isCut)
+            finishPaste(pasted, movedFrom: sources, isCut: isCut)
         } catch {
             guard Self.isPermissionFailure(error) else {
                 presentCreateFailure(
@@ -343,7 +348,7 @@ final class FinderFileCommandCoordinator: NSObject {
                     to: directory,
                     operation: { try paste(sources, into: $0, isCut: isCut) }
                 ) {
-                    finishPaste(pasted, isCut: isCut)
+                    finishPaste(pasted, movedFrom: sources, isCut: isCut)
                     return
                 }
             } catch {
@@ -365,7 +370,7 @@ final class FinderFileCommandCoordinator: NSObject {
                 ) else {
                     throw CocoaError(.fileWriteNoPermission)
                 }
-                finishPaste(pasted, isCut: isCut)
+                finishPaste(pasted, movedFrom: sources, isCut: isCut)
             } catch {
                 presentCreateFailure(
                     directoryDisplayPath: directory.path,
@@ -478,7 +483,7 @@ final class FinderFileCommandCoordinator: NSObject {
         }
     }
 
-    private func finishPaste(_ pasted: [URL], isCut: Bool) {
+    private func finishPaste(_ pasted: [URL], movedFrom sources: [URL], isCut: Bool) {
         // Nothing moved means the cut is still pending - every item was already
         // in this folder - so the clipboard has to survive for the paste the
         // user actually meant. Clearing it here emptied the clipboard and moved
@@ -491,6 +496,20 @@ final class FinderFileCommandCoordinator: NSObject {
             // offer a second paste that could only fail.
             itemPasteboard.clearContents()
         }
+
+        // Revealing the pasted items refreshes the folder they landed in, but
+        // nothing tells Finder about the folder a cut emptied, so a window
+        // showing it keeps listing an item that is no longer there.
+        var changed = Set(pasted.map { $0.deletingLastPathComponent().standardizedFileURL })
+        if isCut {
+            changed.formUnion(
+                sources.map { $0.deletingLastPathComponent().standardizedFileURL }
+            )
+        }
+        for directory in changed {
+            announceDirectoryChange(directory)
+        }
+
         revealFiles(pasted)
     }
 
