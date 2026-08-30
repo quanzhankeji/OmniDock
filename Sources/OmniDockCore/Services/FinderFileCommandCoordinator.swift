@@ -479,13 +479,17 @@ final class FinderFileCommandCoordinator: NSObject {
     }
 
     private func finishPaste(_ pasted: [URL], isCut: Bool) {
+        // Nothing moved means the cut is still pending - every item was already
+        // in this folder - so the clipboard has to survive for the paste the
+        // user actually meant. Clearing it here emptied the clipboard and moved
+        // nothing, which is indistinguishable from the command being broken.
+        guard !pasted.isEmpty else {
+            return
+        }
         if isCut {
             // The sources are gone, so leaving them on the pasteboard would
             // offer a second paste that could only fail.
             itemPasteboard.clearContents()
-        }
-        guard !pasted.isEmpty else {
-            return
         }
         revealFiles(pasted)
     }

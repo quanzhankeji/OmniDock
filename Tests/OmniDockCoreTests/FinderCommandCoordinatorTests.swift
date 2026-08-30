@@ -619,6 +619,37 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         ))
     }
 
+    func testCuttingIntoTheSameFolderKeepsTheClipboard() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("Report.txt")
+        try Data("payload".utf8).write(to: file)
+
+        let pasteboard = makePasteboard()
+        XCTAssertTrue(FinderItemPasteboard.write([file], isCut: true, to: pasteboard))
+
+        let mailbox = FinderCommandMailbox(directoryProvider: { root })
+        let request = FinderCommandEnvelope(
+            command: .pasteItems(directoryDisplayPath: root.path)
+        )
+        try mailbox.enqueue(request)
+
+        FinderFileCommandCoordinator(
+            requestMailbox: mailbox,
+            preferencesStore: makePreferencesStore(FinderMenuPreferences(isEnabled: true)),
+            directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            itemPasteboard: pasteboard,
+            revealFiles: { _ in },
+            requestDirectoryAccess: { _ in nil }
+        ).handle(requestID: request.id)
+
+        // Nothing moved, so the cut is still pending and must remain usable for
+        // the folder the user actually meant.
+        let remaining = FinderItemPasteboard.read(from: pasteboard)
+        XCTAssertEqual(remaining.urls, [file])
+        XCTAssertTrue(remaining.isCut)
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("OmniDockFinderCommandTests-\(UUID().uuidString)", isDirectory: true)
