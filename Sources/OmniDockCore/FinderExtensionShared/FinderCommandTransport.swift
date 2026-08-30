@@ -41,6 +41,9 @@ enum FinderCommand: Codable, Equatable {
         directoryDisplayPath: String
     )
     case setHiddenFilesVisible(Bool)
+    // Only the destination travels. What to paste is read from the pasteboard
+    // when the command runs, so the request cannot name files of its own.
+    case pasteItems(directoryDisplayPath: String)
     case openDirectory(
         shortcut: FinderLaunchShortcut,
         directoryDisplayPath: String

@@ -554,6 +554,8 @@ struct FinderMenuPreferences: Codable, Equatable {
     var launchShortcuts: [FinderLaunchShortcut]
     var documentPresets: [FinderDocumentPreset]
     var showsCopyPathCommand: Bool
+    var showsCopyItemsCommand: Bool
+    var showsPasteItemsCommand: Bool
     var showsShowHiddenFilesCommand: Bool
     var showsHideHiddenFilesCommand: Bool
     var observationRootPaths: [String]
@@ -567,6 +569,8 @@ struct FinderMenuPreferences: Codable, Equatable {
         launchShortcuts: [FinderLaunchShortcut] = FinderLaunchShortcut.defaultShortcuts,
         documentPresets: [FinderDocumentPreset] = FinderDocumentPreset.defaultPresets,
         showsCopyPathCommand: Bool = true,
+        showsCopyItemsCommand: Bool = true,
+        showsPasteItemsCommand: Bool = true,
         showsShowHiddenFilesCommand: Bool = true,
         showsHideHiddenFilesCommand: Bool = true,
         observationRootPaths: [String] = []
@@ -582,6 +586,8 @@ struct FinderMenuPreferences: Codable, Equatable {
         )
         self.documentPresets = documentPresets
         self.showsCopyPathCommand = showsCopyPathCommand
+        self.showsCopyItemsCommand = showsCopyItemsCommand
+        self.showsPasteItemsCommand = showsPasteItemsCommand
         self.showsShowHiddenFilesCommand = showsShowHiddenFilesCommand
         self.showsHideHiddenFilesCommand = showsHideHiddenFilesCommand
         self.observationRootPaths = observationRootPaths
@@ -596,6 +602,8 @@ struct FinderMenuPreferences: Codable, Equatable {
         case launchShortcuts
         case documentPresets
         case showsCopyPathCommand
+        case showsCopyItemsCommand
+        case showsPasteItemsCommand
         case showsShowHiddenFilesCommand
         case showsHideHiddenFilesCommand
         case observationRootPaths
@@ -646,6 +654,14 @@ struct FinderMenuPreferences: Codable, Equatable {
         showsCopyPathCommand = try container.decodeIfPresent(
             Bool.self,
             forKey: .showsCopyPathCommand
+        ) ?? true
+        showsCopyItemsCommand = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .showsCopyItemsCommand
+        ) ?? true
+        showsPasteItemsCommand = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .showsPasteItemsCommand
         ) ?? true
         showsShowHiddenFilesCommand = try container.decodeIfPresent(
             Bool.self,
@@ -800,6 +816,8 @@ final class FinderMenuPreferencesStore {
         static let launchShortcuts = "finderExtensionLaunchShortcuts"
         static let documentPresets = "finderExtensionDocumentPresets"
         static let showsCopyPathCommand = "finderExtensionCopyPathCommand"
+        static let showsCopyItemsCommand = "finderExtensionCopyItemsCommand"
+        static let showsPasteItemsCommand = "finderExtensionPasteItemsCommand"
         static let showsShowHiddenFilesCommand = "finderExtensionShowHiddenFilesCommand"
         static let showsHideHiddenFilesCommand = "finderExtensionHideHiddenFilesCommand"
         static let observationRootPaths = "finderExtensionObservationRootPaths"
@@ -859,6 +877,12 @@ final class FinderMenuPreferencesStore {
                 showsCopyPathCommand: defaults.object(
                     forKey: Key.showsCopyPathCommand
                 ) as? Bool ?? true,
+                showsCopyItemsCommand: defaults.object(
+                    forKey: Key.showsCopyItemsCommand
+                ) as? Bool ?? true,
+                showsPasteItemsCommand: defaults.object(
+                    forKey: Key.showsPasteItemsCommand
+                ) as? Bool ?? true,
                 showsShowHiddenFilesCommand: defaults.object(
                     forKey: Key.showsShowHiddenFilesCommand
                 ) as? Bool ?? true,
@@ -896,6 +920,8 @@ final class FinderMenuPreferencesStore {
             defaults.set(encoded(preferences.launchShortcuts), forKey: Key.launchShortcuts)
             defaults.set(encoded(preferences.documentPresets), forKey: Key.documentPresets)
             defaults.set(preferences.showsCopyPathCommand, forKey: Key.showsCopyPathCommand)
+            defaults.set(preferences.showsCopyItemsCommand, forKey: Key.showsCopyItemsCommand)
+            defaults.set(preferences.showsPasteItemsCommand, forKey: Key.showsPasteItemsCommand)
             defaults.set(
                 preferences.showsShowHiddenFilesCommand,
                 forKey: Key.showsShowHiddenFilesCommand

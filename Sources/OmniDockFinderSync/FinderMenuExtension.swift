@@ -149,6 +149,13 @@ final class FinderMenuExtension: FIFinderSync {
             ))
         case .copySelectedPaths:
             copy(FinderPathList.text(for: binding.context.selectedURLs))
+        case .copySelectedItems:
+            copyItems(binding.context.selectedURLs)
+        case .pasteItems:
+            guard let directory = binding.context.currentDirectory else {
+                return
+            }
+            forward(.pasteItems(directoryDisplayPath: directory.path))
         case .showHiddenFiles:
             forward(.setHiddenFilesVisible(true))
         case .hideHiddenFiles:
@@ -185,6 +192,10 @@ final class FinderMenuExtension: FIFinderSync {
         switch action {
         case .copyCurrentDirectoryPath, .copySelectedPaths:
             return Self.symbol("doc.on.doc")
+        case .copySelectedItems:
+            return Self.symbol("square.on.square")
+        case .pasteItems:
+            return Self.symbol("doc.on.clipboard")
         case .showHiddenFiles:
             return Self.symbol("eye")
         case .hideHiddenFiles:
@@ -223,6 +234,13 @@ final class FinderMenuExtension: FIFinderSync {
         return item
     }
 
+    private static func pasteboardHasFiles() -> Bool {
+        NSPasteboard.general.canReadObject(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        )
+    }
+
     private func context(for menuKind: FIMenuKind) -> FinderMenuContext? {
         let controller = FIFinderSyncController.default()
         switch menuKind {
@@ -232,7 +250,8 @@ final class FinderMenuExtension: FIFinderSync {
                 currentDirectory: FinderObservationRoots.folderURL(
                     targetedURL: controller.targetedURL()
                 ),
-                selectedURLs: []
+                selectedURLs: [],
+                pasteboardHasFiles: Self.pasteboardHasFiles()
             )
         case .contextualMenuForItems:
             let selectedURLs = controller.selectedItemURLs() ?? []
@@ -268,6 +287,17 @@ final class FinderMenuExtension: FIFinderSync {
         configuredObservationRoots = roots
         FIFinderSyncController.default().directoryURLs = roots
         Self.logger.info("Configured \(roots.count) Finder observation roots")
+    }
+
+    // Writing the URLs themselves, not their paths, is what lets Finder and
+    // other applications treat this as a file copy rather than pasted text.
+    private func copyItems(_ urls: [URL]) {
+        guard !urls.isEmpty else {
+            return
+        }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects(urls as [NSPasteboardWriting])
     }
 
     private func copy(_ string: String) {

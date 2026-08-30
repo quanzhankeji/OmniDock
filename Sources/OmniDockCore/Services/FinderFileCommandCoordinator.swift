@@ -125,6 +125,16 @@ final class FinderFileCommandCoordinator: NSObject {
                 fileExtension: fileExtension,
                 directoryDisplayPath: directoryDisplayPath
             )
+        case let .pasteItems(directoryDisplayPath):
+            guard preferences.showsPasteItemsCommand else {
+                return
+            }
+            pasteItems(
+                into: URL(
+                    fileURLWithPath: directoryDisplayPath,
+                    isDirectory: true
+                ).standardizedFileURL
+            )
         case let .setHiddenFilesVisible(isVisible):
             guard FinderCommandAuthorizationPolicy.allowsHiddenFilesCommand(
                 isVisible: isVisible,
@@ -281,6 +291,101 @@ final class FinderFileCommandCoordinator: NSObject {
                 error: error
             )
         }
+    }
+
+    // The sources come from the pasteboard at the moment the command runs, the
+    // same thing Finder pastes, so nothing about them travels in the request.
+    private func pasteItems(into directory: URL) {
+        let sources = (NSPasteboard.general.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) as? [URL]) ?? []
+        guard !sources.isEmpty else {
+            return
+        }
+
+        do {
+            let pasted = try paste(sources, into: directory)
+            revealFiles(pasted)
+        } catch {
+            guard Self.isPermissionFailure(error) else {
+                presentCreateFailure(
+                    directoryDisplayPath: directory.path,
+                    error: error
+                )
+                return
+            }
+            do {
+                if let pasted = try directoryGrantStore.performWithSavedAccess(
+                    to: directory,
+                    operation: { try paste(sources, into: $0) }
+                ) {
+                    revealFiles(pasted)
+                    return
+                }
+            } catch {
+                guard Self.isPermissionFailure(error) else {
+                    presentCreateFailure(
+                        directoryDisplayPath: directory.path,
+                        error: error
+                    )
+                    return
+                }
+            }
+            guard grantAccess(to: directory) else {
+                return
+            }
+            do {
+                guard let pasted = try directoryGrantStore.performWithSavedAccess(
+                    to: directory,
+                    operation: { try paste(sources, into: $0) }
+                ) else {
+                    throw CocoaError(.fileWriteNoPermission)
+                }
+                revealFiles(pasted)
+            } catch {
+                presentCreateFailure(
+                    directoryDisplayPath: directory.path,
+                    error: error
+                )
+            }
+        }
+    }
+
+    private func paste(_ sources: [URL], into directory: URL) throws -> [URL] {
+        var pasted: [URL] = []
+        for source in sources {
+            // Pasting into the folder an item already lives in would otherwise
+            // fail; Finder makes a copy beside it, and so do we.
+            let destination = Self.availableDestination(
+                for: source,
+                in: directory,
+                fileManager: fileManager
+            )
+            try fileManager.copyItem(at: source, to: destination)
+            pasted.append(destination)
+        }
+        return pasted
+    }
+
+    // "Report.txt" becomes "Report 2.txt" rather than overwriting anything.
+    static func availableDestination(
+        for source: URL,
+        in directory: URL,
+        fileManager: FileManager = .default
+    ) -> URL {
+        let fileExtension = source.pathExtension
+        let base = source.deletingPathExtension().lastPathComponent
+        var candidate = directory.appendingPathComponent(source.lastPathComponent)
+        var sequence = 2
+        while fileManager.fileExists(atPath: candidate.path) {
+            let name = fileExtension.isEmpty
+                ? "\(base) \(sequence)"
+                : "\(base) \(sequence).\(fileExtension)"
+            candidate = directory.appendingPathComponent(name)
+            sequence += 1
+        }
+        return candidate
     }
 
     private func reveal(_ file: URL) {

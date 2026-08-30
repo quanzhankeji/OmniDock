@@ -103,6 +103,8 @@ public final class SettingsStore {
         case finderLaunchShortcuts = "finderLaunchShortcuts"
         case finderDocumentPresets = "finderDocumentPresets"
         case finderExtensionCopyPathCommand = "finderExtensionCopyPathCommand"
+        case finderExtensionCopyItemsCommand = "finderExtensionCopyItemsCommand"
+        case finderExtensionPasteItemsCommand = "finderExtensionPasteItemsCommand"
         case finderExtensionShowHiddenFilesCommand = "finderExtensionShowHiddenFilesCommand"
         case finderExtensionHideHiddenFilesCommand = "finderExtensionHideHiddenFilesCommand"
         case liveDockPreviewsEnabled = "liveDockPreviewsEnabled"
@@ -201,6 +203,8 @@ public final class SettingsStore {
             Key.finderDocumentPresetsGrouped.rawValue: true,
             Key.finderQuickCommandsGrouped.rawValue: false,
             Key.finderExtensionCopyPathCommand.rawValue: true,
+            Key.finderExtensionCopyItemsCommand.rawValue: true,
+            Key.finderExtensionPasteItemsCommand.rawValue: true,
             Key.finderExtensionShowHiddenFilesCommand.rawValue: true,
             Key.finderExtensionHideHiddenFilesCommand.rawValue: true,
             Key.liveDockPreviewsEnabled.rawValue: true,
@@ -290,6 +294,28 @@ public final class SettingsStore {
         }
         set {
             defaults.set(newValue, forKey: Key.finderExtensionCopyPathCommand.rawValue)
+            syncFinderExtensionSettings()
+            postChange(.finderExtension)
+        }
+    }
+
+    public var finderCopyItemsCommand: Bool {
+        get {
+            defaults.object(forKey: Key.finderExtensionCopyItemsCommand.rawValue) as? Bool ?? true
+        }
+        set {
+            defaults.set(newValue, forKey: Key.finderExtensionCopyItemsCommand.rawValue)
+            syncFinderExtensionSettings()
+            postChange(.finderExtension)
+        }
+    }
+
+    public var finderPasteItemsCommand: Bool {
+        get {
+            defaults.object(forKey: Key.finderExtensionPasteItemsCommand.rawValue) as? Bool ?? true
+        }
+        set {
+            defaults.set(newValue, forKey: Key.finderExtensionPasteItemsCommand.rawValue)
             syncFinderExtensionSettings()
             postChange(.finderExtension)
         }
@@ -775,7 +801,8 @@ public final class SettingsStore {
             return .finderExtension
         case .finderLaunchShortcutsGrouped, .finderDocumentPresetsGrouped,
              .finderQuickCommandsGrouped, .finderLaunchShortcuts, .finderDocumentPresets,
-             .finderExtensionCopyPathCommand, .finderExtensionShowHiddenFilesCommand,
+             .finderExtensionCopyPathCommand, .finderExtensionCopyItemsCommand,
+             .finderExtensionPasteItemsCommand, .finderExtensionShowHiddenFilesCommand,
              .finderExtensionHideHiddenFilesCommand:
             return .finderExtension
         case .liveDockPreviewsEnabled:
@@ -823,6 +850,8 @@ public final class SettingsStore {
             launchShortcuts: finderLaunchShortcuts,
             documentPresets: finderDocumentPresets,
             showsCopyPathCommand: finderCopyPathCommand,
+            showsCopyItemsCommand: finderCopyItemsCommand,
+            showsPasteItemsCommand: finderPasteItemsCommand,
             showsShowHiddenFilesCommand: finderShowHiddenFilesCommand,
             showsHideHiddenFilesCommand: finderHideHiddenFilesCommand,
             observationRootPaths: observationRootPaths

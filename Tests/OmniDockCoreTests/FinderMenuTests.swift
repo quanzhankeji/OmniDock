@@ -325,6 +325,7 @@ final class FinderMenuTests: XCTestCase {
             launchShortcuts: [moved],
             documentPresets: [],
             showsCopyPathCommand: false,
+            showsCopyItemsCommand: false,
             showsShowHiddenFilesCommand: false,
             showsHideHiddenFilesCommand: false
         )
@@ -465,6 +466,50 @@ final class FinderMenuTests: XCTestCase {
         XCTAssertTrue(preferences.groupsLaunchShortcuts)
     }
 
+    func testPasteAppearsOnlyWhenThePasteboardHasFiles() {
+        var preferences = FinderMenuPreferences(isEnabled: true)
+        preferences.documentPresets = []
+        preferences.showsCopyPathCommand = false
+        preferences.showsShowHiddenFilesCommand = false
+        preferences.showsHideHiddenFilesCommand = false
+
+        for hasFiles in [true, false] {
+            let entries = FinderMenuCatalog.entries(
+                for: FinderMenuContext(
+                    location: .folderBackground,
+                    currentDirectory: URL(fileURLWithPath: "/tmp/OmniDock"),
+                    selectedURLs: [],
+                    pasteboardHasFiles: hasFiles
+                ),
+                preferences: preferences,
+                resolveApplication: { _ in nil },
+                acceptsDirectories: { _ in true }
+            )
+            XCTAssertEqual(entries, hasFiles ? [.action(.pasteItems)] : [], "hasFiles: \(hasFiles)")
+        }
+    }
+
+    func testCopyIsOfferedForASelectionAndPasteIsNot() {
+        var preferences = FinderMenuPreferences(isEnabled: true)
+        preferences.showsCopyPathCommand = false
+        preferences.showsShowHiddenFilesCommand = false
+        preferences.showsHideHiddenFilesCommand = false
+
+        let entries = FinderMenuCatalog.entries(
+            for: FinderMenuContext(
+                location: .selection,
+                currentDirectory: URL(fileURLWithPath: "/tmp/OmniDock"),
+                selectedURLs: [URL(fileURLWithPath: "/tmp/OmniDock/file.txt")],
+                pasteboardHasFiles: true
+            ),
+            preferences: preferences,
+            resolveApplication: { _ in nil },
+            acceptsDirectories: { _ in true }
+        )
+
+        XCTAssertEqual(entries, [.action(.copySelectedItems)])
+    }
+
     func testContainerMenuOffersNewFileAndCurrentPath() {
         let context = FinderMenuContext(
             location: .folderBackground,
@@ -575,6 +620,7 @@ final class FinderMenuTests: XCTestCase {
             FinderMenuCatalog.entries(for: selected, preferences: enabled),
             [
                 .action(.copySelectedPaths),
+                .action(.copySelectedItems),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]
@@ -609,6 +655,7 @@ final class FinderMenuTests: XCTestCase {
             [
                 .action(.copySelectedPaths),
                 .applicationSubmenu([.openDirectory(app)]),
+                .action(.copySelectedItems),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]
@@ -625,6 +672,7 @@ final class FinderMenuTests: XCTestCase {
             [
                 .action(.copySelectedPaths),
                 .action(.openDirectory(app)),
+                .action(.copySelectedItems),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]
@@ -1240,6 +1288,7 @@ final class FinderMenuTests: XCTestCase {
             ),
             [
                 .action(.copySelectedPaths),
+                .action(.copySelectedItems),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]

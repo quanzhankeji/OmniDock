@@ -4,6 +4,8 @@ enum FinderMenuAction: Equatable {
     case createDocument(FinderDocumentPreset)
     case copyCurrentDirectoryPath
     case copySelectedPaths
+    case copySelectedItems
+    case pasteItems
     case showHiddenFiles
     case hideHiddenFiles
     case openDirectory(FinderLaunchShortcut)
@@ -12,8 +14,10 @@ enum FinderMenuAction: Equatable {
         switch self {
         case .createDocument, .copyCurrentDirectoryPath:
             return location == .folderBackground
-        case .copySelectedPaths, .openDirectory:
+        case .copySelectedPaths, .copySelectedItems, .openDirectory:
             return location == .selection
+        case .pasteItems:
+            return location == .folderBackground
         case .showHiddenFiles, .hideHiddenFiles:
             return true
         }
@@ -29,6 +33,21 @@ struct FinderMenuContext: Equatable {
     let location: FinderMenuLocation
     let currentDirectory: URL?
     let selectedURLs: [URL]
+    // Paste is only worth offering when there is something to paste, and only
+    // the extension can see the pasteboard, so the answer is carried in.
+    let pasteboardHasFiles: Bool
+
+    init(
+        location: FinderMenuLocation,
+        currentDirectory: URL?,
+        selectedURLs: [URL],
+        pasteboardHasFiles: Bool = false
+    ) {
+        self.location = location
+        self.currentDirectory = currentDirectory
+        self.selectedURLs = selectedURLs
+        self.pasteboardHasFiles = pasteboardHasFiles
+    }
 }
 
 struct FinderMenuCommandBinding: Equatable {
@@ -163,7 +182,7 @@ enum FinderMenuCatalog {
                 resolveApplication: resolveApplication,
                 acceptsDirectories: acceptsDirectories
             ))
-            entries.append(contentsOf: hiddenFileEntries(for: preferences))
+            entries.append(contentsOf: commandEntries(for: context, preferences: preferences))
             return entries
         case .selection:
             guard !context.selectedURLs.isEmpty else {
@@ -180,15 +199,24 @@ enum FinderMenuCatalog {
                 resolveApplication: resolveApplication,
                 acceptsDirectories: acceptsDirectories
             ))
-            entries.append(contentsOf: hiddenFileEntries(for: preferences))
+            entries.append(contentsOf: commandEntries(for: context, preferences: preferences))
             return entries
         }
     }
 
-    private static func hiddenFileEntries(
-        for preferences: FinderMenuPreferences
+    private static func commandEntries(
+        for context: FinderMenuContext,
+        preferences: FinderMenuPreferences
     ) -> [FinderMenuEntry] {
         var actions: [FinderMenuAction] = []
+        if context.location == .selection, preferences.showsCopyItemsCommand {
+            actions.append(.copySelectedItems)
+        }
+        if context.location == .folderBackground,
+           preferences.showsPasteItemsCommand,
+           context.pasteboardHasFiles {
+            actions.append(.pasteItems)
+        }
         if preferences.showsShowHiddenFilesCommand {
             actions.append(.showHiddenFiles)
         }
@@ -211,6 +239,14 @@ enum FinderMenuLabels {
             return "复制路径"
         case (.copyCurrentDirectoryPath, false), (.copySelectedPaths, false):
             return "Copy Path"
+        case (.copySelectedItems, true):
+            return "复制"
+        case (.copySelectedItems, false):
+            return "Copy"
+        case (.pasteItems, true):
+            return "粘贴"
+        case (.pasteItems, false):
+            return "Paste"
         case (.showHiddenFiles, true):
             return "显示所有文件"
         case (.showHiddenFiles, false):

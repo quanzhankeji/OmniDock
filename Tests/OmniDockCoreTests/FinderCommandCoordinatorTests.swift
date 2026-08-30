@@ -272,6 +272,57 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         XCTAssertEqual(promptCount, 0)
     }
 
+    func testPasteCopiesTheItemsOnThePasteboardIntoTheFolder() throws {
+        let root = try makeTemporaryDirectory()
+        let source = root.appendingPathComponent("Source", isDirectory: true)
+        let destination = root.appendingPathComponent("Destination", isDirectory: true)
+        for url in [source, destination] {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = source.appendingPathComponent("Report.txt")
+        try Data("payload".utf8).write(to: file)
+
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.writeObjects([file as NSURL])
+
+        let preferences = makePreferencesStore(FinderMenuPreferences(isEnabled: true))
+        let mailbox = FinderCommandMailbox(directoryProvider: { root })
+        let request = FinderCommandEnvelope(
+            command: .pasteItems(directoryDisplayPath: destination.path)
+        )
+        try mailbox.enqueue(request)
+
+        var revealed: [URL] = []
+        FinderFileCommandCoordinator(
+            requestMailbox: mailbox,
+            preferencesStore: preferences,
+            directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            revealFiles: { revealed = $0 },
+            requestDirectoryAccess: { _ in nil }
+        ).handle(requestID: request.id)
+
+        let pasted = destination.appendingPathComponent("Report.txt")
+        XCTAssertEqual(try String(contentsOf: pasted), "payload")
+        XCTAssertEqual(revealed, [pasted])
+    }
+
+    func testPasteNeverOverwritesAnExistingItem() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let existing = root.appendingPathComponent("Report.txt")
+        try Data("original".utf8).write(to: existing)
+
+        let incoming = FinderFileCommandCoordinator.availableDestination(
+            for: existing,
+            in: root
+        )
+
+        XCTAssertEqual(incoming.lastPathComponent, "Report 2.txt")
+        XCTAssertEqual(try String(contentsOf: existing), "original")
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("OmniDockFinderCommandTests-\(UUID().uuidString)", isDirectory: true)

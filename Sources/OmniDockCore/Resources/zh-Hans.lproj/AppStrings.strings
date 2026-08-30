@@ -139,6 +139,10 @@
 "finderQuickCommandsDetail" = "选择要在 Finder 右键菜单中显示的快捷命令。";
 "finderQuickCommandCopyPathTitle" = "复制路径";
 "finderQuickCommandCopyPathDetail" = "在右键菜单中显示“复制路径”。";
+"finderQuickCommandCopyItemsTitle" = "复制";
+"finderQuickCommandCopyItemsDetail" = "复制选中的项目，以便粘贴到其他文件夹。";
+"finderQuickCommandPasteItemsTitle" = "粘贴";
+"finderQuickCommandPasteItemsDetail" = "将已复制的项目粘贴到当前文件夹，仅在有内容可粘贴时显示。";
 "finderQuickCommandShowHiddenTitle" = "显示所有文件";
 "finderQuickCommandShowHiddenDetail" = "在右键菜单中显示“显示所有文件”。";
 "finderQuickCommandHideHiddenTitle" = "隐藏所有文件";
