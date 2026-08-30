@@ -2,6 +2,15 @@ import AppKit
 import ApplicationServices
 import CoreGraphics
 
+// What to do about items whose name is already taken at the destination. One
+// decision covers the whole paste: asking per item turns a multi-file paste
+// into an interrogation.
+enum FinderPasteConflictResolution: Equatable {
+    case replace
+    case keepBoth
+    case cancel
+}
+
 @MainActor
 final class FinderFileCommandCoordinator: NSObject {
     private let requestMailbox: FinderCommandMailbox
@@ -12,6 +21,7 @@ final class FinderFileCommandCoordinator: NSObject {
     private let hiddenFilesController: FinderHiddenFilesController
     private let revealFiles: ([URL]) -> Void
     private let requestDirectoryAccess: @MainActor (URL) -> URL?
+    private let resolvePasteConflicts: @MainActor ([URL]) -> FinderPasteConflictResolution
     private let openApplication: (
         _ directoryURL: URL,
         _ applicationURL: URL,
@@ -31,6 +41,8 @@ final class FinderFileCommandCoordinator: NSObject {
         },
         requestDirectoryAccess: @escaping @MainActor (URL) -> URL? =
             FinderFileCommandCoordinator.presentDirectoryAccessPanel,
+        resolvePasteConflicts: @escaping @MainActor ([URL]) -> FinderPasteConflictResolution =
+            FinderFileCommandCoordinator.presentPasteConflictAlert,
         openApplication: @escaping (
             _ directoryURL: URL,
             _ applicationURL: URL,
@@ -55,6 +67,7 @@ final class FinderFileCommandCoordinator: NSObject {
         self.hiddenFilesController = hiddenFilesController ?? FinderHiddenFilesController()
         self.revealFiles = revealFiles
         self.requestDirectoryAccess = requestDirectoryAccess
+        self.resolvePasteConflicts = resolvePasteConflicts
         self.openApplication = openApplication
         super.init()
     }
@@ -367,21 +380,45 @@ final class FinderFileCommandCoordinator: NSObject {
         into directory: URL,
         isCut: Bool
     ) throws -> [URL] {
-        var pasted: [URL] = []
-        for source in sources {
-            // Moving an item into the folder it already sits in is a no-op, not
-            // a rename to "Report 2.txt".
-            if isCut,
-               source.deletingLastPathComponent().standardizedFileURL == directory {
-                continue
+        // Moving an item into the folder it already sits in is a no-op, not a
+        // rename to "Report 2.txt".
+        let incoming = sources.filter { source in
+            !(isCut && source.deletingLastPathComponent().standardizedFileURL == directory)
+        }
+
+        var resolution = FinderPasteConflictResolution.keepBoth
+        let conflicts = incoming.filter {
+            Self.conflictsOnPaste($0, in: directory, isCut: isCut, fileManager: fileManager)
+        }
+        if !conflicts.isEmpty {
+            resolution = resolvePasteConflicts(conflicts)
+            guard resolution != .cancel else {
+                return []
             }
-            // Pasting a copy into that same folder does need a free name, the
-            // way Finder puts a copy beside the original.
-            let destination = Self.availableDestination(
-                for: source,
-                in: directory,
-                fileManager: fileManager
-            )
+        }
+
+        var pasted: [URL] = []
+        for source in incoming {
+            let taken = directory.appendingPathComponent(source.lastPathComponent)
+            let replaces = resolution == .replace
+                && Self.conflictsOnPaste(
+                    source,
+                    in: directory,
+                    isCut: isCut,
+                    fileManager: fileManager
+                )
+            // Keeping both puts the incoming item beside the existing one, the
+            // way Finder does; replacing clears the way for it first.
+            let destination = replaces
+                ? taken
+                : Self.availableDestination(
+                    for: source,
+                    in: directory,
+                    fileManager: fileManager
+                )
+            if replaces, fileManager.fileExists(atPath: destination.path) {
+                try fileManager.removeItem(at: destination)
+            }
             if isCut {
                 try fileManager.moveItem(at: source, to: destination)
             } else {
@@ -390,6 +427,55 @@ final class FinderFileCommandCoordinator: NSObject {
             pasted.append(destination)
         }
         return pasted
+    }
+
+    // Copying an item into the folder it already lives in is never a conflict:
+    // there is nothing to replace, because the only match is the item itself.
+    static func conflictsOnPaste(
+        _ source: URL,
+        in directory: URL,
+        isCut: Bool,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        let taken = directory.appendingPathComponent(source.lastPathComponent)
+        guard fileManager.fileExists(atPath: taken.path) else {
+            return false
+        }
+        return isCut || taken.standardizedFileURL != source.standardizedFileURL
+    }
+
+    static func presentPasteConflictAlert(
+        _ conflicts: [URL]
+    ) -> FinderPasteConflictResolution {
+        guard let application = NSApp, let first = conflicts.first else {
+            return .cancel
+        }
+        application.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = conflicts.count == 1
+            ? String(
+                format: AppStrings.text(.finderPasteConflictTitle),
+                first.lastPathComponent
+            )
+            : String(
+                format: AppStrings.text(.finderPasteConflictMultipleTitle),
+                conflicts.count
+            )
+        alert.informativeText = AppStrings.text(.finderPasteConflictDetail)
+        // Keeping both is first so Return cannot destroy anything.
+        alert.addButton(withTitle: AppStrings.text(.finderPasteConflictKeepBoth))
+        alert.addButton(withTitle: AppStrings.text(.finderPasteConflictReplace))
+        alert.addButton(withTitle: AppStrings.text(.finderPasteConflictCancel))
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+            return .keepBoth
+        case .alertSecondButtonReturn:
+            return .replace
+        default:
+            return .cancel
+        }
     }
 
     private func finishPaste(_ pasted: [URL], isCut: Bool) {

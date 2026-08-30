@@ -521,6 +521,104 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         XCTAssertTrue(FinderItemPasteboard.read(from: pasteboard).urls.isEmpty)
     }
 
+    private func pasteWithConflict(
+        isCut: Bool,
+        resolution: FinderPasteConflictResolution,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> (source: URL, destination: URL, asked: [URL]) {
+        let root = try makeTemporaryDirectory()
+        let source = root.appendingPathComponent("src", isDirectory: true)
+        let destination = root.appendingPathComponent("dst", isDirectory: true)
+        for url in [source, destination] {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+        try Data("incoming".utf8).write(to: source.appendingPathComponent("Dup.txt"))
+        try Data("existing".utf8).write(to: destination.appendingPathComponent("Dup.txt"))
+
+        let pasteboard = makePasteboard()
+        XCTAssertTrue(FinderItemPasteboard.write(
+            [source.appendingPathComponent("Dup.txt")],
+            isCut: isCut,
+            to: pasteboard
+        ), file: file, line: line)
+
+        let mailbox = FinderCommandMailbox(directoryProvider: { root })
+        let request = FinderCommandEnvelope(
+            command: .pasteItems(directoryDisplayPath: destination.path)
+        )
+        try mailbox.enqueue(request)
+
+        var asked: [URL] = []
+        FinderFileCommandCoordinator(
+            requestMailbox: mailbox,
+            preferencesStore: makePreferencesStore(FinderMenuPreferences(isEnabled: true)),
+            directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            itemPasteboard: pasteboard,
+            revealFiles: { _ in },
+            requestDirectoryAccess: { _ in nil },
+            resolvePasteConflicts: { conflicts in
+                asked = conflicts
+                return resolution
+            }
+        ).handle(requestID: request.id)
+        return (source, destination, asked)
+    }
+
+    func testPasteAsksBeforeTouchingAnExistingItem() throws {
+        let result = try pasteWithConflict(isCut: false, resolution: .keepBoth)
+        defer { try? FileManager.default.removeItem(at: result.source.deletingLastPathComponent()) }
+
+        XCTAssertEqual(result.asked.map(\.lastPathComponent), ["Dup.txt"])
+        XCTAssertEqual(
+            try String(contentsOf: result.destination.appendingPathComponent("Dup.txt")),
+            "existing"
+        )
+        XCTAssertEqual(
+            try String(contentsOf: result.destination.appendingPathComponent("Dup 2.txt")),
+            "incoming"
+        )
+    }
+
+    func testReplacingOverwritesTheExistingItem() throws {
+        let result = try pasteWithConflict(isCut: false, resolution: .replace)
+        defer { try? FileManager.default.removeItem(at: result.source.deletingLastPathComponent()) }
+
+        XCTAssertEqual(
+            try String(contentsOf: result.destination.appendingPathComponent("Dup.txt")),
+            "incoming"
+        )
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: result.destination.appendingPathComponent("Dup 2.txt").path
+        ))
+    }
+
+    func testCancellingAConflictLeavesBothSidesAlone() throws {
+        let result = try pasteWithConflict(isCut: true, resolution: .cancel)
+        defer { try? FileManager.default.removeItem(at: result.source.deletingLastPathComponent()) }
+
+        // Nothing pasted, and a cancelled cut must not have removed the source.
+        XCTAssertEqual(
+            try String(contentsOf: result.destination.appendingPathComponent("Dup.txt")),
+            "existing"
+        )
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: result.source.appendingPathComponent("Dup.txt").path
+        ))
+    }
+
+    func testCopyingIntoItsOwnFolderIsNotTreatedAsAConflict() {
+        let directory = URL(fileURLWithPath: "/tmp/OmniDock")
+        let source = directory.appendingPathComponent("Report.txt")
+
+        XCTAssertFalse(FinderFileCommandCoordinator.conflictsOnPaste(
+            source,
+            in: directory,
+            isCut: false,
+            fileManager: .default
+        ))
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("OmniDockFinderCommandTests-\(UUID().uuidString)", isDirectory: true)

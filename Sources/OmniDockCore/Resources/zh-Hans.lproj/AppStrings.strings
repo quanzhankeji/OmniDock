@@ -145,6 +145,12 @@
 "finderQuickCommandCutItemsDetail" = "剪切选中的项目，粘贴时移动而非复制。";
 "finderQuickCommandPasteItemsTitle" = "粘贴";
 "finderQuickCommandPasteItemsDetail" = "将已复制的项目粘贴到当前文件夹，仅在有内容可粘贴时显示。";
+"finderPasteConflictTitle" = "此位置已存在“%@”。";
+"finderPasteConflictMultipleTitle" = "此位置已存在 %d 个同名项目。";
+"finderPasteConflictDetail" = "选择“两者都保留”会为粘贴进来的项目添加编号。";
+"finderPasteConflictKeepBoth" = "两者都保留";
+"finderPasteConflictReplace" = "替换";
+"finderPasteConflictCancel" = "取消";
 "finderQuickCommandShowHiddenTitle" = "显示所有文件";
 "finderQuickCommandShowHiddenDetail" = "在右键菜单中显示“显示所有文件”。";
 "finderQuickCommandHideHiddenTitle" = "隐藏所有文件";

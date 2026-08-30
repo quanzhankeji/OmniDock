@@ -145,6 +145,12 @@ enum AppStringKey: String, CaseIterable {
     case finderQuickCommandCutItemsDetail
     case finderQuickCommandPasteItemsTitle
     case finderQuickCommandPasteItemsDetail
+    case finderPasteConflictTitle
+    case finderPasteConflictMultipleTitle
+    case finderPasteConflictDetail
+    case finderPasteConflictKeepBoth
+    case finderPasteConflictReplace
+    case finderPasteConflictCancel
     case finderQuickCommandCopyPathDetail
     case finderQuickCommandShowHiddenTitle
     case finderQuickCommandShowHiddenDetail

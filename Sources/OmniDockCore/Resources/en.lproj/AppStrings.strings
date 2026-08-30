@@ -145,6 +145,12 @@
 "finderQuickCommandCutItemsDetail" = "Cut the selected items so pasting moves them instead of copying.";
 "finderQuickCommandPasteItemsTitle" = "Paste";
 "finderQuickCommandPasteItemsDetail" = "Paste copied items into the folder, shown only when there is something to paste.";
+"finderPasteConflictTitle" = "“%@” already exists in this location.";
+"finderPasteConflictMultipleTitle" = "%d items already exist in this location.";
+"finderPasteConflictDetail" = "Keeping both adds a number to the name of the item being pasted.";
+"finderPasteConflictKeepBoth" = "Keep Both";
+"finderPasteConflictReplace" = "Replace";
+"finderPasteConflictCancel" = "Cancel";
 "finderQuickCommandShowHiddenTitle" = "Show All Files";
 "finderQuickCommandShowHiddenDetail" = "Show the Show All Files command in contextual menus.";
 "finderQuickCommandHideHiddenTitle" = "Hide Hidden Files";
