@@ -108,7 +108,7 @@
 "menuBarShelfDividerTooltip" = "按住 Command，将菜单栏图标拖过此分界线";
 
 "finderExtensionEnableTitle" = "启用";
-"finderExtensionEnableDetail" = "扩展 Finder 右键菜单能力；iCloud 同步文件夹暂不支持此功能。";
+"finderExtensionEnableDetail" = "扩展 Finder 右键菜单能力；云端文件夹是否显示菜单取决于 Finder 与文件提供方。";
 "finderExtensionSetupRequired" = "请在 macOS 的 Finder 扩展中开启 OmniDock 后使用这些菜单项。";
 "finderExtensionOpenSettings" = "打开 Finder 扩展设置";
 "finderExtensionCreateFailedTitle" = "无法新建文件";
@@ -117,7 +117,7 @@
 "finderExtensionAccessDetail" = "请选择“%@”或它的上级文件夹，允许 OmniDock 在其中新建文件。此授权只需完成一次。";
 "finderExtensionAccessButton" = "允许";
 "finderQuickOpenTitle" = "快捷操作";
-"finderQuickOpenDetail" = "使用选择的应用打开当前 Finder 文件夹。";
+"finderQuickOpenDetail" = "使用选择的应用打开所选 Finder 项目；没有选择项目时则打开当前文件夹。";
 "finderQuickOpenGroupedTitle" = "折叠应用菜单";
 "finderQuickOpenGroupedDetail" = "将所选应用收纳到一个“打开方式”子菜单中。";
 "finderDocumentTypesGroupedTitle" = "合并文件列表";
@@ -132,8 +132,8 @@
 "finderQuickOpenLoading" = "正在检测…";
 "finderQuickOpenInstalled" = "已安装";
 "finderQuickOpenNotInstalled" = "未安装";
-"finderQuickOpenFailedTitle" = "无法打开当前文件夹";
-"finderQuickOpenFailedDetail" = "无法使用“%@”打开当前文件夹。%@";
+"finderQuickOpenFailedTitle" = "无法使用应用打开";
+"finderQuickOpenFailedDetail" = "无法使用“%@”打开所选 Finder 项目或当前文件夹。%@";
 "finderQuickOpenApplicationMissing" = "该应用已经不可用。";
 "finderQuickCommandsTitle" = "快捷指令";
 "finderQuickCommandsDetail" = "选择要在 Finder 右键菜单中显示的快捷命令。";

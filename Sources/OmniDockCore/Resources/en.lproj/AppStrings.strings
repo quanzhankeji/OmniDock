@@ -108,7 +108,7 @@
 "menuBarShelfDividerTooltip" = "Command-drag menu bar icons across this divider";
 
 "finderExtensionEnableTitle" = "Enable";
-"finderExtensionEnableDetail" = "Extend Finder contextual menus with additional commands. This feature is unavailable in iCloud-synced folders.";
+"finderExtensionEnableDetail" = "Extend Finder contextual menus with additional commands. Menu availability in cloud folders depends on Finder and the file provider.";
 "finderExtensionSetupRequired" = "Turn on OmniDock in macOS Finder Extensions to add these menu items.";
 "finderExtensionOpenSettings" = "Open Finder Extensions";
 "finderExtensionCreateFailedTitle" = "Could Not Create File";
@@ -117,7 +117,7 @@
 "finderExtensionAccessDetail" = "Choose “%@” or one of its parent folders to allow OmniDock to create files there. This is only required once.";
 "finderExtensionAccessButton" = "Allow";
 "finderQuickOpenTitle" = "Quick Actions";
-"finderQuickOpenDetail" = "Open the current Finder folder with apps you choose.";
+"finderQuickOpenDetail" = "Open selected Finder items, or the current folder when nothing is selected, with apps you choose.";
 "finderQuickOpenGroupedTitle" = "Group Apps in a Submenu";
 "finderQuickOpenGroupedDetail" = "Place selected apps under one Open With submenu.";
 "finderDocumentTypesGroupedTitle" = "Group File Types in a Submenu";
@@ -132,8 +132,8 @@
 "finderQuickOpenLoading" = "Checking…";
 "finderQuickOpenInstalled" = "Installed";
 "finderQuickOpenNotInstalled" = "Not Installed";
-"finderQuickOpenFailedTitle" = "Could Not Open Folder";
-"finderQuickOpenFailedDetail" = "OmniDock could not open the current folder with “%@”. %@";
+"finderQuickOpenFailedTitle" = "Could Not Open in App";
+"finderQuickOpenFailedDetail" = "OmniDock could not open the selected Finder item or current folder with “%@”. %@";
 "finderQuickOpenApplicationMissing" = "The application is no longer available.";
 "finderQuickCommandsTitle" = "Quick Commands";
 "finderQuickCommandsDetail" = "Choose which commands appear in Finder contextual menus.";

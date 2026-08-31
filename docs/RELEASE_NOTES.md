@@ -1,6 +1,6 @@
-# OmniDock 1.2.6
+# OmniDock 1.2.7
 
-- Encrypt clipboard history stored on your Mac and keep paste actions tied to their intended app.
-- Harden automatic updates and Finder commands around trusted packages and folders you have granted access to.
-- Refine window dragging and resizing, including precise Escape handling and smoother size HUD behavior.
-- Add required privacy declarations and a single version source for safer, more consistent releases.
+- Add a Launch at Login setting on macOS 13 and later.
+- Refine Finder menus with icons and independent grouping for New File, Open With, and hidden-file commands.
+- Open selected Finder items, or the current folder when nothing is selected, with compatible chosen apps; new documents begin inline rename.
+- Improve encrypted clipboard-history reliability by keeping its key beside the local archive with owner-only file permissions.

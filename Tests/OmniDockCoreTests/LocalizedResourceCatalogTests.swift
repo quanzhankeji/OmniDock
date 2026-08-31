@@ -152,11 +152,15 @@ final class LocalizedResourceCatalogTests: XCTestCase {
         XCTAssertEqual(LocalizedResourceCatalog.text(.tabSettings, language: .en), "Settings")
         XCTAssertEqual(LocalizedResourceCatalog.text(.tabFinderExtension, language: .en), "Finder Extension")
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderExtensionEnableTitle, language: .en), "Enable")
+        XCTAssertEqual(
+            LocalizedResourceCatalog.text(.finderExtensionEnableDetail, language: .en),
+            "Extend Finder contextual menus with additional commands. Menu availability in cloud folders depends on Finder and the file provider."
+        )
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderExtensionOpenSettings, language: .en), "Open Finder Extensions")
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenTitle, language: .en), "Quick Actions")
         XCTAssertEqual(
             LocalizedResourceCatalog.text(.finderQuickOpenDetail, language: .en),
-            "Open the current Finder folder with apps you choose."
+            "Open selected Finder items, or the current folder when nothing is selected, with apps you choose."
         )
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenLoading, language: .en), "Checking…")
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenInstalled, language: .en), "Installed")
@@ -164,11 +168,15 @@ final class LocalizedResourceCatalogTests: XCTestCase {
         XCTAssertEqual(LocalizedResourceCatalog.text(.tabSettings, language: .zhHans), "设置")
         XCTAssertEqual(LocalizedResourceCatalog.text(.tabFinderExtension, language: .zhHans), "右键扩展")
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderExtensionEnableTitle, language: .zhHans), "启用")
+        XCTAssertEqual(
+            LocalizedResourceCatalog.text(.finderExtensionEnableDetail, language: .zhHans),
+            "扩展 Finder 右键菜单能力；云端文件夹是否显示菜单取决于 Finder 与文件提供方。"
+        )
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderExtensionOpenSettings, language: .zhHans), "打开 Finder 扩展设置")
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenTitle, language: .zhHans), "快捷操作")
         XCTAssertEqual(
             LocalizedResourceCatalog.text(.finderQuickOpenDetail, language: .zhHans),
-            "使用选择的应用打开当前 Finder 文件夹。"
+            "使用选择的应用打开所选 Finder 项目；没有选择项目时则打开当前文件夹。"
         )
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenLoading, language: .zhHans), "正在检测…")
         XCTAssertEqual(LocalizedResourceCatalog.text(.finderQuickOpenInstalled, language: .zhHans), "已安装")
