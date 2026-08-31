@@ -240,8 +240,9 @@ final class FinderMenuExtension: FIFinderSync {
         case .contextualMenuForContainer:
             return FinderMenuContext(
                 location: .folderBackground,
-                currentDirectory: FinderObservationRoots.folderURL(
-                    targetedURL: controller.targetedURL()
+                currentDirectory: FinderObservationRoots.containerURL(
+                    targetedURL: controller.targetedURL(),
+                    selectedURLs: controller.selectedItemURLs() ?? []
                 ),
                 selectedURLs: []
             )
