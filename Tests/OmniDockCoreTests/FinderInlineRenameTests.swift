@@ -75,6 +75,8 @@ final class FinderInlineRenameTests: XCTestCase {
         var activator = FinderInlineRenameActivator()
         activator.frontmostBundleIdentifier = { frontmost }
         activator.isSecureInputEnabled = { false }
+        activator.hasAccessibilityAccess = { true }
+        activator.bringFinderForward = {}
         activator.postReturnKey = { returnCount += 1 }
         activator.now = { currentTime }
         activator.schedule = { delay, work in
@@ -102,6 +104,8 @@ final class FinderInlineRenameTests: XCTestCase {
         var activator = FinderInlineRenameActivator()
         activator.frontmostBundleIdentifier = { "com.apple.Safari" }
         activator.isSecureInputEnabled = { false }
+        activator.hasAccessibilityAccess = { true }
+        activator.bringFinderForward = {}
         activator.postReturnKey = { returnCount += 1 }
         activator.now = { currentTime }
         activator.schedule = { delay, work in
@@ -119,5 +123,72 @@ final class FinderInlineRenameTests: XCTestCase {
         }
 
         XCTAssertEqual(returnCount, 0)
+    }
+
+    func testNothingIsPostedWithoutAccessibilityAccess() {
+        // The system drops synthetic keys from an untrusted app, so there is
+        // nothing to wait for: stop instead of polling to the deadline.
+        var scheduled = 0
+        var returnCount = 0
+        var didActivateFinder = false
+
+        var activator = FinderInlineRenameActivator()
+        activator.frontmostBundleIdentifier = { "com.apple.finder" }
+        activator.isSecureInputEnabled = { false }
+        activator.hasAccessibilityAccess = { false }
+        activator.bringFinderForward = { didActivateFinder = true }
+        activator.postReturnKey = { returnCount += 1 }
+        activator.now = { self.now }
+        activator.schedule = { _, _ in scheduled += 1 }
+
+        activator.begin()
+
+        XCTAssertEqual(returnCount, 0)
+        XCTAssertEqual(scheduled, 0)
+        XCTAssertFalse(didActivateFinder)
+    }
+
+    func testSecureInputStopsBeforeAskingForAccessibility() {
+        // Asking would put a permission prompt on screen for a keystroke that
+        // could not be delivered anyway.
+        var didCheckAccess = false
+        var returnCount = 0
+
+        var activator = FinderInlineRenameActivator()
+        activator.frontmostBundleIdentifier = { "com.apple.finder" }
+        activator.isSecureInputEnabled = { true }
+        activator.hasAccessibilityAccess = {
+            didCheckAccess = true
+            return true
+        }
+        activator.bringFinderForward = {}
+        activator.postReturnKey = { returnCount += 1 }
+        activator.now = { self.now }
+        activator.schedule = { _, _ in }
+
+        activator.begin()
+
+        XCTAssertFalse(didCheckAccess)
+        XCTAssertEqual(returnCount, 0)
+    }
+
+    func testFinderIsAskedForwardBeforeTheWaitBegins() {
+        var order: [String] = []
+
+        var activator = FinderInlineRenameActivator()
+        activator.frontmostBundleIdentifier = {
+            order.append("checked")
+            return "com.apple.finder"
+        }
+        activator.isSecureInputEnabled = { false }
+        activator.hasAccessibilityAccess = { true }
+        activator.bringFinderForward = { order.append("activated") }
+        activator.postReturnKey = { order.append("return") }
+        activator.now = { self.now }
+        activator.schedule = { _, _ in }
+
+        activator.begin()
+
+        XCTAssertEqual(order, ["activated", "checked", "return"])
     }
 }

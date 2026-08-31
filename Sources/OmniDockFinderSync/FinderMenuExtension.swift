@@ -149,11 +149,11 @@ final class FinderMenuExtension: FIFinderSync {
             return
         }
 
+        let directory = resolvedDirectory(for: binding)
+
         switch binding.action {
         case .copyCurrentDirectoryPath:
-            copy(FinderPathList.text(
-                for: binding.context.currentDirectory.map { [$0] } ?? []
-            ))
+            copy(FinderPathList.text(for: directory.map { [$0] } ?? []))
         case .copySelectedPaths:
             copy(FinderPathList.text(for: binding.context.selectedURLs))
         case .showHiddenFiles:
@@ -161,7 +161,7 @@ final class FinderMenuExtension: FIFinderSync {
         case .hideHiddenFiles:
             forward(.setHiddenFilesVisible(false))
         case let .createDocument(preset):
-            guard let directory = binding.context.currentDirectory else {
+            guard let directory else {
                 return
             }
             forward(.createDocument(
@@ -169,7 +169,7 @@ final class FinderMenuExtension: FIFinderSync {
                 directoryDisplayPath: directory.path
             ))
         case let .openDirectory(shortcut):
-            guard let directory = binding.context.currentDirectory else {
+            guard let directory else {
                 return
             }
             forward(.openDirectory(
@@ -230,6 +230,27 @@ final class FinderMenuExtension: FIFinderSync {
         return item
     }
 
+    // The folder was worked out while the menu was being built, when Finder
+    // had not yet said which items were selected. Ask again now that the menu
+    // has closed: with both answers in hand a target that is itself selected
+    // can be recognised as a click on empty space. The value captured earlier
+    // stands in when Finder no longer reports a target at all.
+    private func resolvedDirectory(
+        for binding: FinderMenuCommandBinding
+    ) -> URL? {
+        guard binding.context.location == .folderBackground else {
+            return binding.context.currentDirectory
+        }
+        let controller = FIFinderSyncController.default()
+        guard let targetedURL = controller.targetedURL() else {
+            return binding.context.currentDirectory
+        }
+        return FinderObservationRoots.containerURL(
+            targetedURL: targetedURL,
+            selectedURLs: controller.selectedItemURLs() ?? []
+        )
+    }
+
     private func currentPreferences() -> FinderMenuPreferences {
         menuCache.preferences { self.preferencesStore.snapshot() }
     }
@@ -240,9 +261,11 @@ final class FinderMenuExtension: FIFinderSync {
         case .contextualMenuForContainer:
             return FinderMenuContext(
                 location: .folderBackground,
-                currentDirectory: FinderObservationRoots.containerURL(
-                    targetedURL: controller.targetedURL(),
-                    selectedURLs: controller.selectedItemURLs() ?? []
+                // Resolved again when the item is clicked. Finder is blocked
+                // on this menu right now, so it is asked one question here and
+                // the rest once it is free.
+                currentDirectory: FinderObservationRoots.folderURL(
+                    targetedURL: controller.targetedURL()
                 ),
                 selectedURLs: []
             )

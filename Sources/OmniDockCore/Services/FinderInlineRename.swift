@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Carbon.HIToolbox
 import CoreGraphics
 
@@ -44,11 +45,48 @@ enum FinderInlineRenamePolicy {
     }
 }
 
+// Synthetic key events are dropped unless the app is trusted for accessibility.
+// Without the permission the rename simply never starts, which looks like a
+// broken feature, so ask for it - once per launch. Repeating the request every
+// time a document is created would nag someone who has already decided against
+// it, and the decision is theirs to make in System Settings.
+private final class AccessibilityAuthorizationRequest: @unchecked Sendable {
+    private let lock = NSLock()
+    private var hasAsked = false
+
+    func isGranted() -> Bool {
+        if AXIsProcessTrusted() {
+            return true
+        }
+        lock.lock()
+        let shouldAsk = !hasAsked
+        hasAsked = true
+        lock.unlock()
+        guard shouldAsk else {
+            return false
+        }
+        let prompt = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        return AXIsProcessTrustedWithOptions([prompt: true] as CFDictionary)
+    }
+}
+
+private let accessibilityAuthorization = AccessibilityAuthorizationRequest()
+
 struct FinderInlineRenameActivator {
     var frontmostBundleIdentifier: () -> String? = {
         NSWorkspace.shared.frontmostApplication?.bundleIdentifier
     }
     var isSecureInputEnabled: () -> Bool = { IsSecureEventInputEnabled() }
+    var hasAccessibilityAccess: () -> Bool = { accessibilityAuthorization.isGranted() }
+    // Revealing the file asks Finder to come forward, but that request competes
+    // with whatever else is activating. Asking the application directly as well
+    // makes the difference between a rename that starts and one that times out
+    // waiting for a Finder that never quite arrives.
+    var bringFinderForward: () -> Void = {
+        NSRunningApplication.runningApplications(
+            withBundleIdentifier: FinderInlineRenamePolicy.finderBundleIdentifier
+        ).first?.activate(options: [])
+    }
     var postReturnKey: () -> Void = FinderInlineRenameActivator.postReturn
     var now: () -> Date = Date.init
     var schedule: (TimeInterval, @escaping () -> Void) -> Void = { delay, work in
@@ -56,6 +94,10 @@ struct FinderInlineRenameActivator {
     }
 
     func begin() {
+        guard !isSecureInputEnabled(), hasAccessibilityAccess() else {
+            return
+        }
+        bringFinderForward()
         waitForFinder(
             deadline: now().addingTimeInterval(
                 FinderInlineRenamePolicy.activationTimeout
@@ -81,11 +123,11 @@ struct FinderInlineRenameActivator {
         }
     }
 
-    // Posting needs the accessibility permission the clipboard palette already
-    // asks for. Without it the event is dropped by the system and the file just
-    // stays selected, which is why nothing here reports a failure.
+    // Posted at the HID layer, the level real hardware feeds into. A key put
+    // onto the session tap instead is delivered inconsistently to another
+    // application's window, which is exactly what this has to do.
     private static func postReturn() {
-        guard let source = CGEventSource(stateID: .combinedSessionState),
+        guard let source = CGEventSource(stateID: .hidSystemState),
               let keyDown = CGEvent(
                   keyboardEventSource: source,
                   virtualKey: CGKeyCode(kVK_Return),
@@ -99,7 +141,7 @@ struct FinderInlineRenameActivator {
         else {
             return
         }
-        keyDown.post(tap: .cgAnnotatedSessionEventTap)
-        keyUp.post(tap: .cgAnnotatedSessionEventTap)
+        keyDown.post(tap: .cghidEventTap)
+        keyUp.post(tap: .cghidEventTap)
     }
 }

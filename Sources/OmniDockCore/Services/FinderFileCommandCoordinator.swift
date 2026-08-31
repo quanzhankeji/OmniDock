@@ -160,14 +160,31 @@ final class FinderFileCommandCoordinator: NSObject {
         }
     }
 
+    // A command does not always name the folder to create in. Finder reports
+    // the highlighted item as the target for some right-clicks, and a document
+    // cannot be created inside a file, so fall back to the folder holding it.
+    // A path that does not exist is left alone: creating there fails with an
+    // error worth showing rather than quietly writing somewhere else.
+    nonisolated static func enclosingDirectory(
+        for displayPath: String,
+        fileManager: FileManager = .default
+    ) -> URL {
+        let url = URL(fileURLWithPath: displayPath).standardizedFileURL
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+            return url
+        }
+        return isDirectory.boolValue ? url : url.deletingLastPathComponent()
+    }
+
     private func createFile(
         fileExtension: String,
         directoryDisplayPath: String
     ) {
-        let directory = URL(
-            fileURLWithPath: directoryDisplayPath,
-            isDirectory: true
-        ).standardizedFileURL
+        let directory = Self.enclosingDirectory(
+            for: directoryDisplayPath,
+            fileManager: fileManager
+        )
 
         do {
             let file = try BlankDocumentFactory.create(
