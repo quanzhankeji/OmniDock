@@ -557,21 +557,25 @@ final class FinderExtensionSettingsView: NSView {
             detail: AppStrings.text(.finderQuickCommandCopyPathDetail),
             control: copyPathCommandSwitch
         ))
-        itemRows.addArrangedSubview(makeSettingRow(
-            title: AppStrings.text(.finderQuickCommandCopyItemsTitle),
-            detail: AppStrings.text(.finderQuickCommandCopyItemsDetail),
-            control: copyItemsCommandSwitch
-        ))
-        itemRows.addArrangedSubview(makeSettingRow(
-            title: AppStrings.text(.finderQuickCommandCutItemsTitle),
-            detail: AppStrings.text(.finderQuickCommandCutItemsDetail),
-            control: cutItemsCommandSwitch
-        ))
-        itemRows.addArrangedSubview(makeSettingRow(
-            title: AppStrings.text(.finderQuickCommandPasteItemsTitle),
-            detail: AppStrings.text(.finderQuickCommandPasteItemsDetail),
-            control: pasteItemsCommandSwitch
-        ))
+        // Withheld along with the commands themselves, so the panel cannot
+        // offer a switch that changes nothing.
+        if FinderItemTransferCommands.isAvailable {
+            itemRows.addArrangedSubview(makeSettingRow(
+                title: AppStrings.text(.finderQuickCommandCopyItemsTitle),
+                detail: AppStrings.text(.finderQuickCommandCopyItemsDetail),
+                control: copyItemsCommandSwitch
+            ))
+            itemRows.addArrangedSubview(makeSettingRow(
+                title: AppStrings.text(.finderQuickCommandCutItemsTitle),
+                detail: AppStrings.text(.finderQuickCommandCutItemsDetail),
+                control: cutItemsCommandSwitch
+            ))
+            itemRows.addArrangedSubview(makeSettingRow(
+                title: AppStrings.text(.finderQuickCommandPasteItemsTitle),
+                detail: AppStrings.text(.finderQuickCommandPasteItemsDetail),
+                control: pasteItemsCommandSwitch
+            ))
+        }
         itemRows.addArrangedSubview(makeSettingRow(
             title: AppStrings.text(.finderQuickCommandShowHiddenTitle),
             detail: AppStrings.text(.finderQuickCommandShowHiddenDetail),

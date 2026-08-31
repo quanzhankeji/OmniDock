@@ -45,7 +45,7 @@ final class FinderMenuExtension: FIFinderSync {
     }
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu? {
-        let preferences = menuCache.preferences { self.preferencesStore.snapshot() }
+        let preferences = currentPreferences()
         Self.logger.debug(
             "Finder requested \(Self.menuKindName(menuKind), privacy: .public); enabled: \(preferences.isEnabled)"
         )
@@ -143,7 +143,7 @@ final class FinderMenuExtension: FIFinderSync {
     }
 
     @objc private func performAction(_ sender: NSMenuItem) {
-        guard menuCache.preferences({ self.preferencesStore.snapshot() }).isEnabled,
+        guard currentPreferences().isEnabled,
               let binding = actionRegistry.consume(token: sender.tag)
         else {
             return
@@ -246,6 +246,15 @@ final class FinderMenuExtension: FIFinderSync {
         return item
     }
 
+    // One entry point for the cache: whichever caller runs first decides the
+    // cached value, so the withheld commands have to be applied here rather
+    // than at any single call site.
+    private func currentPreferences() -> FinderMenuPreferences {
+        menuCache.preferences {
+            FinderItemTransferCommands.withheld(from: self.preferencesStore.snapshot())
+        }
+    }
+
     private func context(for menuKind: FIMenuKind) -> FinderMenuContext? {
         let controller = FIFinderSyncController.default()
         switch menuKind {
@@ -295,9 +304,7 @@ final class FinderMenuExtension: FIFinderSync {
             guard let self else {
                 return
             }
-            let preferences = self.menuCache.preferences {
-                self.preferencesStore.snapshot()
-            }
+            let preferences = self.currentPreferences()
             guard preferences.isEnabled else {
                 return
             }
@@ -315,7 +322,7 @@ final class FinderMenuExtension: FIFinderSync {
     }
 
     private func configureObservationRoots() {
-        let preferences = menuCache.preferences { self.preferencesStore.snapshot() }
+        let preferences = currentPreferences()
         let roots = FinderObservationRoots.registeredURLs(
             authorizedDirectoryPaths: preferences.observationRootPaths
         )

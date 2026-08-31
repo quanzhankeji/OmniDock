@@ -686,6 +686,33 @@ struct FinderMenuPreferences: Codable, Equatable {
     }
 }
 
+// Copy, cut, and paste are withheld from the Finder menu. Right-clicking a
+// folder hangs Finder once files are on the pasteboard, and the cause is still
+// unidentified: the menu was stripped of every pasteboard access and the hang
+// survived, so it is not the extension reading the clipboard. Until that is
+// understood the commands stay out of reach rather than shipping a menu that
+// can freeze the Finder.
+//
+// Nothing is deleted - the actions, the stored preferences, and the app-side
+// handling all remain. Flipping this back puts them all in place again.
+enum FinderItemTransferCommands {
+    static let isAvailable = false
+
+    // Applied where the menu is built rather than where preferences are read,
+    // so the stored settings survive untouched and the app still knows how to
+    // run the commands the moment they are offered again.
+    static func withheld(from preferences: FinderMenuPreferences) -> FinderMenuPreferences {
+        guard !isAvailable else {
+            return preferences
+        }
+        var preferences = preferences
+        preferences.showsCopyItemsCommand = false
+        preferences.showsCutItemsCommand = false
+        preferences.showsPasteItemsCommand = false
+        return preferences
+    }
+}
+
 enum FinderObservationRoots {
     // A sandboxed process - the extension always, and the App Store build of
     // the app - gets its container back from homeDirectoryForCurrentUser, so
