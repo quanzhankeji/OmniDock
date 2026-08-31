@@ -340,7 +340,7 @@ final class FinderMenuTests: XCTestCase {
                 resolveApplication: { _ in URL(fileURLWithPath: "/Applications/Moved.app") },
                 acceptsDirectories: { _ in true }
             )
-            XCTAssertEqual(entries, [.action(.openDirectory(moved))], "\(location)")
+            XCTAssertEqual(entries, [.action(.openWithApplication(moved))], "\(location)")
         }
     }
 
@@ -538,29 +538,6 @@ final class FinderMenuTests: XCTestCase {
         )
     }
 
-    func testFinderCommandsCarryTheirRequiredMenuContext() {
-        let create = FinderMenuAction.createDocument(FinderDocumentPreset.defaultPresets[0])
-        XCTAssertTrue(create.isAvailable(in: .folderBackground))
-        XCTAssertFalse(create.isAvailable(in: .selection))
-        XCTAssertTrue(FinderMenuAction.copyCurrentDirectoryPath.isAvailable(in: .folderBackground))
-        XCTAssertFalse(FinderMenuAction.copyCurrentDirectoryPath.isAvailable(in: .selection))
-        XCTAssertTrue(FinderMenuAction.copySelectedPaths.isAvailable(in: .selection))
-        XCTAssertFalse(FinderMenuAction.copySelectedPaths.isAvailable(in: .folderBackground))
-        let shortcut = FinderLaunchShortcut(
-            displayName: "Sample App",
-            bundleURLString: URL(fileURLWithPath: "/Applications/Sample.app").absoluteString,
-            bundleIdentifier: "com.example.sample"
-        )
-        XCTAssertTrue(FinderMenuAction.openDirectory(shortcut).isAvailable(in: .selection))
-        XCTAssertFalse(
-            FinderMenuAction.openDirectory(shortcut).isAvailable(in: .folderBackground)
-        )
-        XCTAssertTrue(FinderMenuAction.showHiddenFiles.isAvailable(in: .folderBackground))
-        XCTAssertTrue(FinderMenuAction.showHiddenFiles.isAvailable(in: .selection))
-        XCTAssertTrue(FinderMenuAction.hideHiddenFiles.isAvailable(in: .folderBackground))
-        XCTAssertTrue(FinderMenuAction.hideHiddenFiles.isAvailable(in: .selection))
-    }
-
     func testItemMenuOnlyAppearsForSelectedItems() {
         let empty = FinderMenuContext(location: .selection, currentDirectory: nil, selectedURLs: [])
         let selected = FinderMenuContext(
@@ -608,7 +585,7 @@ final class FinderMenuTests: XCTestCase {
             ),
             [
                 .action(.copySelectedPaths),
-                .applicationSubmenu([.openDirectory(app)]),
+                .applicationSubmenu([.openWithApplication(app)]),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]
@@ -624,7 +601,7 @@ final class FinderMenuTests: XCTestCase {
             ),
             [
                 .action(.copySelectedPaths),
-                .action(.openDirectory(app)),
+                .action(.openWithApplication(app)),
                 .action(.showHiddenFiles),
                 .action(.hideHiddenFiles)
             ]
@@ -731,9 +708,9 @@ final class FinderMenuTests: XCTestCase {
             bundleIdentifier: "com.example.sample"
         )
         let request = FinderCommandEnvelope(
-            command: .openDirectory(
+            command: .openWithApplication(
                 shortcut: shortcut,
-                directoryDisplayPath: "/tmp"
+                displayPaths: ["/tmp"]
             )
         )
 
@@ -1484,6 +1461,70 @@ final class FinderMenuTests: XCTestCase {
         view.subviews.flatMap { child in
             (child as? NSScrollView).map { [$0] } ?? descendantScrollViews(in: child)
         }
+    }
+
+    func testASelectedFileKeepsDocumentOnlyApplicationsInTheMenu() {
+        // The folder filter must not reach a selected file: an editor that
+        // takes single documents is exactly what someone wants there.
+        let fileOnlyEditor = FinderLaunchShortcut(
+            displayName: "Single File Editor",
+            bundleURLString: URL(fileURLWithPath: "/Applications/Single.app").absoluteString,
+            bundleIdentifier: "com.example.single"
+        )
+        let context = FinderMenuContext(
+            location: .selection,
+            currentDirectory: URL(fileURLWithPath: "/tmp/OmniDock", isDirectory: true),
+            selectedURLs: [URL(fileURLWithPath: "/tmp/OmniDock/Notes.md")]
+        )
+
+        let entries = FinderMenuCatalog.entries(
+            for: context,
+            preferences: FinderMenuPreferences(
+                isEnabled: true,
+                groupsLaunchShortcuts: false,
+                launchShortcuts: [fileOnlyEditor],
+                documentPresets: [],
+                showsCopyPathCommand: false,
+                showsShowHiddenFilesCommand: false,
+                showsHideHiddenFilesCommand: false
+            ),
+            resolveApplication: { _ in URL(fileURLWithPath: "/Applications/Single.app") },
+            acceptsDirectories: { _ in false }
+        )
+
+        XCTAssertEqual(entries, [.action(.openWithApplication(fileOnlyEditor))])
+    }
+
+    func testASelectedFolderStillHidesApplicationsThatRefuseFolders() {
+        let fileOnlyEditor = FinderLaunchShortcut(
+            displayName: "Single File Editor",
+            bundleURLString: URL(fileURLWithPath: "/Applications/Single.app").absoluteString,
+            bundleIdentifier: "com.example.single"
+        )
+        let context = FinderMenuContext(
+            location: .selection,
+            currentDirectory: URL(fileURLWithPath: "/tmp/OmniDock", isDirectory: true),
+            selectedURLs: [
+                URL(fileURLWithPath: "/tmp/OmniDock/Archive", isDirectory: true)
+            ]
+        )
+
+        let entries = FinderMenuCatalog.entries(
+            for: context,
+            preferences: FinderMenuPreferences(
+                isEnabled: true,
+                groupsLaunchShortcuts: false,
+                launchShortcuts: [fileOnlyEditor],
+                documentPresets: [],
+                showsCopyPathCommand: false,
+                showsShowHiddenFilesCommand: false,
+                showsHideHiddenFilesCommand: false
+            ),
+            resolveApplication: { _ in URL(fileURLWithPath: "/Applications/Single.app") },
+            acceptsDirectories: { _ in false }
+        )
+
+        XCTAssertTrue(entries.isEmpty)
     }
 }
 

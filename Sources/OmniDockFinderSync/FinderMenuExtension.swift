@@ -168,13 +168,18 @@ final class FinderMenuExtension: FIFinderSync {
                 fileExtension: preset.fileExtension,
                 directoryDisplayPath: directory.path
             ))
-        case let .openDirectory(shortcut):
-            guard let directory else {
+        case let .openWithApplication(shortcut):
+            // The selection is what the user pointed at; the folder on screen
+            // is the target only when nothing is selected.
+            let targets = binding.context.location == .selection
+                ? binding.context.selectedURLs
+                : directory.map { [$0] } ?? []
+            guard !targets.isEmpty else {
                 return
             }
-            forward(.openDirectory(
+            forward(.openWithApplication(
                 shortcut: shortcut,
-                directoryDisplayPath: directory.path
+                displayPaths: targets.map(\.path)
             ))
         }
     }
@@ -201,7 +206,7 @@ final class FinderMenuExtension: FIFinderSync {
             // symbol when a dozen of them are listed together.
             return menuCache.documentIcon(forFileExtension: preset.fileExtension)
                 ?? Self.symbol("doc")
-        case let .openDirectory(shortcut):
+        case let .openWithApplication(shortcut):
             // Resolved, not the stored path: an application that moved still
             // shows its own icon.
             guard let applicationURL = menuCache.applicationURL(for: shortcut) else {

@@ -105,9 +105,9 @@ final class FinderCommandCoordinatorTests: XCTestCase {
             launchShortcuts: [shortcut]
         ))
         let mailbox = FinderCommandMailbox(directoryProvider: { home })
-        let request = FinderCommandEnvelope(command: .openDirectory(
+        let request = FinderCommandEnvelope(command: .openWithApplication(
             shortcut: shortcut,
-            directoryDisplayPath: downloads.path
+            displayPaths: [downloads.path]
         ))
         try mailbox.enqueue(request)
 
@@ -117,8 +117,8 @@ final class FinderCommandCoordinatorTests: XCTestCase {
             requestMailbox: mailbox,
             preferencesStore: preferences,
             directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
-            openApplication: { directoryURL, applicationURL, completion in
-                openedDirectory = directoryURL
+            openApplication: { targetURLs, applicationURL, completion in
+                openedDirectory = targetURLs.first
                 openedApplication = applicationURL
                 completion(nil)
             }
@@ -129,7 +129,7 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         XCTAssertEqual(openedApplication, application)
     }
 
-    func testCoordinatorNeverPassesAFileToAQuickOpenApplication() throws {
+    func testASelectedFileIsHandedToTheApplicationItself() throws {
         let home = try makeTemporaryDirectory()
         let downloads = home.appendingPathComponent("Downloads", isDirectory: true)
         let selectedFile = downloads.appendingPathComponent("Installer.dmg")
@@ -149,21 +149,23 @@ final class FinderCommandCoordinatorTests: XCTestCase {
             launchShortcuts: [shortcut]
         ))
         let mailbox = FinderCommandMailbox(directoryProvider: { home })
-        let request = FinderCommandEnvelope(command: .openDirectory(
+        let request = FinderCommandEnvelope(command: .openWithApplication(
             shortcut: shortcut,
-            directoryDisplayPath: selectedFile.path
+            displayPaths: [selectedFile.path]
         ))
         try mailbox.enqueue(request)
 
-        var didOpenApplication = false
+        var openedTargets: [URL] = []
         FinderFileCommandCoordinator(
             requestMailbox: mailbox,
             preferencesStore: preferences,
             directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
-            openApplication: { _, _, _ in didOpenApplication = true }
+            openApplication: { targetURLs, _, _ in openedTargets = targetURLs }
         ).handle(requestID: request.id)
 
-        XCTAssertFalse(didOpenApplication)
+        // Picking a file and choosing an application means that file, the way
+        // Open With does everywhere else.
+        XCTAssertEqual(openedTargets, [selectedFile.standardizedFileURL])
     }
 
     func testCreatingADocumentInAnUngrantedFolderDoesNotAsk() throws {
@@ -249,9 +251,9 @@ final class FinderCommandCoordinatorTests: XCTestCase {
             launchShortcuts: [shortcut]
         ))
         let mailbox = FinderCommandMailbox(directoryProvider: { root })
-        let request = FinderCommandEnvelope(command: .openDirectory(
+        let request = FinderCommandEnvelope(command: .openWithApplication(
             shortcut: shortcut,
-            directoryDisplayPath: root.path
+            displayPaths: [root.path]
         ))
         try mailbox.enqueue(request)
 
@@ -262,8 +264,8 @@ final class FinderCommandCoordinatorTests: XCTestCase {
             preferencesStore: preferences,
             directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
             requestDirectoryAccess: { promptCount += 1; return $0 },
-            openApplication: { directoryURL, _, completion in
-                openedDirectory = directoryURL
+            openApplication: { targetURLs, _, completion in
+                openedDirectory = targetURLs.first
                 completion(nil)
             }
         ).handle(requestID: request.id)

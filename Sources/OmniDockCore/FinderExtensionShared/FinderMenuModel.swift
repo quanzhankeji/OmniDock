@@ -6,18 +6,8 @@ enum FinderMenuAction: Equatable {
     case copySelectedPaths
     case showHiddenFiles
     case hideHiddenFiles
-    case openDirectory(FinderLaunchShortcut)
+    case openWithApplication(FinderLaunchShortcut)
 
-    func isAvailable(in location: FinderMenuLocation) -> Bool {
-        switch self {
-        case .createDocument, .copyCurrentDirectoryPath:
-            return location == .folderBackground
-        case .copySelectedPaths, .openDirectory:
-            return location == .selection
-        case .showHiddenFiles, .hideHiddenFiles:
-            return true
-        }
-    }
 }
 
 enum FinderMenuLocation: String, Codable, Equatable {
@@ -29,6 +19,17 @@ struct FinderMenuContext: Equatable {
     let location: FinderMenuLocation
     let currentDirectory: URL?
     let selectedURLs: [URL]
+
+    // What the application is handed: the items the user picked, or the folder
+    // the menu was opened in when nothing is selected.
+    var applicationTargets: [URL] {
+        switch location {
+        case .folderBackground:
+            return currentDirectory.map { [$0] } ?? []
+        case .selection:
+            return selectedURLs
+        }
+    }
 
     init(
         location: FinderMenuLocation,
@@ -107,9 +108,27 @@ enum FinderMenuCatalog {
         resolveApplication: (FinderLaunchShortcut) -> URL?,
         acceptsDirectories: (URL) -> Bool
     ) -> [FinderMenuEntry] {
-        guard context.currentDirectory != nil else {
+        let targets = context.applicationTargets
+        guard !targets.isEmpty else {
             return []
         }
+        // Only worth asking when every target is a folder. An application that
+        // handles single documents does nothing useful with one, but it is the
+        // obvious choice for a selected file, and the answer for a folder says
+        // nothing about that.
+        //
+        // The container menu is decided by where it was opened rather than by
+        // inspecting the URL: whether a file URL reports itself as a directory
+        // depends on how it was built, and the folder on screen is a folder no
+        // matter which form it arrived in.
+        let handsOverFoldersOnly: Bool = {
+            switch context.location {
+            case .folderBackground:
+                return true
+            case .selection:
+                return targets.allSatisfy(\.hasDirectoryPath)
+            }
+        }()
         let actions = preferences.launchShortcuts
             .filter { shortcut in
                 guard shortcut.isEnabled,
@@ -117,12 +136,9 @@ enum FinderMenuCatalog {
                 else {
                     return false
                 }
-                // The command hands over a folder, so an application that only
-                // takes single documents is left out rather than offered as a
-                // command that does nothing.
-                return acceptsDirectories(applicationURL)
+                return handsOverFoldersOnly ? acceptsDirectories(applicationURL) : true
             }
-            .map(FinderMenuAction.openDirectory)
+            .map(FinderMenuAction.openWithApplication)
         guard !actions.isEmpty else {
             return []
         }
@@ -243,7 +259,7 @@ enum FinderMenuLabels {
             return preset.fileExtension == "txt"
                 ? "Text File"
                 : preset.displayName
-        case let (.openDirectory(shortcut), _):
+        case let (.openWithApplication(shortcut), _):
             return shortcut.displayName
         }
     }

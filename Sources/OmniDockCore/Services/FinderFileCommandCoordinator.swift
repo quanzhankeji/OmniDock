@@ -17,7 +17,7 @@ final class FinderFileCommandCoordinator: NSObject {
     private let requestDirectoryAccess: @MainActor (URL) -> URL?
     private let beginInlineRename: () -> Void
     private let openApplication: (
-        _ directoryURL: URL,
+        _ targetURLs: [URL],
         _ applicationURL: URL,
         _ completion: @escaping (Error?) -> Void
     ) -> Void
@@ -38,14 +38,14 @@ final class FinderFileCommandCoordinator: NSObject {
             FinderInlineRenameActivator().begin()
         },
         openApplication: @escaping (
-            _ directoryURL: URL,
+            _ targetURLs: [URL],
             _ applicationURL: URL,
             _ completion: @escaping (Error?) -> Void
-        ) -> Void = { directoryURL, applicationURL, completion in
+        ) -> Void = { targetURLs, applicationURL, completion in
             let configuration = NSWorkspace.OpenConfiguration()
             configuration.activates = true
             NSWorkspace.shared.open(
-                [directoryURL],
+                targetURLs,
                 withApplicationAt: applicationURL,
                 configuration: configuration
             ) { _, error in
@@ -142,19 +142,15 @@ final class FinderFileCommandCoordinator: NSObject {
                 return
             }
             hiddenFilesController.setHiddenFilesVisible(isVisible)
-        case let .openDirectory(requestedShortcut, directoryDisplayPath):
+        case let .openWithApplication(requestedShortcut, displayPaths):
             guard let shortcut = FinderCommandAuthorizationPolicy.launchShortcut(
                 matching: requestedShortcut,
                 preferences: preferences
             ) else {
                 return
             }
-            let directory = URL(
-                fileURLWithPath: directoryDisplayPath,
-                isDirectory: true
-            ).standardizedFileURL
-            openDirectory(
-                directory,
+            openTargets(
+                displayPaths.map { URL(fileURLWithPath: $0).standardizedFileURL },
                 with: shortcut
             )
         }
@@ -309,17 +305,6 @@ final class FinderFileCommandCoordinator: NSObject {
         }
     }
 
-    // The sources come from the pasteboard at the moment the command runs, the
-    // same thing Finder pastes, so nothing about them travels in the request.
-
-
-    // Copying an item into the folder it already lives in is never a conflict:
-    // there is nothing to replace, because the only match is the item itself.
-
-
-
-    // "Report.txt" becomes "Report 2.txt" rather than overwriting anything.
-
     // Only the new-document commands land here; a paste reveals its own items
     // without arming the rename, because a pasted file already has the name the
     // user chose for it.
@@ -338,15 +323,15 @@ final class FinderFileCommandCoordinator: NSObject {
             && (error.code == Int(EACCES) || error.code == Int(EPERM))
     }
 
-    private func openDirectory(
-        _ directoryURL: URL,
+    // Files and folders alike: the user picked what to open, and an
+    // application that cannot take one says so itself. Refusing anything that
+    // was not a folder used to end here silently, with nothing opened and
+    // nothing said.
+    private func openTargets(
+        _ targets: [URL],
         with shortcut: FinderLaunchShortcut
     ) {
-        var isDirectory = ObjCBool(false)
-        guard fileManager.fileExists(
-            atPath: directoryURL.path,
-            isDirectory: &isDirectory
-        ), isDirectory.boolValue else {
+        guard !targets.isEmpty else {
             return
         }
 
@@ -361,7 +346,7 @@ final class FinderFileCommandCoordinator: NSObject {
             return
         }
 
-        openApplication(directoryURL, applicationURL) { [weak self] error in
+        openApplication(targets, applicationURL) { [weak self] error in
             guard let error else {
                 return
             }

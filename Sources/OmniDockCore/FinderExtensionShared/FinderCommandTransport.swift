@@ -45,9 +45,11 @@ enum FinderCommand: Codable, Equatable {
         directoryDisplayPath: String
     )
     case setHiddenFilesVisible(Bool)
-    case openDirectory(
+    // Every selected item travels: opening three folders in an editor should
+    // open three, not the first one.
+    case openWithApplication(
         shortcut: FinderLaunchShortcut,
-        directoryDisplayPath: String
+        displayPaths: [String]
     )
 }
 
