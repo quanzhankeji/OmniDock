@@ -215,6 +215,13 @@ enum FinderMenuCatalog {
         for context: FinderMenuContext,
         preferences: FinderMenuPreferences
     ) -> [FinderMenuEntry] {
+        // These change what the window is showing, not what was clicked. On a
+        // selected file or folder they read as something that will be done to
+        // it, so they belong on the empty area alone.
+        guard context.location == .folderBackground else {
+            return []
+        }
+
         var actions: [FinderMenuAction] = []
         if preferences.showsShowHiddenFilesCommand {
             actions.append(.showHiddenFiles)

@@ -538,6 +538,46 @@ final class FinderMenuTests: XCTestCase {
         )
     }
 
+    func testHiddenFileCommandsBelongToTheEmptyAreaOnly() {
+        let preferences = FinderMenuPreferences(
+            isEnabled: true,
+            launchShortcuts: [],
+            documentPresets: [],
+            showsCopyPathCommand: false
+        )
+        let folder = URL(fileURLWithPath: "/tmp/OmniDock", isDirectory: true)
+
+        let onEmptyArea = FinderMenuCatalog.entries(
+            for: FinderMenuContext(
+                location: .folderBackground,
+                currentDirectory: folder,
+                selectedURLs: []
+            ),
+            preferences: preferences
+        )
+        XCTAssertEqual(
+            onEmptyArea,
+            [.action(.showHiddenFiles), .action(.hideHiddenFiles)]
+        )
+
+        // They change what the window is showing, so on a selected item they
+        // would read as something about to be done to it.
+        for selected in [
+            folder.appendingPathComponent("Notes.md"),
+            folder.appendingPathComponent("Archive", isDirectory: true)
+        ] {
+            let onSelection = FinderMenuCatalog.entries(
+                for: FinderMenuContext(
+                    location: .selection,
+                    currentDirectory: folder,
+                    selectedURLs: [selected]
+                ),
+                preferences: preferences
+            )
+            XCTAssertTrue(onSelection.isEmpty, "\(selected.lastPathComponent)")
+        }
+    }
+
     func testItemMenuOnlyAppearsForSelectedItems() {
         let empty = FinderMenuContext(location: .selection, currentDirectory: nil, selectedURLs: [])
         let selected = FinderMenuContext(
@@ -550,11 +590,9 @@ final class FinderMenuTests: XCTestCase {
         XCTAssertTrue(FinderMenuCatalog.entries(for: empty, preferences: enabled).isEmpty)
         XCTAssertEqual(
             FinderMenuCatalog.entries(for: selected, preferences: enabled),
-            [
-                .action(.copySelectedPaths),
-                .action(.showHiddenFiles),
-                .action(.hideHiddenFiles)
-            ]
+            // The hidden-file commands change what the window shows rather
+            // than acting on the selection, so they stay off this menu.
+            [.action(.copySelectedPaths)]
         )
         XCTAssertTrue(FinderMenuCatalog.entries(
             for: selected,
@@ -585,9 +623,7 @@ final class FinderMenuTests: XCTestCase {
             ),
             [
                 .action(.copySelectedPaths),
-                .applicationSubmenu([.openWithApplication(app)]),
-                .action(.showHiddenFiles),
-                .action(.hideHiddenFiles)
+                .applicationSubmenu([.openWithApplication(app)])
             ]
         )
         XCTAssertEqual(
@@ -601,9 +637,7 @@ final class FinderMenuTests: XCTestCase {
             ),
             [
                 .action(.copySelectedPaths),
-                .action(.openWithApplication(app)),
-                .action(.showHiddenFiles),
-                .action(.hideHiddenFiles)
+                .action(.openWithApplication(app))
             ]
         )
     }
@@ -1215,11 +1249,7 @@ final class FinderMenuTests: XCTestCase {
                     launchShortcuts: [disabled]
                 )
             ),
-            [
-                .action(.copySelectedPaths),
-                .action(.showHiddenFiles),
-                .action(.hideHiddenFiles)
-            ]
+            [.action(.copySelectedPaths)]
         )
     }
 
