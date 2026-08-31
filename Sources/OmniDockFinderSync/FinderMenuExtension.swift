@@ -246,10 +246,6 @@ final class FinderMenuExtension: FIFinderSync {
         return item
     }
 
-    private static func pasteboardHasFiles() -> Bool {
-        FinderItemPasteboard.hasFiles()
-    }
-
     private func context(for menuKind: FIMenuKind) -> FinderMenuContext? {
         let controller = FIFinderSyncController.default()
         switch menuKind {
@@ -260,7 +256,11 @@ final class FinderMenuExtension: FIFinderSync {
                     targetedURL: controller.targetedURL()
                 ),
                 selectedURLs: [],
-                pasteboardHasFiles: Self.pasteboardHasFiles()
+                // Deliberately not asked of the pasteboard. Reading it here
+                // runs while Finder blocks on this menu, and the answer only
+                // decides whether one item looks dimmed. Offer the item always;
+                // pasting with nothing on the pasteboard does nothing.
+                pasteboardHasFiles: true
             )
         case .contextualMenuForItems:
             let selectedURLs = controller.selectedItemURLs() ?? []
