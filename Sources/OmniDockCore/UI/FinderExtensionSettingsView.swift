@@ -62,9 +62,6 @@ final class FinderExtensionSettingsView: NSView {
     private var groupingTitleLabel: NSTextField?
     private var groupingDetailLabel: NSTextField?
     private let copyPathCommandSwitch = FinderSettingsSwitch()
-    private let copyItemsCommandSwitch = FinderSettingsSwitch()
-    private let cutItemsCommandSwitch = FinderSettingsSwitch()
-    private let pasteItemsCommandSwitch = FinderSettingsSwitch()
     private let showHiddenFilesCommandSwitch = FinderSettingsSwitch()
     private let hideHiddenFilesCommandSwitch = FinderSettingsSwitch()
     private let setupView = NSStackView()
@@ -106,9 +103,6 @@ final class FinderExtensionSettingsView: NSView {
     func reload() {
         masterSwitch.state = settings.finderExtensionEnabled ? .on : .off
         copyPathCommandSwitch.state = settings.finderCopyPathCommand ? .on : .off
-        copyItemsCommandSwitch.state = settings.finderCopyItemsCommand ? .on : .off
-        cutItemsCommandSwitch.state = settings.finderCutItemsCommand ? .on : .off
-        pasteItemsCommandSwitch.state = settings.finderPasteItemsCommand ? .on : .off
         showHiddenFilesCommandSwitch.state = settings.finderShowHiddenFilesCommand ? .on : .off
         hideHiddenFilesCommandSwitch.state = settings.finderHideHiddenFilesCommand ? .on : .off
         setupView.isHidden = !FinderExtensionActivation.requiresManualActivation(
@@ -146,12 +140,6 @@ final class FinderExtensionSettingsView: NSView {
         masterSwitch.action = #selector(toggleExtension(_:))
         copyPathCommandSwitch.target = self
         copyPathCommandSwitch.action = #selector(toggleCopyPathCommand(_:))
-        copyItemsCommandSwitch.target = self
-        copyItemsCommandSwitch.action = #selector(toggleCopyItemsCommand(_:))
-        cutItemsCommandSwitch.target = self
-        cutItemsCommandSwitch.action = #selector(toggleCutItemsCommand(_:))
-        pasteItemsCommandSwitch.target = self
-        pasteItemsCommandSwitch.action = #selector(togglePasteItemsCommand(_:))
         showHiddenFilesCommandSwitch.target = self
         showHiddenFilesCommandSwitch.action = #selector(toggleShowHiddenFilesCommand(_:))
         hideHiddenFilesCommandSwitch.target = self
@@ -557,25 +545,6 @@ final class FinderExtensionSettingsView: NSView {
             detail: AppStrings.text(.finderQuickCommandCopyPathDetail),
             control: copyPathCommandSwitch
         ))
-        // Withheld along with the commands themselves, so the panel cannot
-        // offer a switch that changes nothing.
-        if FinderItemTransferCommands.isAvailable {
-            itemRows.addArrangedSubview(makeSettingRow(
-                title: AppStrings.text(.finderQuickCommandCopyItemsTitle),
-                detail: AppStrings.text(.finderQuickCommandCopyItemsDetail),
-                control: copyItemsCommandSwitch
-            ))
-            itemRows.addArrangedSubview(makeSettingRow(
-                title: AppStrings.text(.finderQuickCommandCutItemsTitle),
-                detail: AppStrings.text(.finderQuickCommandCutItemsDetail),
-                control: cutItemsCommandSwitch
-            ))
-            itemRows.addArrangedSubview(makeSettingRow(
-                title: AppStrings.text(.finderQuickCommandPasteItemsTitle),
-                detail: AppStrings.text(.finderQuickCommandPasteItemsDetail),
-                control: pasteItemsCommandSwitch
-            ))
-        }
         itemRows.addArrangedSubview(makeSettingRow(
             title: AppStrings.text(.finderQuickCommandShowHiddenTitle),
             detail: AppStrings.text(.finderQuickCommandShowHiddenDetail),
@@ -856,18 +825,6 @@ final class FinderExtensionSettingsView: NSView {
 
     @objc private func toggleCopyPathCommand(_ sender: NSSwitch) {
         settings.finderCopyPathCommand = sender.state == .on
-    }
-
-    @objc private func toggleCopyItemsCommand(_ sender: NSSwitch) {
-        settings.finderCopyItemsCommand = sender.state == .on
-    }
-
-    @objc private func toggleCutItemsCommand(_ sender: NSSwitch) {
-        settings.finderCutItemsCommand = sender.state == .on
-    }
-
-    @objc private func togglePasteItemsCommand(_ sender: NSSwitch) {
-        settings.finderPasteItemsCommand = sender.state == .on
     }
 
     @objc private func toggleShowHiddenFilesCommand(_ sender: NSSwitch) {

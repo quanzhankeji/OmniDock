@@ -139,12 +139,6 @@
 "finderQuickCommandsDetail" = "Choose which commands appear in Finder contextual menus.";
 "finderQuickCommandCopyPathTitle" = "Copy Path";
 "finderQuickCommandCopyPathDetail" = "Show the Copy Path command in contextual menus.";
-"finderQuickCommandCopyItemsTitle" = "Copy";
-"finderQuickCommandCopyItemsDetail" = "Copy the selected items so they can be pasted into another folder.";
-"finderQuickCommandCutItemsTitle" = "Cut";
-"finderQuickCommandCutItemsDetail" = "Cut the selected items so pasting moves them instead of copying.";
-"finderQuickCommandPasteItemsTitle" = "Paste";
-"finderQuickCommandPasteItemsDetail" = "Paste copied items into the folder, shown only when there is something to paste.";
 "finderPasteConflictTitle" = "“%@” already exists in this location.";
 "finderPasteConflictMultipleTitle" = "%d items already exist in this location.";
 "finderPasteConflictDetail" = "Keeping both adds a number to the name of the item being pasted.";

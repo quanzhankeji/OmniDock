@@ -4,32 +4,16 @@ enum FinderMenuAction: Equatable {
     case createDocument(FinderDocumentPreset)
     case copyCurrentDirectoryPath
     case copySelectedPaths
-    case copySelectedItems
-    case cutSelectedItems
-    case pasteItems
     case showHiddenFiles
     case hideHiddenFiles
     case openDirectory(FinderLaunchShortcut)
-
-    // Whether the command can run right now, as opposed to whether it belongs
-    // in this menu at all.
-    func isEnabled(in context: FinderMenuContext) -> Bool {
-        switch self {
-        case .pasteItems:
-            return context.pasteboardHasFiles
-        default:
-            return true
-        }
-    }
 
     func isAvailable(in location: FinderMenuLocation) -> Bool {
         switch self {
         case .createDocument, .copyCurrentDirectoryPath:
             return location == .folderBackground
-        case .copySelectedPaths, .copySelectedItems, .cutSelectedItems, .openDirectory:
+        case .copySelectedPaths, .openDirectory:
             return location == .selection
-        case .pasteItems:
-            return true
         case .showHiddenFiles, .hideHiddenFiles:
             return true
         }
@@ -45,20 +29,15 @@ struct FinderMenuContext: Equatable {
     let location: FinderMenuLocation
     let currentDirectory: URL?
     let selectedURLs: [URL]
-    // Paste is only worth offering when there is something to paste, and only
-    // the extension can see the pasteboard, so the answer is carried in.
-    let pasteboardHasFiles: Bool
 
     init(
         location: FinderMenuLocation,
         currentDirectory: URL?,
-        selectedURLs: [URL],
-        pasteboardHasFiles: Bool = false
+        selectedURLs: [URL]
     ) {
         self.location = location
         self.currentDirectory = currentDirectory
         self.selectedURLs = selectedURLs
-        self.pasteboardHasFiles = pasteboardHasFiles
     }
 }
 
@@ -221,18 +200,6 @@ enum FinderMenuCatalog {
         preferences: FinderMenuPreferences
     ) -> [FinderMenuEntry] {
         var actions: [FinderMenuAction] = []
-        if context.location == .selection, preferences.showsCopyItemsCommand {
-            actions.append(.copySelectedItems)
-        }
-        if context.location == .selection, preferences.showsCutItemsCommand {
-            actions.append(.cutSelectedItems)
-        }
-        // Offered in both menus and kept visible with nothing to paste, the
-        // way every other desktop does it. A command that vanishes when the
-        // clipboard is empty reads as a missing feature.
-        if preferences.showsPasteItemsCommand {
-            actions.append(.pasteItems)
-        }
         if preferences.showsShowHiddenFilesCommand {
             actions.append(.showHiddenFiles)
         }
@@ -255,18 +222,6 @@ enum FinderMenuLabels {
             return "复制路径"
         case (.copyCurrentDirectoryPath, false), (.copySelectedPaths, false):
             return "Copy Path"
-        case (.copySelectedItems, true):
-            return "复制"
-        case (.copySelectedItems, false):
-            return "Copy"
-        case (.cutSelectedItems, true):
-            return "剪切"
-        case (.cutSelectedItems, false):
-            return "Cut"
-        case (.pasteItems, true):
-            return "粘贴"
-        case (.pasteItems, false):
-            return "Paste"
         case (.showHiddenFiles, true):
             return "显示所有文件"
         case (.showHiddenFiles, false):

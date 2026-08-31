@@ -39,76 +39,12 @@ enum BlankDocumentFactory {
 // macOS has no system-wide notion of a cut, so the intent rides along with the
 // URLs in a private type. Anything else that writes to the pasteboard clears
 // it, which is exactly when a pending cut should stop applying.
-enum FinderItemPasteboard {
-    static let cutType = NSPasteboard.PasteboardType(
-        "com.quanzhankeji.OmniDock.finder-cut"
-    )
-
-    @discardableResult
-    static func write(
-        _ urls: [URL],
-        isCut: Bool,
-        to pasteboard: NSPasteboard = .general
-    ) -> Bool {
-        // writeObjects reports success for an empty list, which would leave a
-        // pasteboard carrying a cut marker and no files - a paste that can only
-        // do nothing.
-        guard !urls.isEmpty else {
-            return false
-        }
-
-        // The items are built by hand rather than by handing NSURL to the
-        // pasteboard. Writing an NSURL asks it to describe the file, which the
-        // sandboxed extension cannot always do for the item that was
-        // right-clicked; a public.file-url string needs no such access and is
-        // what Finder and other applications read to treat this as files
-        // rather than pasted text.
-        let items = urls.map { url -> NSPasteboardItem in
-            let item = NSPasteboardItem()
-            item.setString(url.absoluteString, forType: .fileURL)
-            return item
-        }
-        if isCut {
-            items[0].setData(Data(), forType: cutType)
-        }
-        pasteboard.clearContents()
-        return pasteboard.writeObjects(items)
-    }
-
-    static func read(
-        from pasteboard: NSPasteboard = .general
-    ) -> (urls: [URL], isCut: Bool) {
-        let urls = (pasteboard.readObjects(
-            forClasses: [NSURL.self],
-            options: [.urlReadingFileURLsOnly: true]
-        ) as? [URL]) ?? []
-        return (urls, pasteboard.data(forType: cutType) != nil)
-    }
-
-    // Asked on every right-click in a folder background, while Finder blocks
-    // waiting for the menu. Reading NSURL objects would make the pasteboard
-    // resolve every item into a URL and, inside the sandboxed extension, mint
-    // file access for each one - none of which is needed to decide whether the
-    // paste item should be enabled. The type list answers that without touching
-    // a single file.
-    static func hasFiles(_ pasteboard: NSPasteboard = .general) -> Bool {
-        pasteboard.types?.contains(.fileURL) ?? false
-    }
-}
-
 enum FinderCommand: Codable, Equatable {
     case createDocument(
         fileExtension: String,
         directoryDisplayPath: String
     )
     case setHiddenFilesVisible(Bool)
-    // The selection is copied by the containing app rather than the extension:
-    // a sandboxed extension cannot put a file URL on the pasteboard for an item
-    // it has no access to, and the write is dropped without an error.
-    case copyItems(displayPaths: [String], isCut: Bool)
-    // Only the destination travels. What to paste is read from the pasteboard
-    // when the command runs, so the request cannot name files of its own.
-    case pasteItems(directoryDisplayPath: String)
     case openDirectory(
         shortcut: FinderLaunchShortcut,
         directoryDisplayPath: String

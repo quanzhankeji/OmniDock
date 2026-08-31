@@ -66,8 +66,8 @@ final class FinderMenuExtension: FIFinderSync {
         }
 
         let menu = NSMenu(title: "OmniDock")
-        // Required for a disabled item to stay disabled: AppKit would
-        // otherwise re-enable anything with a valid target and action.
+        // Every item here is always actionable, so skip AppKit's validation
+        // pass rather than have it call back for each one while Finder waits.
         menu.autoenablesItems = false
         for entry in entries {
             switch entry {
@@ -156,15 +156,6 @@ final class FinderMenuExtension: FIFinderSync {
             ))
         case .copySelectedPaths:
             copy(FinderPathList.text(for: binding.context.selectedURLs))
-        case .copySelectedItems:
-            forwardItems(binding.context.selectedURLs, isCut: false)
-        case .cutSelectedItems:
-            forwardItems(binding.context.selectedURLs, isCut: true)
-        case .pasteItems:
-            guard let directory = binding.context.currentDirectory else {
-                return
-            }
-            forward(.pasteItems(directoryDisplayPath: directory.path))
         case .showHiddenFiles:
             forward(.setHiddenFilesVisible(true))
         case .hideHiddenFiles:
@@ -201,12 +192,6 @@ final class FinderMenuExtension: FIFinderSync {
         switch action {
         case .copyCurrentDirectoryPath, .copySelectedPaths:
             return Self.symbol("doc.on.doc")
-        case .copySelectedItems:
-            return Self.symbol("square.on.square")
-        case .cutSelectedItems:
-            return Self.symbol("scissors")
-        case .pasteItems:
-            return Self.symbol("doc.on.clipboard")
         case .showHiddenFiles:
             return Self.symbol("eye")
         case .hideHiddenFiles:
@@ -242,17 +227,11 @@ final class FinderMenuExtension: FIFinderSync {
             context: context
         ))
         item.image = icon(for: action)
-        item.isEnabled = action.isEnabled(in: context)
         return item
     }
 
-    // One entry point for the cache: whichever caller runs first decides the
-    // cached value, so the withheld commands have to be applied here rather
-    // than at any single call site.
     private func currentPreferences() -> FinderMenuPreferences {
-        menuCache.preferences {
-            FinderItemTransferCommands.withheld(from: self.preferencesStore.snapshot())
-        }
+        menuCache.preferences { self.preferencesStore.snapshot() }
     }
 
     private func context(for menuKind: FIMenuKind) -> FinderMenuContext? {
@@ -264,12 +243,7 @@ final class FinderMenuExtension: FIFinderSync {
                 currentDirectory: FinderObservationRoots.folderURL(
                     targetedURL: controller.targetedURL()
                 ),
-                selectedURLs: [],
-                // Deliberately not asked of the pasteboard. Reading it here
-                // runs while Finder blocks on this menu, and the answer only
-                // decides whether one item looks dimmed. Offer the item always;
-                // pasting with nothing on the pasteboard does nothing.
-                pasteboardHasFiles: true
+                selectedURLs: []
             )
         case .contextualMenuForItems:
             let selectedURLs = controller.selectedItemURLs() ?? []
@@ -333,13 +307,6 @@ final class FinderMenuExtension: FIFinderSync {
         configuredObservationRoots = roots
         FIFinderSyncController.default().directoryURLs = roots
         Self.logger.info("Configured \(roots.count) Finder observation roots")
-    }
-
-    private func forwardItems(_ urls: [URL], isCut: Bool) {
-        guard !urls.isEmpty else {
-            return
-        }
-        forward(.copyItems(displayPaths: urls.map(\.path), isCut: isCut))
     }
 
     private func copy(_ string: String) {

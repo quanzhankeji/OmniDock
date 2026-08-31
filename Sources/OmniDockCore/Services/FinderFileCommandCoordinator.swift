@@ -5,11 +5,6 @@ import CoreGraphics
 // What to do about items whose name is already taken at the destination. One
 // decision covers the whole paste: asking per item turns a multi-file paste
 // into an interrogation.
-enum FinderPasteConflictResolution: Equatable {
-    case replace
-    case keepBoth
-    case cancel
-}
 
 @MainActor
 final class FinderFileCommandCoordinator: NSObject {
@@ -17,11 +12,9 @@ final class FinderFileCommandCoordinator: NSObject {
     private let preferencesStore: FinderMenuPreferencesStore
     private let directoryGrantStore: FinderDirectoryGrantStore
     private let fileManager: FileManager
-    private let itemPasteboard: NSPasteboard
     private let hiddenFilesController: FinderHiddenFilesController
     private let revealFiles: ([URL]) -> Void
     private let requestDirectoryAccess: @MainActor (URL) -> URL?
-    private let resolvePasteConflicts: @MainActor ([URL]) -> FinderPasteConflictResolution
     private let beginInlineRename: () -> Void
     private let openApplication: (
         _ directoryURL: URL,
@@ -35,15 +28,12 @@ final class FinderFileCommandCoordinator: NSObject {
         preferencesStore: FinderMenuPreferencesStore = FinderMenuPreferencesStore(),
         directoryGrantStore: FinderDirectoryGrantStore = FinderDirectoryGrantStore(),
         fileManager: FileManager = .default,
-        itemPasteboard: NSPasteboard = .general,
         hiddenFilesController: FinderHiddenFilesController? = nil,
         revealFiles: @escaping ([URL]) -> Void = {
             NSWorkspace.shared.activateFileViewerSelecting($0)
         },
         requestDirectoryAccess: @escaping @MainActor (URL) -> URL? =
             FinderFileCommandCoordinator.presentDirectoryAccessPanel,
-        resolvePasteConflicts: @escaping @MainActor ([URL]) -> FinderPasteConflictResolution =
-            FinderFileCommandCoordinator.presentPasteConflictAlert,
         beginInlineRename: @escaping () -> Void = {
             FinderInlineRenameActivator().begin()
         },
@@ -67,11 +57,9 @@ final class FinderFileCommandCoordinator: NSObject {
         self.preferencesStore = preferencesStore
         self.directoryGrantStore = directoryGrantStore
         self.fileManager = fileManager
-        self.itemPasteboard = itemPasteboard
         self.hiddenFilesController = hiddenFilesController ?? FinderHiddenFilesController()
         self.revealFiles = revealFiles
         self.requestDirectoryAccess = requestDirectoryAccess
-        self.resolvePasteConflicts = resolvePasteConflicts
         self.beginInlineRename = beginInlineRename
         self.openApplication = openApplication
         super.init()
@@ -146,26 +134,6 @@ final class FinderFileCommandCoordinator: NSObject {
                 fileExtension: fileExtension,
                 directoryDisplayPath: directoryDisplayPath
             )
-        case let .pasteItems(directoryDisplayPath):
-            guard preferences.showsPasteItemsCommand else {
-                return
-            }
-            pasteItems(
-                into: URL(
-                    fileURLWithPath: directoryDisplayPath,
-                    isDirectory: true
-                ).standardizedFileURL
-            )
-        case let .copyItems(displayPaths, isCut):
-            guard isCut ? preferences.showsCutItemsCommand
-                        : preferences.showsCopyItemsCommand
-            else {
-                return
-            }
-            let urls = displayPaths.map {
-                URL(fileURLWithPath: $0).standardizedFileURL
-            }
-            FinderItemPasteboard.write(urls, isCut: isCut, to: itemPasteboard)
         case let .setHiddenFilesVisible(isVisible):
             guard FinderCommandAuthorizationPolicy.allowsHiddenFilesCommand(
                 isVisible: isVisible,
@@ -326,199 +294,14 @@ final class FinderFileCommandCoordinator: NSObject {
 
     // The sources come from the pasteboard at the moment the command runs, the
     // same thing Finder pastes, so nothing about them travels in the request.
-    private func pasteItems(into directory: URL) {
-        let (sources, isCut) = FinderItemPasteboard.read(from: itemPasteboard)
-        guard !sources.isEmpty else {
-            return
-        }
 
-        do {
-            let pasted = try paste(sources, into: directory, isCut: isCut)
-            finishPaste(pasted, isCut: isCut)
-        } catch {
-            guard Self.isPermissionFailure(error) else {
-                presentCreateFailure(
-                    directoryDisplayPath: directory.path,
-                    error: error
-                )
-                return
-            }
-            do {
-                if let pasted = try directoryGrantStore.performWithSavedAccess(
-                    to: directory,
-                    operation: { try paste(sources, into: $0, isCut: isCut) }
-                ) {
-                    finishPaste(pasted, isCut: isCut)
-                    return
-                }
-            } catch {
-                guard Self.isPermissionFailure(error) else {
-                    presentCreateFailure(
-                        directoryDisplayPath: directory.path,
-                        error: error
-                    )
-                    return
-                }
-            }
-            guard grantAccess(to: directory) else {
-                return
-            }
-            do {
-                guard let pasted = try directoryGrantStore.performWithSavedAccess(
-                    to: directory,
-                    operation: { try paste(sources, into: $0, isCut: isCut) }
-                ) else {
-                    throw CocoaError(.fileWriteNoPermission)
-                }
-                finishPaste(pasted, isCut: isCut)
-            } catch {
-                presentCreateFailure(
-                    directoryDisplayPath: directory.path,
-                    error: error
-                )
-            }
-        }
-    }
-
-    private func paste(
-        _ sources: [URL],
-        into directory: URL,
-        isCut: Bool
-    ) throws -> [URL] {
-        // Moving an item into the folder it already sits in is a no-op, not a
-        // rename to "Report 2.txt".
-        let incoming = sources.filter { source in
-            !(isCut && source.deletingLastPathComponent().standardizedFileURL == directory)
-        }
-
-        var resolution = FinderPasteConflictResolution.keepBoth
-        let conflicts = incoming.filter {
-            Self.conflictsOnPaste($0, in: directory, isCut: isCut, fileManager: fileManager)
-        }
-        if !conflicts.isEmpty {
-            resolution = resolvePasteConflicts(conflicts)
-            guard resolution != .cancel else {
-                return []
-            }
-        }
-
-        var pasted: [URL] = []
-        for source in incoming {
-            let taken = directory.appendingPathComponent(source.lastPathComponent)
-            let replaces = resolution == .replace
-                && Self.conflictsOnPaste(
-                    source,
-                    in: directory,
-                    isCut: isCut,
-                    fileManager: fileManager
-                )
-            // Keeping both puts the incoming item beside the existing one, the
-            // way Finder does; replacing clears the way for it first.
-            let destination = replaces
-                ? taken
-                : Self.availableDestination(
-                    for: source,
-                    in: directory,
-                    fileManager: fileManager
-                )
-            if replaces, fileManager.fileExists(atPath: destination.path) {
-                try fileManager.removeItem(at: destination)
-            }
-            if isCut {
-                try fileManager.moveItem(at: source, to: destination)
-            } else {
-                try fileManager.copyItem(at: source, to: destination)
-            }
-            pasted.append(destination)
-        }
-        return pasted
-    }
 
     // Copying an item into the folder it already lives in is never a conflict:
     // there is nothing to replace, because the only match is the item itself.
-    static func conflictsOnPaste(
-        _ source: URL,
-        in directory: URL,
-        isCut: Bool,
-        fileManager: FileManager = .default
-    ) -> Bool {
-        let taken = directory.appendingPathComponent(source.lastPathComponent)
-        guard fileManager.fileExists(atPath: taken.path) else {
-            return false
-        }
-        return isCut || taken.standardizedFileURL != source.standardizedFileURL
-    }
 
-    static func presentPasteConflictAlert(
-        _ conflicts: [URL]
-    ) -> FinderPasteConflictResolution {
-        guard let application = NSApp, let first = conflicts.first else {
-            return .cancel
-        }
-        application.activate(ignoringOtherApps: true)
 
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = conflicts.count == 1
-            ? String(
-                format: AppStrings.text(.finderPasteConflictTitle),
-                first.lastPathComponent
-            )
-            : String(
-                format: AppStrings.text(.finderPasteConflictMultipleTitle),
-                conflicts.count
-            )
-        alert.informativeText = AppStrings.text(.finderPasteConflictDetail)
-        // Keeping both is first so Return cannot destroy anything.
-        alert.addButton(withTitle: AppStrings.text(.finderPasteConflictKeepBoth))
-        alert.addButton(withTitle: AppStrings.text(.finderPasteConflictReplace))
-        alert.addButton(withTitle: AppStrings.text(.finderPasteConflictCancel))
-        switch alert.runModal() {
-        case .alertFirstButtonReturn:
-            return .keepBoth
-        case .alertSecondButtonReturn:
-            return .replace
-        default:
-            return .cancel
-        }
-    }
-
-    private func finishPaste(_ pasted: [URL], isCut: Bool) {
-        // Nothing moved means the cut is still pending - every item was already
-        // in this folder - so the clipboard has to survive for the paste the
-        // user actually meant. Clearing it here emptied the clipboard and moved
-        // nothing, which is indistinguishable from the command being broken.
-        guard !pasted.isEmpty else {
-            return
-        }
-        if isCut {
-            // The sources are gone, so leaving them on the pasteboard would
-            // offer a second paste that could only fail.
-            itemPasteboard.clearContents()
-        }
-
-        revealFiles(pasted)
-    }
 
     // "Report.txt" becomes "Report 2.txt" rather than overwriting anything.
-    static func availableDestination(
-        for source: URL,
-        in directory: URL,
-        fileManager: FileManager = .default
-    ) -> URL {
-        let fileExtension = source.pathExtension
-        let base = source.deletingPathExtension().lastPathComponent
-        var candidate = directory.appendingPathComponent(source.lastPathComponent)
-        var sequence = 2
-        while fileManager.fileExists(atPath: candidate.path) {
-            let name = fileExtension.isEmpty
-                ? "\(base) \(sequence)"
-                : "\(base) \(sequence).\(fileExtension)"
-            candidate = directory.appendingPathComponent(name)
-            sequence += 1
-        }
-        return candidate
-    }
 
     // Only the new-document commands land here; a paste reveals its own items
     // without arming the rename, because a pasted file already has the name the
