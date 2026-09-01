@@ -627,8 +627,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         let snapshot = applicationUpdateService.snapshot
         updateVersionField?.stringValue = AppStrings.format(
             .updateCurrentVersion,
-            snapshot.currentVersion,
-            snapshot.currentBuild
+            snapshot.currentVersion
         )
 
         let statusText: String

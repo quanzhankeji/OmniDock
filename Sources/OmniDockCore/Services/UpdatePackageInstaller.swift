@@ -51,7 +51,6 @@ struct PreparedApplicationUpdate {
     let release: GitHubRelease
     let appURL: URL
     let workingDirectory: URL
-    let designatedRequirement: String
 }
 
 struct PreparedManualUpdate {
@@ -129,12 +128,34 @@ enum UpdateAtomicReplacement {
     }
 }
 
-enum UpdateBundleValidator {
+enum UpdateSigningPolicy {
     static let bundleIdentifier = "com.quanzhankeji.OmniDock"
+
+    static func officialReleaseRequirement(
+        teamIdentifier: String
+    ) -> String? {
+        let allowedCharacters = Set(
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        )
+        guard teamIdentifier.count == 10,
+              teamIdentifier.allSatisfy(allowedCharacters.contains)
+        else {
+            return nil
+        }
+
+        return "identifier \"\(bundleIdentifier)\" and anchor apple generic "
+            + "and certificate 1[field.1.2.840.113635.100.6.2.6] exists "
+            + "and certificate leaf[field.1.2.840.113635.100.6.1.13] exists "
+            + "and certificate leaf[subject.OU] = \"\(teamIdentifier)\""
+    }
+}
+
+enum UpdateBundleValidator {
+    static let bundleIdentifier = UpdateSigningPolicy.bundleIdentifier
     static let finderExtensionRelativePath =
         "Contents/PlugIns/OmniDockFinderSync.appex"
 
-    static func currentDesignatedRequirement(appURL: URL) throws -> String {
+    static func officialReleaseRequirement(appURL: URL) throws -> String {
         var staticCode: SecStaticCode?
         guard SecStaticCodeCreateWithPath(
             appURL as CFURL,
@@ -145,7 +166,7 @@ enum UpdateBundleValidator {
         else {
             throw UpdatePackageError.signatureInvalid
         }
-        return try designatedRequirementText(for: staticCode)
+        return try officialReleaseRequirement(for: staticCode)
     }
 
     // The installer helper is reachable from the command line, so anything it
@@ -154,6 +175,14 @@ enum UpdateBundleValidator {
     // Deriving it from the running code instead ties the check to the copy of
     // OmniDock that is actually performing the installation.
     static func runningDesignatedRequirement() throws -> String {
+        try designatedRequirementText(for: runningStaticCode())
+    }
+
+    static func runningOfficialReleaseRequirement() throws -> String {
+        try officialReleaseRequirement(for: runningStaticCode())
+    }
+
+    private static func runningStaticCode() throws -> SecStaticCode {
         var code: SecCode?
         guard SecCodeCopySelf(SecCSFlags(), &code) == errSecSuccess,
               let code
@@ -171,7 +200,29 @@ enum UpdateBundleValidator {
         else {
             throw UpdatePackageError.signatureInvalid
         }
-        return try designatedRequirementText(for: staticCode)
+        return staticCode
+    }
+
+    private static func officialReleaseRequirement(
+        for staticCode: SecStaticCode
+    ) throws -> String {
+        var signingInformation: CFDictionary?
+        guard SecCodeCopySigningInformation(
+            staticCode,
+            SecCSFlags(rawValue: kSecCSSigningInformation),
+            &signingInformation
+        ) == errSecSuccess,
+        let information = signingInformation as? [String: Any],
+        let teamIdentifier = information[
+            kSecCodeInfoTeamIdentifier as String
+        ] as? String,
+        let requirement = UpdateSigningPolicy.officialReleaseRequirement(
+            teamIdentifier: teamIdentifier
+        )
+        else {
+            throw UpdatePackageError.signatureInvalid
+        }
+        return requirement
     }
 
     private static func designatedRequirementText(
@@ -369,7 +420,7 @@ final class UpdatePackageInstaller: @unchecked Sendable {
             guard fileManager.fileExists(atPath: appURL.path) else {
                 throw UpdatePackageError.archiveInvalid
             }
-            let requirement = try UpdateBundleValidator.currentDesignatedRequirement(
+            let requirement = try UpdateBundleValidator.officialReleaseRequirement(
                 appURL: currentAppURL
             )
             try UpdateBundleValidator.validate(
@@ -380,8 +431,7 @@ final class UpdatePackageInstaller: @unchecked Sendable {
             return PreparedApplicationUpdate(
                 release: release,
                 appURL: appURL,
-                workingDirectory: workingDirectory,
-                designatedRequirement: requirement
+                workingDirectory: workingDirectory
             )
         } catch {
             try? fileManager.removeItem(at: workingDirectory)
@@ -731,8 +781,10 @@ public enum UpdateInstallerCommand {
         else {
             throw UpdatePackageError.versionMismatch
         }
-        let designatedRequirement = try UpdateBundleValidator
+        let installedRequirement = try UpdateBundleValidator
             .runningDesignatedRequirement()
+        let officialReleaseRequirement = try UpdateBundleValidator
+            .runningOfficialReleaseRequirement()
 
         let fileManager = FileManager.default
         let targetURL = manifest.targetAppURL.resolvingSymlinksInPath()
@@ -756,7 +808,7 @@ public enum UpdateInstallerCommand {
         try UpdateBundleValidator.validate(
             appURL: targetURL,
             expectedVersion: installedVersion,
-            designatedRequirement: designatedRequirement,
+            designatedRequirement: installedRequirement,
             assessGatekeeper: false
         )
 
@@ -777,7 +829,7 @@ public enum UpdateInstallerCommand {
             try UpdateBundleValidator.validate(
                 appURL: incomingURL,
                 expectedVersion: expectedVersion,
-                designatedRequirement: designatedRequirement
+                designatedRequirement: officialReleaseRequirement
             )
             do {
                 try UpdateAtomicReplacement.perform(

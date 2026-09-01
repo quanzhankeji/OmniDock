@@ -29,6 +29,10 @@ The direct-distribution script requires a Developer ID Application identity with
   --notary-profile <keychain-profile>
 ```
 
+Use only the marketing version in the Git tag, GitHub Release title, and
+public asset names. Keep the build number in the app metadata and private
+release records; never publish a version label such as `1.2.7 (17)`.
+
 GPL mode installs the repository license as `COPYING.txt` and records both the source and binary license as `GPL-3.0-only` in the private release manifest.
 
 For a separately licensed Developer ID release, use `--license-mode eula --binary-license </secure/path/to/approved-eula.txt>`. The EULA must be an approved, nonempty file stored outside the source repository. The script refuses the GPL source license as a substitute, records the EULA digest without recording its private path, and installs the EULA as `EULA.txt`.

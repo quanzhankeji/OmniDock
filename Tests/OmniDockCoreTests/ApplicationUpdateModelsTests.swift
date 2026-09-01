@@ -151,6 +151,51 @@ final class ApplicationUpdateModelsTests: XCTestCase {
         )
     }
 
+    func testOfficialUpdateRequirementUsesDeveloperIDForTheCurrentTeam() throws {
+        let requirement = try XCTUnwrap(
+            UpdateSigningPolicy.officialReleaseRequirement(
+                teamIdentifier: "8UPRU238P7"
+            )
+        )
+
+        XCTAssertTrue(requirement.contains(#"identifier "com.quanzhankeji.OmniDock""#))
+        XCTAssertTrue(requirement.contains("certificate leaf[subject.OU] = \"8UPRU238P7\""))
+        XCTAssertTrue(requirement.contains("1.2.840.113635.100.6.1.13"))
+        XCTAssertFalse(requirement.contains("Apple Development:"))
+    }
+
+    func testOfficialUpdateRequirementRejectsUnsafeTeamIdentifiers() {
+        XCTAssertNil(
+            UpdateSigningPolicy.officialReleaseRequirement(
+                teamIdentifier: #"8UPRU238P7" or true"#
+            )
+        )
+        XCTAssertNil(
+            UpdateSigningPolicy.officialReleaseRequirement(
+                teamIdentifier: "short"
+            )
+        )
+    }
+
+    func testDisplayedUpdateVersionOmitsTheBuildNumber() {
+        XCTAssertEqual(
+            LocalizedResourceCatalog.format(
+                .updateCurrentVersion,
+                arguments: ["1.2.7"],
+                language: .en
+            ),
+            "Current version 1.2.7"
+        )
+        XCTAssertEqual(
+            LocalizedResourceCatalog.format(
+                .updateCurrentVersion,
+                arguments: ["1.2.7"],
+                language: .zhHans
+            ),
+            "当前版本 1.2.7"
+        )
+    }
+
     func testInstallerHelperIgnoresManifestOutsideTheUpdateStagingArea() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(
             UUID().uuidString,

@@ -22,7 +22,7 @@
 "appearanceDark" = "Dark";
 "updateVersionTitle" = "Version";
 "updateVersionDetail" = "OmniDock checks GitHub Releases for signed updates.";
-"updateCurrentVersion" = "Current version %@ (%@)";
+"updateCurrentVersion" = "Current version %@";
 "updateNeverChecked" = "Not checked yet";
 "updateChecking" = "Checking for updates…";
 "updateCurrentStatus" = "Up to date";

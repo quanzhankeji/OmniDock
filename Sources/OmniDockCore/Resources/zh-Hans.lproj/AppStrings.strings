@@ -22,7 +22,7 @@
 "appearanceDark" = "深色";
 "updateVersionTitle" = "版本";
 "updateVersionDetail" = "OmniDock 会通过 GitHub Releases 检查经过签名的更新。";
-"updateCurrentVersion" = "当前版本 %@（%@）";
+"updateCurrentVersion" = "当前版本 %@";
 "updateNeverChecked" = "尚未检查";
 "updateChecking" = "正在检查更新…";
 "updateCurrentStatus" = "当前已是最新版本";
