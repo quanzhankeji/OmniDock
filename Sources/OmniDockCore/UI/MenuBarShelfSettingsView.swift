@@ -6,6 +6,8 @@ final class MenuBarShelfSettingsView: NSView {
     private let enableSwitch = NSSwitch()
     private let autoHideSwitch = NSSwitch()
     private let delayPopup = NSPopUpButton()
+    private var autoHideRow: NSView?
+    private var illustration: NSView?
 
     init(settings: SettingsStore) {
         self.settings = settings
@@ -22,8 +24,12 @@ final class MenuBarShelfSettingsView: NSView {
     func reload() {
         enableSwitch.state = settings.menuBarShelfEnabled ? .on : .off
         autoHideSwitch.state = settings.menuBarShelfAutoHideEnabled ? .on : .off
-        autoHideSwitch.isEnabled = settings.menuBarShelfEnabled
-        delayPopup.isEnabled = settings.menuBarShelfEnabled && settings.menuBarShelfAutoHideEnabled
+        // Hidden rather than dimmed, the way the shortcuts panel does it: with
+        // the feature off there is nothing for these to act on.
+        let showsDetail = settings.menuBarShelfEnabled
+        autoHideRow?.isHidden = !showsDetail
+        illustration?.isHidden = !showsDetail
+        delayPopup.isEnabled = settings.menuBarShelfAutoHideEnabled
         delayPopup.selectItem(withTag: settings.menuBarShelfAutoHideDelay)
     }
 
@@ -53,9 +59,6 @@ final class MenuBarShelfSettingsView: NSView {
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
 
-        let illustration = makeIllustration()
-        stack.addArrangedSubview(illustration)
-
         enableSwitch.target = self
         enableSwitch.action = #selector(toggleFeature(_:))
         stack.addArrangedSubview(makeSettingRow(
@@ -71,11 +74,19 @@ final class MenuBarShelfSettingsView: NSView {
         autoHideControls.orientation = .horizontal
         autoHideControls.alignment = .centerY
         autoHideControls.spacing = 10
-        stack.addArrangedSubview(makeSettingRow(
+        let autoHideRow = makeSettingRow(
             title: AppStrings.text(.menuBarShelfAutoHideTitle),
             detail: AppStrings.text(.menuBarShelfAutoHideDetail),
             control: autoHideControls
-        ))
+        )
+        self.autoHideRow = autoHideRow
+        stack.addArrangedSubview(autoHideRow)
+
+        // The picture explains the feature rather than configuring it, so it
+        // sits below the controls instead of pushing them down the page.
+        let illustration = makeIllustration()
+        self.illustration = illustration
+        stack.addArrangedSubview(illustration)
 
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: leadingAnchor),

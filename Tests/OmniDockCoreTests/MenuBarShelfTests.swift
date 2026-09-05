@@ -63,6 +63,35 @@ final class MenuBarShelfTests: XCTestCase {
         )
     }
 
+    func testAutoHideWaitsWhileTheMenuBarIsBeingArranged() {
+        // Arranging means holding Command and dragging, which easily outlasts
+        // the delay; closing the shelf then puts the icon being moved out of
+        // reach and the whole arrangement has to start again.
+        XCTAssertTrue(MenuBarShelfAutoHidePolicy.deferAutoHide(
+            isCommandHeld: true,
+            isMouseButtonDown: false,
+            didItemsMove: false
+        ))
+        XCTAssertTrue(MenuBarShelfAutoHidePolicy.deferAutoHide(
+            isCommandHeld: false,
+            isMouseButtonDown: true,
+            didItemsMove: false
+        ))
+        XCTAssertTrue(MenuBarShelfAutoHidePolicy.deferAutoHide(
+            isCommandHeld: false,
+            isMouseButtonDown: false,
+            didItemsMove: true
+        ))
+    }
+
+    func testAutoHideProceedsOnceEverythingHasSettled() {
+        XCTAssertFalse(MenuBarShelfAutoHidePolicy.deferAutoHide(
+            isCommandHeld: false,
+            isMouseButtonDown: false,
+            didItemsMove: false
+        ))
+    }
+
     func testAutoHideDelayUsesSupportedNearestValue() {
         XCTAssertEqual(MenuBarShelfAutoHidePolicy.normalizedDelay(0), 5)
         XCTAssertEqual(MenuBarShelfAutoHidePolicy.normalizedDelay(9), 10)

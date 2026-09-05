@@ -35,6 +35,21 @@ enum MenuBarShelfAutoHidePolicy {
             return lhsDistance == rhsDistance ? lhs < rhs : lhsDistance < rhsDistance
         } ?? 10
     }
+
+    /// Whether closing the shelf should wait. Arranging the menu bar means
+    /// holding Command and dragging, which can easily outlast the delay - and
+    /// closing the shelf mid-drag puts the icon being placed out of reach.
+    ///
+    /// Read from the current input state rather than watched for: a monitor on
+    /// the keyboard would make this feature ask for accessibility, which
+    /// nothing else about it needs.
+    static func deferAutoHide(
+        isCommandHeld: Bool,
+        isMouseButtonDown: Bool,
+        didItemsMove: Bool
+    ) -> Bool {
+        isCommandHeld || isMouseButtonDown || didItemsMove
+    }
 }
 
 @MainActor
@@ -45,6 +60,8 @@ final class MenuBarShelfService: NSObject {
     private var boundaryItem: NSStatusItem?
     private var boundaryMenu: NSMenu?
     private var autoHideTimer: Timer?
+    private var lastKnownItemPositions: [CGFloat] = []
+    private var isRepairingArrangement = false
     private var state: MenuBarShelfState = .visible
     private var isRunning = false
 
@@ -105,8 +122,30 @@ final class MenuBarShelfService: NSObject {
         guard settings.menuBarShelfEnabled, state == .visible else {
             return
         }
+
+        let positions = currentItemPositions()
+        let didItemsMove = positions != lastKnownItemPositions
+        lastKnownItemPositions = positions
+
+        if MenuBarShelfAutoHidePolicy.deferAutoHide(
+            isCommandHeld: NSEvent.modifierFlags.contains(.command),
+            isMouseButtonDown: NSEvent.pressedMouseButtons != 0,
+            didItemsMove: didItemsMove
+        ) {
+            // Start the wait over rather than shorten it: the delay is how long
+            // the shelf stays open once someone has stopped, not a deadline.
+            scheduleAutoHideIfNeeded()
+            return
+        }
+
         state = .tucked
         applyState()
+    }
+
+    private func currentItemPositions() -> [CGFloat] {
+        [toggleItem, boundaryItem].map {
+            $0?.button?.window?.frame.origin.x ?? .nan
+        }
     }
 
     @objc func openSettings(_ sender: NSMenuItem) {
@@ -148,6 +187,13 @@ final class MenuBarShelfService: NSObject {
         let boundaryMenu = makeBoundaryMenu()
         boundaryItem.menu = boundaryMenu
 
+        // Removing a status item records it against its autosave name as one
+        // the user put away, and it comes back that way the next time it is
+        // built. Turning the feature off and on again is enough to lose the
+        // divider for good, so say plainly that both belong on screen.
+        toggleItem.isVisible = true
+        boundaryItem.isVisible = true
+
         self.toggleItem = toggleItem
         self.boundaryItem = boundaryItem
         self.boundaryMenu = boundaryMenu
@@ -175,6 +221,10 @@ final class MenuBarShelfService: NSObject {
             widestScreen: NSScreen.screens.map(\.frame.width).max() ?? 4_096
         )
 
+        if state == .tucked {
+            verifyArrangementAfterTucking()
+        }
+
         let symbolName = state == .tucked ? "chevron.left" : "chevron.right"
         let image = NSImage(
             systemSymbolName: symbolName,
@@ -185,6 +235,47 @@ final class MenuBarShelfService: NSObject {
         button.toolTip = AppStrings.text(.menuBarShelfToggleTooltip)
 
         scheduleAutoHideIfNeeded()
+    }
+
+    // The expanded divider pushes whatever sits beside it past the edge of the
+    // screen. That is the point - it is how the shelf hides icons - but if the
+    // divider has been dragged to the other side of the arrow it takes both of
+    // this app's own buttons with it, leaving no way to bring them back.
+    //
+    // Checked rather than predicted: which side is which depends on where macOS
+    // placed the items and where the user has since dragged them, and the only
+    // reliable answer is whether the arrow is still on a screen afterwards.
+    private func verifyArrangementAfterTucking() {
+        guard !isRepairingArrangement else {
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self,
+                  self.state == .tucked,
+                  let frame = self.toggleItem?.button?.window?.frame,
+                  !NSScreen.screens.contains(where: { $0.frame.intersects(frame) })
+            else {
+                return
+            }
+            self.repairArrangement()
+        }
+    }
+
+    private func repairArrangement() {
+        isRepairingArrangement = true
+        defer { isRepairingArrangement = false }
+
+        // Drop the remembered positions and build the items again, which puts
+        // them back where macOS would have placed them.
+        for name in ["OmniDock.MenuBarShelf.Toggle", "OmniDock.MenuBarShelf.Boundary"] {
+            UserDefaults.standard.removeObject(
+                forKey: "NSStatusItem Preferred Position \(name)"
+            )
+        }
+        removeItems()
+        state = .visible
+        installItemsIfNeeded()
+        applyState()
     }
 
     private func updateLocalizedContent() {
@@ -204,6 +295,7 @@ final class MenuBarShelfService: NSObject {
             return
         }
 
+        lastKnownItemPositions = currentItemPositions()
         let timer = Timer(
             timeInterval: TimeInterval(settings.menuBarShelfAutoHideDelay),
             target: self,
