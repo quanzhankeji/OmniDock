@@ -1,0 +1,35 @@
+name: Rebuild website on release
+
+# The website reads release metadata from the GitHub Releases API at build
+# time. Publishing a release here does not push to the website repository, so
+# this workflow tells Cloudflare Pages to rebuild. The daily schedule is a
+# fallback for a deploy hook that fails without a retry.
+
+on:
+  release:
+    types: [published, edited]
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
+
+permissions: {}
+
+concurrency:
+  group: rebuild-website
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the Cloudflare Pages deploy hook
+        env:
+          DEPLOY_HOOK: ${{ secrets.CLOUDFLARE_PAGES_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "::error::CLOUDFLARE_PAGES_DEPLOY_HOOK is not configured."
+            exit 1
+          fi
+          curl --fail --silent --show-error --retry 3 --retry-delay 5 \
+            --request POST "$DEPLOY_HOOK" > /dev/null
+          echo "Requested a website rebuild."
