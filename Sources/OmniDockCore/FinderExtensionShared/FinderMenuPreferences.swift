@@ -721,33 +721,6 @@ enum FinderObservationRoots {
         ))
     }
 
-    // Right-clicking empty space does not always report the folder on screen.
-    // In gallery view the blank area around the preview still belongs to the
-    // highlighted item, so Finder hands back the selected folder as the target
-    // and a new document would be created inside it rather than beside it.
-    //
-    // A folder cannot appear among the items it contains, so a target that is
-    // itself selected can only have come from that blank area: step up to the
-    // folder actually being viewed. This covers a selected file too, whose
-    // parent is the same folder.
-    static func containerURL(
-        targetedURL: URL?,
-        selectedURLs: [URL],
-        homeDirectory: URL = FinderObservationRoots.userHomeDirectory
-    ) -> URL {
-        guard let targetedURL else {
-            return desktopURL(homeDirectory: homeDirectory)
-        }
-        let target = targetedURL.standardizedFileURL
-        // Compared by path: a directory URL may or may not carry a trailing
-        // slash depending on how Finder built it, and the two forms are not
-        // equal as URLs.
-        let isSelected = selectedURLs.contains {
-            $0.standardizedFileURL.path == target.path
-        }
-        return isSelected ? target.deletingLastPathComponent() : target
-    }
-
     static func folderURL(
         targetedURL: URL?,
         selectedURLs: [URL] = [],

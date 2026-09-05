@@ -346,17 +346,66 @@ final class FinderFileCommandCoordinator: NSObject {
             return
         }
 
-        openApplication(targets, applicationURL) { [weak self] error in
-            guard let error else {
+        let launch = { [weak self] in
+            guard let self else {
                 return
             }
-            Task { @MainActor [weak self] in
-                self?.presentOpenFailure(
-                    applicationName: shortcut.displayName,
-                    detail: error.localizedDescription
-                )
+            self.openApplication(targets, applicationURL) { [weak self] error in
+                guard let error else {
+                    return
+                }
+                Task { @MainActor [weak self] in
+                    self?.presentOpenFailure(
+                        applicationName: shortcut.displayName,
+                        detail: error.localizedDescription
+                    )
+                }
             }
         }
+
+        // Held while the request is made, when there is a grant to hold. A
+        // sandboxed build that cannot reach the folder has these URLs dropped
+        // on the way out, and the application starts with nothing to open: a
+        // terminal lands in the home folder rather than here.
+        let directory = Self.enclosingDirectory(
+            for: targets[0].path,
+            fileManager: fileManager
+        )
+        let launchedWithGrant = try? directoryGrantStore.performWithSavedAccess(
+            to: directory
+        ) { _ in
+            launch()
+            return true
+        }
+        guard launchedWithGrant == nil else {
+            return
+        }
+
+        // No grant covers it. Outside a sandbox the folder is reachable anyway,
+        // so hand it over as before rather than ask for a permission that is
+        // not needed.
+        guard Self.isSandboxed else {
+            launch()
+            return
+        }
+
+        // Inside one, the URLs would be dropped on the way out and the
+        // application would start with nothing - looking, from the outside,
+        // like a command that was ignored. Ask for the folder instead. A
+        // refusal leaves nothing opened, which is the honest outcome.
+        guard grantAccess(to: directory) else {
+            return
+        }
+        _ = try? directoryGrantStore.performWithSavedAccess(to: directory) { _ in
+            launch()
+            return true
+        }
+    }
+
+    // Set for a sandboxed process and absent otherwise, so it answers the only
+    // question here: whether a folder can be reached without being granted.
+    nonisolated static var isSandboxed: Bool {
+        ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] != nil
     }
 
     private func presentCreateFailure(

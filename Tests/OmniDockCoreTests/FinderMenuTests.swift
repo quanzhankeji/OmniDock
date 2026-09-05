@@ -578,6 +578,51 @@ final class FinderMenuTests: XCTestCase {
         }
     }
 
+    func testMenuLanguageFollowsTheResolvedSettingRatherThanTheSystem() {
+        // The app resolves "system" before storing it, so these are the only
+        // two values the extension is ever handed.
+        XCTAssertEqual(
+            FinderMenuLabels.title(
+                for: .copyCurrentDirectoryPath,
+                languageIdentifier: AppLanguage.Resolved.en.rawValue
+            ),
+            "Copy Path"
+        )
+        XCTAssertEqual(
+            FinderMenuLabels.title(
+                for: .copyCurrentDirectoryPath,
+                languageIdentifier: AppLanguage.Resolved.zhHans.rawValue
+            ),
+            "复制路径"
+        )
+    }
+
+    func testAnEnglishMenuIsNotOverriddenByAChineseSystem() {
+        // The bug this replaced: the extension re-resolved "system" itself, so
+        // a Chinese system produced a Chinese menu whatever the app was set to.
+        for action in [
+            FinderMenuAction.copyCurrentDirectoryPath,
+            .showHiddenFiles,
+            .hideHiddenFiles
+        ] {
+            let english = FinderMenuLabels.title(
+                for: action,
+                languageIdentifier: AppLanguage.Resolved.en.rawValue
+            )
+            XCTAssertTrue(english.allSatisfy { $0.isASCII }, "\(action): \(english)")
+        }
+    }
+
+    func testTheOlderStoredSpellingStillReadsAsChinese() {
+        XCTAssertEqual(
+            FinderMenuLabels.title(
+                for: .copyCurrentDirectoryPath,
+                languageIdentifier: "zhHans"
+            ),
+            "复制路径"
+        )
+    }
+
     func testItemMenuOnlyAppearsForSelectedItems() {
         let empty = FinderMenuContext(location: .selection, currentDirectory: nil, selectedURLs: [])
         let selected = FinderMenuContext(
@@ -943,7 +988,12 @@ final class FinderMenuTests: XCTestCase {
         )
 
         XCTAssertFalse(settings.finderExtensionEnabled)
-        XCTAssertEqual(groupStore.snapshot(), FinderMenuPreferences())
+        // The stored language is resolved by the app before it is written, so
+        // the default is whichever of the two this system resolves to.
+        XCTAssertEqual(
+            groupStore.snapshot(),
+            FinderMenuPreferences(languageIdentifier: AppLanguage.system.resolved().rawValue)
+        )
 
         settings.finderExtensionEnabled = true
         settings.appLanguage = .zhHans
@@ -965,7 +1015,7 @@ final class FinderMenuTests: XCTestCase {
             groupStore.snapshot(),
             FinderMenuPreferences(
                 isEnabled: true,
-                languageIdentifier: AppLanguage.zhHans.rawValue,
+                languageIdentifier: AppLanguage.zhHans.resolved().rawValue,
                 groupsLaunchShortcuts: false,
                 launchShortcuts: [app],
                 documentPresets: expectedPresets

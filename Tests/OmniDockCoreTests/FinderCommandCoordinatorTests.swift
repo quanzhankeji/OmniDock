@@ -129,6 +129,85 @@ final class FinderCommandCoordinatorTests: XCTestCase {
         XCTAssertEqual(openedApplication, application)
     }
 
+    func testAskingForTheFolderIsSkippedOutsideASandbox() throws {
+        // The tests run unsandboxed, which is the case that must never prompt:
+        // the folder is reachable, so asking would be a dialog for nothing.
+        XCTAssertFalse(FinderFileCommandCoordinator.isSandboxed)
+
+        let home = try makeTemporaryDirectory()
+        let downloads = home.appendingPathComponent("Downloads", isDirectory: true)
+        let application = home.appendingPathComponent("Sample.app", isDirectory: true)
+        for url in [downloads, application] {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        let shortcut = FinderLaunchShortcut(
+            displayName: "Sample App",
+            bundleURLString: application.absoluteString,
+            bundleIdentifier: "com.example.sample"
+        )
+        let mailbox = FinderCommandMailbox(directoryProvider: { home })
+        let request = FinderCommandEnvelope(command: .openWithApplication(
+            shortcut: shortcut,
+            displayPaths: [downloads.path]
+        ))
+        try mailbox.enqueue(request)
+
+        var promptCount = 0
+        var openedTargets: [URL] = []
+        FinderFileCommandCoordinator(
+            requestMailbox: mailbox,
+            preferencesStore: makePreferencesStore(FinderMenuPreferences(
+                isEnabled: true,
+                launchShortcuts: [shortcut]
+            )),
+            directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            requestDirectoryAccess: { promptCount += 1; return $0 },
+            openApplication: { targetURLs, _, _ in openedTargets = targetURLs }
+        ).handle(requestID: request.id)
+
+        XCTAssertEqual(promptCount, 0)
+        XCTAssertEqual(openedTargets, [downloads.standardizedFileURL])
+    }
+
+    func testTheFolderIsStillOpenedWhenNoGrantCoversIt() throws {
+        // A folder the sandbox already reaches needs no grant, so a missing one
+        // must not turn into a command that does nothing.
+        let home = try makeTemporaryDirectory()
+        let downloads = home.appendingPathComponent("Downloads", isDirectory: true)
+        let application = home.appendingPathComponent("Sample.app", isDirectory: true)
+        for url in [downloads, application] {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        }
+        defer { try? FileManager.default.removeItem(at: home) }
+
+        let shortcut = FinderLaunchShortcut(
+            displayName: "Sample App",
+            bundleURLString: application.absoluteString,
+            bundleIdentifier: "com.example.sample"
+        )
+        let mailbox = FinderCommandMailbox(directoryProvider: { home })
+        let request = FinderCommandEnvelope(command: .openWithApplication(
+            shortcut: shortcut,
+            displayPaths: [downloads.path]
+        ))
+        try mailbox.enqueue(request)
+
+        var openedTargets: [URL] = []
+        FinderFileCommandCoordinator(
+            requestMailbox: mailbox,
+            preferencesStore: makePreferencesStore(FinderMenuPreferences(
+                isEnabled: true,
+                launchShortcuts: [shortcut]
+            )),
+            directoryGrantStore: FinderDirectoryGrantStore(defaults: isolatedDefaults()),
+            openApplication: { targetURLs, _, _ in openedTargets = targetURLs }
+        ).handle(requestID: request.id)
+
+        XCTAssertEqual(openedTargets, [downloads.standardizedFileURL])
+    }
+
     func testASelectedFileIsHandedToTheApplicationItself() throws {
         let home = try makeTemporaryDirectory()
         let downloads = home.appendingPathComponent("Downloads", isDirectory: true)

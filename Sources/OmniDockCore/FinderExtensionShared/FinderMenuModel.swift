@@ -283,11 +283,22 @@ enum FinderMenuLabels {
         usesChinese(languageIdentifier) ? "打开方式" : "Open With"
     }
 
+    // The containing app stores a language it has already resolved, so there is
+    // nothing to work out here. The older spellings are still understood: a
+    // build that wrote them may have run before this one, and a menu in the
+    // wrong language is worse than a comparison that carries two dead values.
     private static func usesChinese(_ languageIdentifier: String) -> Bool {
-        languageIdentifier == "zhHans" || (
-            languageIdentifier == "system"
-                && Locale.preferredLanguages.contains { $0.lowercased().hasPrefix("zh") }
-        )
+        switch languageIdentifier {
+        case "zh-Hans", "zhHans":
+            return true
+        case "en":
+            return false
+        default:
+            // Only reached by a value this build does not know - "system" from
+            // an older one, or nothing stored yet. Falling back to the system
+            // is what an install that has never been configured should do.
+            return Locale.preferredLanguages.contains { $0.lowercased().hasPrefix("zh") }
+        }
     }
 }
 

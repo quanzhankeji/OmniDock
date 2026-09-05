@@ -52,6 +52,19 @@ final class BuildEntitlementsTests: XCTestCase {
         XCTAssertTrue(implementation.contains("final class FinderMenuExtension: FIFinderSync"))
     }
 
+    func testFinderExtensionDoesNotPersistMenuLocations() throws {
+        let implementation = try String(
+            contentsOf: repositoryRoot()
+                .appendingPathComponent("Sources", isDirectory: true)
+                .appendingPathComponent("OmniDockFinderSync", isDirectory: true)
+                .appendingPathComponent("FinderMenuExtension.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertFalse(implementation.contains("FinderMenuDiagnostics"))
+        XCTAssertFalse(implementation.contains("finder-menu-diagnostics.log"))
+    }
+
     func testReleaseBuildUsesVersionManifestAndRejectsBaseDebugEntitlements() throws {
         let root = repositoryRoot()
         let manifestData = try Data(

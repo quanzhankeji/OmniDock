@@ -816,7 +816,10 @@ public final class SettingsStore {
             .observationRootPaths ?? []
         finderMenuPreferencesStore?.update(FinderMenuPreferences(
             isEnabled: finderExtensionEnabled,
-            languageIdentifier: appLanguage.rawValue,
+            // Resolved here rather than in the extension. "system" would have
+            // to be worked out again inside a sandboxed appex, from a language
+            // list that is not necessarily the one this app resolved against.
+            languageIdentifier: appLanguage.resolved().rawValue,
             groupsLaunchShortcuts: finderLaunchShortcutsGrouped,
             groupsDocumentPresets: finderDocumentPresetsGrouped,
             groupsQuickCommands: finderQuickCommandsGrouped,
