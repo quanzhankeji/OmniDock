@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import CoreGraphics
+import ScreenCaptureKit
 
 private let windowCycleEventSignature: OSType = 0x4F444154 // "ODAT"
 
@@ -433,7 +434,6 @@ private let windowCycleEventTapCallback: CGEventTapCallBack = { _, type, event, 
 
 @MainActor
 final class WindowCycleService {
-    private static let maximumStaticCaptureCount = 3
     private static let initialReconciliationDelay: TimeInterval = 0.12
 
     private let settings: SettingsStore
@@ -451,7 +451,15 @@ final class WindowCycleService {
     private var sessionTarget: DockAppTarget?
     private var sessionGeneration: UInt64 = 0
     private var inventoryRefreshGeneration: UInt64 = 0
-    private var activeStaticCaptures: [PreviewWindowIdentity: any PreviewCaptureSession] = [:]
+    // Sessions are the registry's to start, reuse and stop, the same way the
+    // Dock previews and the Command-Tab switcher run theirs. What stays here is
+    // the material it reconciles against: the window each identity captures
+    // from, and the ones ScreenCaptureKit never offered.
+    private let captureSessionRegistry = PreviewCaptureSessionRegistry()
+    private var captureWindows: [PreviewWindowIdentity: SCWindow] = [:]
+    // Cached stills seed currentImages, so that cannot tell a card that has
+    // been captured from one that is merely showing something.
+    private var capturedIdentities = Set<PreviewWindowIdentity>()
     private var unavailableStaticIdentities = Set<PreviewWindowIdentity>()
     private var currentImages: [PreviewWindowIdentity: NSImage] = [:]
     private var inventoryChangeObserverIdentifier: UUID?
@@ -666,6 +674,11 @@ final class WindowCycleService {
         return true
     }
 
+    private func refreshInventoryForNextSession() {
+        hasPrewarmedInventory = false
+        scheduleInventoryPrewarmIfNeeded()
+    }
+
     private func scheduleInventoryPrewarmIfNeeded() {
         guard !hasPrewarmedInventory else {
             return
@@ -763,9 +776,7 @@ final class WindowCycleService {
         let removedIdentities = Set(session.windows.map(PreviewWindowIdentity.init))
             .subtracting(replacementIdentities)
         for identity in removedIdentities {
-            activeStaticCaptures.removeValue(forKey: identity)?.stop()
-            currentImages[identity] = nil
-            unavailableStaticIdentities.remove(identity)
+            forgetCapture(identity)
         }
 
         session.replaceWindows(replacement)
@@ -809,18 +820,26 @@ final class WindowCycleService {
         target: DockAppTarget,
         generation: UInt64
     ) {
-        let captureWindows = Array(session.staticCaptureWindows.filter { window in
+        // A window needs a snapshot when nothing has been captured from it yet.
+        // Holding a picture is not the same thing: the session starts with
+        // cached stills so the cards are not blank, and treating those as
+        // finished left every one of them frozen at the cached frame.
+        //
+        // With live previews off a cached still is all a card will ever show,
+        // so there is nothing to gain from capturing again.
+        let reusesCachedImages = !settings.liveDockPreviewsEnabled
+        let pending = session.staticCaptureWindows.filter { window in
             let identity = PreviewWindowIdentity(window)
-            return currentImages[identity] == nil
-                && activeStaticCaptures[identity] == nil
+            return !(reusesCachedImages && currentImages[identity] != nil)
+                && captureWindows[identity] == nil
                 && !unavailableStaticIdentities.contains(identity)
-        }.prefix(Self.maximumStaticCaptureCount - activeStaticCaptures.count))
-        let captureIdentitiesByProcess = Dictionary(grouping: captureWindows, by: \.processIdentifier)
+        }
+        let captureIdentitiesByProcess = Dictionary(grouping: pending, by: \.processIdentifier)
             .mapValues { windows in
                 Set(windows.map(PreviewWindowIdentity.init))
             }
         var seenProcessIdentifiers = Set<pid_t>()
-        let processIdentifiers = captureWindows.compactMap { window -> pid_t? in
+        let processIdentifiers = pending.compactMap { window -> pid_t? in
             seenProcessIdentifiers.insert(window.processIdentifier).inserted
                 ? window.processIdentifier
                 : nil
@@ -839,10 +858,9 @@ final class WindowCycleService {
                 previewAnchorKind: .windowCycle
             )
             previewService.loadWindows(for: applicationTarget) { [weak self] snapshot in
-                self?.startStaticCaptures(
+                self?.adoptCaptureWindows(
                     from: snapshot,
-                    processIdentifier: processIdentifier,
-                    captureIdentities: captureIdentitiesByProcess[processIdentifier, default: []],
+                    requested: captureIdentitiesByProcess[processIdentifier, default: []],
                     target: target,
                     generation: generation
                 )
@@ -850,93 +868,108 @@ final class WindowCycleService {
         }
     }
 
-    private func startStaticCaptures(
+    private func adoptCaptureWindows(
         from snapshot: PreviewWindowSnapshot,
-        processIdentifier: pid_t,
-        captureIdentities: Set<PreviewWindowIdentity>,
+        requested: Set<PreviewWindowIdentity>,
         target: DockAppTarget,
         generation: UInt64
     ) {
         guard generation == sessionGeneration,
-              let session,
+              session != nil,
               sessionTarget?.isSameDockTile(as: target) == true
         else {
             return
         }
-        let unavailableIdentities = StaticPreviewCaptureAvailabilityPolicy.unavailableIdentities(
-            requested: captureIdentities,
-            available: Set(snapshot.captureWindows.keys)
+        unavailableStaticIdentities.formUnion(
+            StaticPreviewCaptureAvailabilityPolicy.unavailableIdentities(
+                requested: requested,
+                available: Set(snapshot.captureWindows.keys)
+            )
         )
-        unavailableStaticIdentities.formUnion(unavailableIdentities)
-        let policy = PreviewCapturePolicy.adaptive(
-            livePreviewsEnabled: false,
-            windowCount: session.windows.count,
-            powerState: .current
-        )
-        var didStartCapture = false
-        for window in session.windows where window.processIdentifier == processIdentifier {
-            guard activeStaticCaptures.count < Self.maximumStaticCaptureCount else {
-                break
-            }
-            let identity = PreviewWindowIdentity(window)
-            guard captureIdentities.contains(identity),
-                  currentImages[identity] == nil,
-                  activeStaticCaptures[identity] == nil,
-                  let captureWindow = snapshot.captureWindows[identity],
-                  let captureSession = previewService.startPreviewCaptureSession(
-                    identity: identity,
-                    window: captureWindow,
-                    mode: .staticImage,
-                    policy: policy,
-                    imageHandler: { [weak self] _, image in
-                        self?.acceptStaticImage(
-                            image,
-                            for: identity,
-                            target: target,
-                            generation: generation
-                        )
-                    },
-                    errorHandler: { [weak self] _ in
-                        guard let self,
-                              generation == self.sessionGeneration,
-                              self.sessionTarget?.isSameDockTile(as: target) == true,
-                              let currentSession = self.session
-                        else {
-                            return
-                        }
-                        self.activeStaticCaptures[identity] = nil
-                        self.unavailableStaticIdentities.insert(identity)
-                        self.requestStaticPreviews(
-                            for: currentSession,
-                            target: target,
-                            generation: generation
-                        )
-                    }
-                  )
-            else {
-                continue
-            }
-            activeStaticCaptures[identity] = captureSession
-            didStartCapture = true
+        for (identity, window) in snapshot.captureWindows {
+            captureWindows[identity] = window
         }
+        reconcileCaptureSessions(target: target, generation: generation)
+    }
 
-        if !unavailableIdentities.isEmpty || !didStartCapture {
-            requestStaticPreviews(
-                for: session,
-                target: target,
-                generation: generation
+    private func reconcileCaptureSessions(target: DockAppTarget, generation: UInt64) {
+        guard let session else {
+            return
+        }
+        // The queue order carries the selection and its neighbours first, so
+        // handing it over whole lets the registry spend its slots on the cards
+        // about to be looked at.
+        let ordered = session.staticCaptureWindows.map(PreviewWindowIdentity.init)
+        let available = Set(captureWindows.keys).subtracting(unavailableStaticIdentities)
+        // Same switch the Dock and Command-Tab previews follow.
+        let policy = PreviewCapturePolicy.adaptive(
+            livePreviewsEnabled: settings.liveDockPreviewsEnabled,
+            windowCount: session.windows.count,
+            powerState: .current,
+            requestedLiveStreamCount: settings.livePreviewWindowLimit
+        )
+
+        captureSessionRegistry.reconcile(
+            orderedIdentities: ordered,
+            availableIdentities: available,
+            sourceSizes: captureWindows.mapValues { $0.frame.size },
+            policy: policy
+        ) { [weak self] identity, mode, sessionPolicy in
+            guard let self,
+                  let window = self.captureWindows[identity]
+            else {
+                return nil
+            }
+            return self.previewService.startPreviewCaptureSession(
+                identity: identity,
+                window: window,
+                mode: mode,
+                policy: sessionPolicy,
+                imageHandler: { [weak self] _, image in
+                    self?.acceptCapturedImage(
+                        image,
+                        for: identity,
+                        target: target,
+                        generation: generation
+                    )
+                },
+                errorHandler: { [weak self] _ in
+                    self?.handleCaptureFailure(
+                        for: identity,
+                        target: target,
+                        generation: generation
+                    )
+                }
             )
         }
     }
 
-    private func acceptStaticImage(
+    private func handleCaptureFailure(
+        for identity: PreviewWindowIdentity,
+        target: DockAppTarget,
+        generation: UInt64
+    ) {
+        guard generation == sessionGeneration,
+              sessionTarget?.isSameDockTile(as: target) == true
+        else {
+            return
+        }
+        captureSessionRegistry.remove(identity)
+        // Marked unavailable rather than retried: the queue holds every other
+        // window, and one that cannot be captured must not hold up the rest.
+        unavailableStaticIdentities.insert(identity)
+        reconcileCaptureSessions(target: target, generation: generation)
+    }
+
+    private func acceptCapturedImage(
         _ image: NSImage,
         for identity: PreviewWindowIdentity,
         target: DockAppTarget,
         generation: UInt64
     ) {
-        activeStaticCaptures[identity]?.stop()
-        activeStaticCaptures[identity] = nil
+        // The session is not stopped here. A still capture finishes on its own
+        // and the registry clears it; stopping a live one would end it at its
+        // first frame, which is the very thing this shows.
         guard generation == sessionGeneration,
               sessionTarget?.isSameDockTile(as: target) == true,
               var session,
@@ -945,12 +978,29 @@ final class WindowCycleService {
             return
         }
 
+        let isFirstImage = capturedIdentities.insert(identity).inserted
         currentImages[identity] = image
         session.update(copy(session.windows[index], image: image), at: index)
         self.session = session
         previewPanelController.updatePreview(windowID: identity.windowID ?? 0, image: image)
         cacheImages(for: identity.processIdentifier)
+
+        // Only once a window first has something to show. A live capture
+        // arrives many times a second, and chasing the queue on every frame
+        // would spend the whole session reconciling.
+        guard isFirstImage else {
+            return
+        }
         requestStaticPreviews(for: session, target: target, generation: generation)
+        reconcileCaptureSessions(target: target, generation: generation)
+    }
+
+    private func forgetCapture(_ identity: PreviewWindowIdentity) {
+        captureSessionRegistry.remove(identity)
+        captureWindows[identity] = nil
+        capturedIdentities.remove(identity)
+        currentImages[identity] = nil
+        unavailableStaticIdentities.remove(identity)
     }
 
     private func removeWindow(_ window: PreviewWindowInfo) {
@@ -958,9 +1008,7 @@ final class WindowCycleService {
     }
 
     private func removeWindow(_ identity: PreviewWindowIdentity) {
-        activeStaticCaptures.removeValue(forKey: identity)?.stop()
-        currentImages[identity] = nil
-        unavailableStaticIdentities.remove(identity)
+        forgetCapture(identity)
         guard var session else {
             return
         }
@@ -976,7 +1024,7 @@ final class WindowCycleService {
     }
 
     private func removeApplication(_ processIdentifier: pid_t) {
-        let captureIdentities = Set(activeStaticCaptures.keys.filter {
+        let captureIdentities = Set(captureWindows.keys.filter {
             $0.processIdentifier == processIdentifier
         }).union(currentImages.keys.filter {
             $0.processIdentifier == processIdentifier
@@ -984,9 +1032,7 @@ final class WindowCycleService {
             $0.processIdentifier == processIdentifier
         })
         for identity in captureIdentities {
-            activeStaticCaptures.removeValue(forKey: identity)?.stop()
-            currentImages[identity] = nil
-            unavailableStaticIdentities.remove(identity)
+            forgetCapture(identity)
         }
         guard var session else {
             return
@@ -1007,8 +1053,9 @@ final class WindowCycleService {
         isAwaitingInventory = false
         stopObservingInventoryChanges()
         inputMonitor.stop()
-        activeStaticCaptures.values.forEach { $0.stop() }
-        activeStaticCaptures.removeAll()
+        captureSessionRegistry.stopAll()
+        captureWindows.removeAll()
+        capturedIdentities.removeAll()
         unavailableStaticIdentities.removeAll()
         currentImages.removeAll()
         session = nil
@@ -1016,6 +1063,11 @@ final class WindowCycleService {
         previewPanelController.hide()
         if wasActive {
             onSessionActivityChanged(false)
+            // Warmed once at registration, the inventory is as old as the last
+            // launch by the time anyone reaches for the switcher, so it opens
+            // on windows that have since closed, moved or resized. Warm it
+            // again now the panel is down and nothing is waiting on it.
+            refreshInventoryForNextSession()
         }
         guard let window else {
             return

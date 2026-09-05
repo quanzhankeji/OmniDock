@@ -31,7 +31,7 @@ final class CmdTabPreviewService {
     private var requestState = CmdTabPreviewRequestState()
     private var currentWindows: [PreviewWindowInfo] = []
     private var currentImages: [PreviewWindowIdentity: NSImage] = [:]
-    private var staticCaptureRetryCounts: [PreviewWindowIdentity: Int] = [:]
+    private var captureRetryCounts: [PreviewWindowIdentity: Int] = [:]
     private var currentTarget: DockAppTarget?
     private var isInteractionActive = false
 
@@ -137,13 +137,6 @@ final class CmdTabPreviewService {
             return
         }
 
-        guard DockTargetOwnershipPolicy.shouldHandle(
-            targetProcessIdentifier: target.processIdentifier
-        ) else {
-            resetPresentation()
-            return
-        }
-
         resetPresentation()
         currentTarget = target
 
@@ -171,17 +164,20 @@ final class CmdTabPreviewService {
                 return
             }
 
+            // Same switch the Dock previews follow, so the two do not disagree
+            // about whether a preview moves.
             let policy = PreviewCapturePolicy.adaptive(
-                livePreviewsEnabled: false,
+                livePreviewsEnabled: self.settings.liveDockPreviewsEnabled,
                 windowCount: snapshot.windows.count,
-                powerState: .current
+                powerState: .current,
+                requestedLiveStreamCount: self.settings.livePreviewWindowLimit
             )
             self.currentWindows = Array(snapshot.windows.prefix(policy.maxVisibleWindows))
             let identities = self.currentWindows.map(PreviewWindowIdentity.init)
             let identitySet = Set(identities)
             self.currentImages = cachedImages.filter { identitySet.contains($0.key) }
             self.refreshPanel(target: target, message: snapshot.message)
-            self.reconcileStaticCaptureSessions(
+            self.reconcileCaptureSessions(
                 snapshot: snapshot,
                 policy: policy,
                 target: target,
@@ -191,7 +187,7 @@ final class CmdTabPreviewService {
         }
     }
 
-    private func reconcileStaticCaptureSessions(
+    private func reconcileCaptureSessions(
         snapshot: PreviewWindowSnapshot,
         policy: PreviewCapturePolicy,
         target: DockAppTarget,
@@ -206,15 +202,17 @@ final class CmdTabPreviewService {
             policy: policy
         ) { [weak self] identity, mode, sessionPolicy in
             guard let self,
-                  mode == .staticImage,
                   let window = snapshot.captureWindows[identity]
             else {
                 return nil
             }
+            // The registry decides which windows stream and which get a single
+            // frame; refusing the live ones here left them with no session at
+            // all once the policy started asking for them.
             return self.previewService.startPreviewCaptureSession(
                 identity: identity,
                 window: window,
-                mode: .staticImage,
+                mode: mode,
                 policy: sessionPolicy,
                 imageHandler: { [weak self] _, image in
                     self?.accept(
@@ -226,7 +224,7 @@ final class CmdTabPreviewService {
                     )
                 },
                 errorHandler: { [weak self] _ in
-                    self?.handleStaticCaptureFailure(
+                    self?.handleCaptureFailure(
                         for: identity,
                         snapshot: snapshot,
                         policy: policy,
@@ -239,7 +237,7 @@ final class CmdTabPreviewService {
         }
     }
 
-    private func handleStaticCaptureFailure(
+    private func handleCaptureFailure(
         for identity: PreviewWindowIdentity,
         snapshot: PreviewWindowSnapshot,
         policy: PreviewCapturePolicy,
@@ -260,11 +258,11 @@ final class CmdTabPreviewService {
         }
 
         captureSessionRegistry.remove(identity)
-        let retryCount = staticCaptureRetryCounts[identity, default: 0]
+        let retryCount = captureRetryCounts[identity, default: 0]
         guard retryCount < 1 else {
             return
         }
-        staticCaptureRetryCounts[identity] = retryCount + 1
+        captureRetryCounts[identity] = retryCount + 1
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
             guard let self,
                   self.requestState.accepts(
@@ -276,7 +274,7 @@ final class CmdTabPreviewService {
             else {
                 return
             }
-            self.reconcileStaticCaptureSessions(
+            self.reconcileCaptureSessions(
                 snapshot: snapshot,
                 policy: policy,
                 target: target,
@@ -300,7 +298,7 @@ final class CmdTabPreviewService {
         currentWindows.contains(where: { PreviewWindowIdentity($0) == identity }) else {
             return
         }
-        staticCaptureRetryCounts[identity] = nil
+        captureRetryCounts[identity] = nil
         currentImages[identity] = image
         refreshPanel(target: target, message: nil)
         cacheCurrentImages(for: target.processIdentifier)
@@ -399,7 +397,7 @@ final class CmdTabPreviewService {
         captureSessionRegistry.remove(identity)
         currentWindows.removeAll { PreviewWindowIdentity($0) == identity }
         currentImages[identity] = nil
-        staticCaptureRetryCounts[identity] = nil
+        captureRetryCounts[identity] = nil
         previewService.removeCachedSnapshot(matching: window)
     }
 
@@ -426,7 +424,7 @@ final class CmdTabPreviewService {
         captureSessionRegistry.stopAll()
         currentWindows = []
         currentImages = [:]
-        staticCaptureRetryCounts = [:]
+        captureRetryCounts = [:]
         currentTarget = nil
         previewPanelController.hide()
         publishButtonTargets()
