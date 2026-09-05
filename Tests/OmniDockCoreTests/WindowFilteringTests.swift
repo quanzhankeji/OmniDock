@@ -306,4 +306,34 @@ final class WindowFilteringTests: XCTestCase {
         ))
     }
 
+
+    // The switcher lists this app's own windows now, so nothing names its
+    // panels to keep them out. This is what actually does it: every one of
+    // them sits above the normal window layer.
+    func testThisAppsOwnPanelLayersStayOutOfTheWindowList() {
+        let ordinary = CGRect(x: 0, y: 0, width: 900, height: 600)
+
+        XCTAssertTrue(WindowFiltering.hasNormalWindowGeometry(
+            layer: Int(NSWindow.Level.normal.rawValue),
+            frame: ordinary
+        ))
+        for level: NSWindow.Level in [.floating, .statusBar, .popUpMenu] {
+            XCTAssertFalse(
+                WindowFiltering.hasNormalWindowGeometry(
+                    layer: Int(level.rawValue),
+                    frame: ordinary
+                ),
+                "level \(level.rawValue)"
+            )
+        }
+    }
+
+    func testPanelLevelsThisAppUsesSitAboveTheNormalLayer() {
+        // Guards the assumption above: a panel created at the normal level
+        // would start appearing in the switcher alongside the settings window.
+        for level: NSWindow.Level in [.floating, .statusBar] {
+            XCTAssertGreaterThan(level.rawValue, NSWindow.Level.normal.rawValue)
+        }
+    }
+
 }

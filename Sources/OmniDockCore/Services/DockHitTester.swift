@@ -249,8 +249,9 @@ public final class DockHitTester {
                 bundleIdentifier: application.bundleIdentifier,
                 localizedName: application.localizedName,
                 isHidden: application.isHidden,
-                isDockTargetCandidate: application.activationPolicy == .regular
-                    && application.processIdentifier != getpid()
+                isDockTargetCandidate: DockTargetCandidatePolicy.isPreviewable(
+                    activationPolicy: application.activationPolicy
+                )
             )
         }
         let screens = NSScreen.screens.compactMap { screen -> DockScreenInventoryItem? in

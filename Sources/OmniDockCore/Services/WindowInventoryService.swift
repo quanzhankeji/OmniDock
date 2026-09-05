@@ -939,11 +939,7 @@ final class WindowInventoryService {
     func reconcileSwitcherWindows() -> [WindowInventoryRecord] {
         let windowServerWindows = windowServerWindowsByProcess()
         let runningApplications = NSWorkspace.shared.runningApplications.filter { application in
-            application.activationPolicy == .regular
-                && !application.isTerminated
-                && DockTargetOwnershipPolicy.shouldHandle(
-                    targetProcessIdentifier: application.processIdentifier
-                )
+            application.activationPolicy == .regular && !application.isTerminated
         }
         let processIdentifiers = Set(runningApplications.map(\.processIdentifier))
             .union(windowServerWindows.keys)
@@ -998,10 +994,16 @@ final class WindowInventoryService {
             }
 
             let processIdentifier = pid_t(rawProcessIdentifier)
-            guard DockTargetOwnershipPolicy.shouldHandle(targetProcessIdentifier: processIdentifier) else {
-                continue
-            }
 
+            // This app's own windows are listed like anyone else's. Whether to
+            // act on a Dock icon is a different question from whether a window
+            // belongs in the list, and answering the second with the first hid
+            // the settings window from the switcher.
+            //
+            // Nothing here needs to name the panels this app puts on screen -
+            // the preview, the clipboard palette, the layout palette. They sit
+            // above the normal window layer, so the geometry check below leaves
+            // them out for the same reason it leaves out every other app's.
             let frame = CGWindowDictionary.frame(from: rawWindow)
             guard WindowFiltering.hasNormalWindowGeometry(layer: layer, frame: frame),
                   let application = NSRunningApplication(processIdentifier: processIdentifier)

@@ -1,5 +1,19 @@
 import AppKit
 
+// Whether a Dock tile can be previewed at all. This app's own tile qualifies:
+// it appears only while one of its windows is on screen, and that window is
+// worth previewing like anyone else's.
+enum DockTargetCandidatePolicy {
+    static func isPreviewable(activationPolicy: NSApplication.ActivationPolicy) -> Bool {
+        activationPolicy == .regular
+    }
+}
+
+// Narrower than it reads: this decides whether to take over an interaction
+// aimed at this app, not whether its windows may be shown. Previews no longer
+// consult it - a click that hid this app would close the very window being
+// previewed, and standing in as another tile's proxy owner would be stranger
+// still.
 enum DockTargetOwnershipPolicy {
     static func shouldHandle(targetProcessIdentifier: pid_t, currentProcessIdentifier: pid_t = getpid()) -> Bool {
         targetProcessIdentifier != currentProcessIdentifier
@@ -528,14 +542,6 @@ public final class DockInteractionCoordinator {
             case let .previewableTarget(hitTarget):
                 previewExitBeganAt = nil
                 let target = resolvedDockTarget(for: hitTarget)
-                guard DockTargetOwnershipPolicy.shouldHandle(
-                    targetProcessIdentifier: target.processIdentifier
-                ) else {
-                    hidePreview()
-                    hoverTarget = nil
-                    hoverBeganAt = nil
-                    return
-                }
                 handleDockHoverTarget(target)
                 synchronizeHoverTimer(isInteracting: true)
                 return
@@ -633,12 +639,6 @@ public final class DockInteractionCoordinator {
     }
 
     private func showPreview(for target: DockAppTarget) {
-        guard DockTargetOwnershipPolicy.shouldHandle(
-            targetProcessIdentifier: target.processIdentifier
-        ) else {
-            hidePreview()
-            return
-        }
         let summary = windowControlService.interactionSummary(for: target.processIdentifier)
         let isHidden = NSRunningApplication(processIdentifier: target.processIdentifier)?.isHidden ?? false
         if !isHidden, summary.normalWindowCount == 0 {

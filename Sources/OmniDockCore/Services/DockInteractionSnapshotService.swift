@@ -113,6 +113,12 @@ private final class DockInteractionTargetEvaluator {
         _ originalTarget: DockAppTarget,
         applications: DockApplicationInventory
     ) -> DockInteractionEvaluatedTarget {
+        // Declined here rather than when the click is acted on. The tap
+        // swallows the event first and asks what to do with it second, so a
+        // click this app will not act on has to be refused at this point or it
+        // reaches neither this app nor the Dock - the tile stops responding
+        // altogether. Previews are unaffected: they come from the hit tester,
+        // not from this evaluation.
         guard DockTargetOwnershipPolicy.shouldHandle(
             targetProcessIdentifier: originalTarget.processIdentifier,
             currentProcessIdentifier: currentProcessIdentifier
