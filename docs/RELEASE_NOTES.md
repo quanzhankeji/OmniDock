@@ -1,4 +1,6 @@
-# OmniDock 1.2.8
+# OmniDock 1.2.9
 
-- Fix official update verification for locally built OmniDock copies while retaining strict Developer ID, Team ID, bundle, nested-code, and Gatekeeper checks.
-- Show only the marketing version in Settings and public release labels; the internal build number remains app metadata.
+- Refresh manual update checks and recover safely from stale GitHub release cache responses.
+- Bring live previews to both window switchers, include OmniDock's own standard windows, and align the app icon with macOS Dock sizing.
+- Improve Finder menu language, selected-item targeting, and sandboxed folder access when opening items with chosen applications.
+- Stabilize feature settings and menu bar shelf controls during configuration and Command-drag arrangement.
