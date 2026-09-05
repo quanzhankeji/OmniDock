@@ -57,11 +57,15 @@ final class WindowPlacementConfigurationTests: XCTestCase {
         defer {
             defaults.removePersistentDomain(forName: defaultsName)
         }
+        let settings = SettingsStore(
+            defaults: defaults,
+            livePreviewLimitProvider: { 8 }
+        )
+        // The editor is only on screen while the feature is on, so turn it on:
+        // this is a test about how wide the grids are, not about when they show.
+        settings.windowPlacementEnabled = true
         let view = WindowPlacementSettingsView(
-            settings: SettingsStore(
-                defaults: defaults,
-                livePreviewLimitProvider: { 8 }
-            ),
+            settings: settings,
             registrationStatus: WindowPlacementRegistrationStatusStore()
         )
         view.frame = CGRect(x: 0, y: 0, width: 732, height: 760)

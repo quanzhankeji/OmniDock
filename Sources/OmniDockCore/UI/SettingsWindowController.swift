@@ -109,6 +109,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     private var hotkeyHideOnRepeatedTriggerRow: NSView?
     private var hotkeyChooseApplicationButton: NSButton?
     private var clipboardHistorySwitch: NSSwitch?
+    private var clipboardDetailViews: [NSView] = []
     private var clipboardHistoryLimitField: NSTextField?
     private var clipboardHistoryLimitStepper: NSStepper?
     private var clipboardHistoryWarningField: NSTextField?
@@ -128,6 +129,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     private var hotkeyGuidanceField: NSTextField?
     private var hotkeyHeaderHeightConstraint: NSLayoutConstraint?
     private var hotkeyBindingCountField: NSTextField?
+    private var renderedHotkeyRowsSignature: HotkeyRowsSignature?
     private var permissionViews: [PermissionKind: [PermissionStatusView]] = [:]
     private var hotkeyRowsStack: NSStackView?
     private var hotkeyWarnings: [UUID: String] = [:]
@@ -324,6 +326,11 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         hotkeyHideOnRepeatedTriggerSwitch?.state = settings.hotkeyHideOnRepeatedTrigger ? .on : .off
         hotkeyHideOnRepeatedTriggerSwitch?.isEnabled = settings.hotkeysEnabled
         clipboardHistorySwitch?.state = settings.clipboardHistoryEnabled ? .on : .off
+        // Off means nothing is being recorded, so the shortcut, the limit and
+        // the history behind them have nothing to describe.
+        for view in clipboardDetailViews {
+            view.isHidden = !settings.clipboardHistoryEnabled
+        }
         refreshClipboardHistoryLimitControls()
         refreshClipboardHistoryStatus()
         refreshHotkeyGuidanceVisibility()
@@ -911,6 +918,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         hotkeyChooseApplicationButton = nil
         finderExtensionSettingsView = nil
         clipboardHistorySwitch = nil
+        clipboardDetailViews = []
         clipboardHistoryLimitField = nil
         clipboardHistoryLimitStepper = nil
         clipboardHistoryWarningField = nil
@@ -927,6 +935,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         hotkeyGuidanceField = nil
         hotkeyHeaderHeightConstraint = nil
         hotkeyBindingCountField = nil
+        renderedHotkeyRowsSignature = nil
         hotkeyRowsStack = nil
         window.contentView = makeContentView()
     }
@@ -1266,9 +1275,12 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         bindingCountField.alignment = .right
         bindingCountField.translatesAutoresizingMaskIntoConstraints = false
         hotkeyBindingCountField = bindingCountField
+        // Count before button: the count is empty until the list is first
+        // filled, and with the button in front of it the button slid left the
+        // moment the text appeared.
         listHeader.addArrangedSubview(listSpacer)
-        listHeader.addArrangedSubview(addButton)
         listHeader.addArrangedSubview(bindingCountField)
+        listHeader.addArrangedSubview(addButton)
         stack.addArrangedSubview(listHeader)
 
         let rowsStack = NSStackView()
@@ -1353,11 +1365,13 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             self?.applyClipboardHistoryShortcut(shortcut, recorder: recorder)
         }
         clipboardShortcutRecorder = recorder
-        settingsStack.addArrangedSubview(makeSettingRow(
+        let shortcutRow = makeSettingRow(
             title: AppStrings.text(.clipboardShortcutTitle),
             detail: AppStrings.text(.clipboardShortcutDetail),
             control: recorder
-        ))
+        )
+        settingsStack.addArrangedSubview(shortcutRow)
+        clipboardDetailViews.append(shortcutRow)
 
         let warning = NSTextField(wrappingLabelWithString: "")
         warning.font = .systemFont(ofSize: 12)
@@ -1367,17 +1381,20 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         clipboardHistoryWarningField = warning
         settingsStack.addArrangedSubview(makeIndentedAuxiliaryTextRow(warning))
 
-        settingsStack.addArrangedSubview(makeSettingRow(
+        let limitRow = makeSettingRow(
             title: AppStrings.text(.clipboardLimitTitle),
             detail: AppStrings.text(.clipboardLimitDetail),
             control: makeClipboardHistoryLimitControl()
-        ))
+        )
+        settingsStack.addArrangedSubview(limitRow)
+        clipboardDetailViews.append(limitRow)
 
         let privacyNote = NSTextField(wrappingLabelWithString: AppStrings.text(.clipboardPrivacyNote))
         privacyNote.font = .systemFont(ofSize: 12)
         privacyNote.textColor = .secondaryLabelColor
         privacyNote.maximumNumberOfLines = 3
         settingsStack.addArrangedSubview(privacyNote)
+        clipboardDetailViews.append(privacyNote)
 
         let listHeader = NSStackView()
         listHeader.orientation = .horizontal
@@ -1385,6 +1402,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         listHeader.spacing = 10
         listHeader.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(listHeader)
+        clipboardDetailViews.append(listHeader)
 
         let searchField = NSSearchField()
         searchField.placeholderString = AppStrings.text(.clipboardSearchPlaceholder)
@@ -1421,6 +1439,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         listView.setContentHuggingPriority(.defaultLow, for: .vertical)
         listView.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
         root.addSubview(listView)
+        clipboardDetailViews.append(listView)
 
         for view in settingsStack.arrangedSubviews {
             view.widthAnchor.constraint(equalTo: settingsStack.widthAnchor).isActive = true
@@ -1967,6 +1986,19 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         guard let hotkeyRowsStack else {
             return
         }
+
+        // Every settings change refreshes this panel, and rebuilding the list
+        // means an application icon and a shortcut recorder per row. Doing that
+        // for a change the list does not reflect is what made the switch feel
+        // stuck: the click landed while the whole list was being rebuilt.
+        let signature = HotkeyRowsSignature(
+            bindings: settings.appHotkeyBindings,
+            warnings: hotkeyWarnings
+        )
+        guard signature != renderedHotkeyRowsSignature else {
+            return
+        }
+        renderedHotkeyRowsSignature = signature
         hotkeyRowsStack.removeAllArrangedSubviews()
 
         let bindings = settings.appHotkeyBindings
@@ -2082,6 +2114,10 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         hotkeyGuidanceField?.isHidden = !isVisible
         hotkeyHideOnRepeatedTriggerRow?.isHidden = !isVisible
         hotkeyChooseApplicationButton?.isHidden = !isVisible
+        // Nothing is bound while the feature is off, so neither the tally nor
+        // the applications behind it say anything worth reading.
+        hotkeyBindingCountField?.isHidden = !isVisible
+        hotkeyRowsStack?.isHidden = !isVisible
         hotkeyHeaderHeightConstraint?.constant = HotkeyGuidancePresentation.headerHeight(
             hotkeysEnabled: settings.hotkeysEnabled
         )

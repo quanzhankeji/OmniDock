@@ -38,6 +38,19 @@ final class WindowPlacementSettingsView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    private var detailSplit: NSView?
+    private var detailRows: [NSView] = []
+
+    private func refreshDetailVisibility() {
+        // With the feature off none of these apply to anything, so they are
+        // hidden rather than left standing for someone to set.
+        let showsDetail = settings.windowPlacementConfiguration.isEnabled
+        for row in detailRows {
+            row.isHidden = !showsDetail
+        }
+        detailSplit?.isHidden = !showsDetail
+    }
+
     func reload() {
         let configuration = settings.windowPlacementConfiguration
         masterSwitch.state = configuration.isEnabled ? .on : .off
@@ -45,8 +58,7 @@ final class WindowPlacementSettingsView: NSView {
         dragSwitch.state = configuration.observesWindowDragging ? .on : .off
         escapeCancelSwitch.state = configuration.allowsEscapeToCancelDrag ? .on : .off
         sizeOnDragSwitch.state = configuration.showsSizeOnDrag ? .on : .off
-        greenButtonSwitch.isEnabled = configuration.isEnabled
-        dragSwitch.isEnabled = configuration.isEnabled
+        refreshDetailVisibility()
         escapeCancelSwitch.isEnabled = configuration.isEnabled
             && configuration.observesWindowDragging
         sizeOnDragSwitch.isEnabled = configuration.isEnabled
@@ -82,37 +94,45 @@ final class WindowPlacementSettingsView: NSView {
 
         greenButtonSwitch.target = self
         greenButtonSwitch.action = #selector(toggleGreenButton(_:))
-        root.addArrangedSubview(makeSettingRow(
+        let rowGreenButton = makeSettingRow(
             title: AppStrings.text(.windowPlacementGreenButtonTitle),
             detail: AppStrings.text(.windowPlacementGreenButtonDetail),
             control: greenButtonSwitch
-        ))
+        )
+        root.addArrangedSubview(rowGreenButton)
+        detailRows.append(rowGreenButton)
 
         dragSwitch.target = self
         dragSwitch.action = #selector(toggleDrag(_:))
-        root.addArrangedSubview(makeSettingRow(
+        let rowDrag = makeSettingRow(
             title: AppStrings.text(.windowPlacementDragTitle),
             detail: AppStrings.text(.windowPlacementDragDetail),
             control: dragSwitch
-        ))
+        )
+        root.addArrangedSubview(rowDrag)
+        detailRows.append(rowDrag)
 
         escapeCancelSwitch.target = self
         escapeCancelSwitch.action = #selector(toggleEscapeCancel(_:))
-        root.addArrangedSubview(makeSettingRow(
+        let rowEscapeCancel = makeSettingRow(
             title: AppStrings.text(.windowPlacementEscapeCancelTitle),
             detail: AppStrings.text(.windowPlacementEscapeCancelDetail),
             control: escapeCancelSwitch,
             indentation: 24
-        ))
+        )
+        root.addArrangedSubview(rowEscapeCancel)
+        detailRows.append(rowEscapeCancel)
 
         sizeOnDragSwitch.target = self
         sizeOnDragSwitch.action = #selector(toggleSizeOnDrag(_:))
-        root.addArrangedSubview(makeSettingRow(
+        let rowShowSizeOnDrag = makeSettingRow(
             title: AppStrings.text(.windowPlacementShowSizeOnDragTitle),
             detail: AppStrings.text(.windowPlacementShowSizeOnDragDetail),
             control: sizeOnDragSwitch,
             indentation: 24
-        ))
+        )
+        root.addArrangedSubview(rowShowSizeOnDrag)
+        detailRows.append(rowShowSizeOnDrag)
 
         registrationWarningField.font = .systemFont(ofSize: 12)
         registrationWarningField.textColor = .systemRed
@@ -122,6 +142,7 @@ final class WindowPlacementSettingsView: NSView {
 
         let split = NSView()
         split.translatesAutoresizingMaskIntoConstraints = false
+        self.detailSplit = split
         root.addArrangedSubview(split)
 
         let commandColumn = makeCommandColumn()

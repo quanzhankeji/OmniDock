@@ -100,11 +100,16 @@ final class FinderExtensionSettingsView: NSView {
         nil
     }
 
+    private var detailSplit: NSView?
+
     func reload() {
         masterSwitch.state = settings.finderExtensionEnabled ? .on : .off
         copyPathCommandSwitch.state = settings.finderCopyPathCommand ? .on : .off
         showHiddenFilesCommandSwitch.state = settings.finderShowHiddenFilesCommand ? .on : .off
         hideHiddenFilesCommandSwitch.state = settings.finderHideHiddenFilesCommand ? .on : .off
+        // Every command below configures a menu that is not being added, so
+        // the master switch hides them rather than leaving them to be set.
+        detailSplit?.isHidden = !settings.finderExtensionEnabled
         setupView.isHidden = !FinderExtensionActivation.requiresManualActivation(
             isFeatureEnabled: settings.finderExtensionEnabled,
             isExtensionEnabledInFinder: isExtensionEnabledInFinder()
@@ -154,6 +159,7 @@ final class FinderExtensionSettingsView: NSView {
 
         let split = makeSplitView()
         split.translatesAutoresizingMaskIntoConstraints = false
+        self.detailSplit = split
         addSubview(split)
 
         NSLayoutConstraint.activate([

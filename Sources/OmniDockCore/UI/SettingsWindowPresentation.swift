@@ -1,5 +1,12 @@
 import AppKit
 
+// What the bound-shortcut list actually draws. Comparing it lets a refresh the
+// list does not reflect leave the rows alone.
+struct HotkeyRowsSignature: Equatable {
+    let bindings: [AppHotkeyBinding]
+    let warnings: [UUID: String]
+}
+
 enum HotkeyGuidancePresentation {
     static var message: String {
         ShortcutRecorderValidation.regularKeyMinimumModifierMessage
