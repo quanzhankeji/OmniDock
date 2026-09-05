@@ -27,9 +27,17 @@ struct GitHubReleaseResponse: Equatable, Sendable {
 }
 
 final class GitHubReleaseCache: @unchecked Sendable {
+    struct Entry: Codable {
+        let release: GitHubRelease
+        let eTag: String?
+        let lastModified: String?
+    }
+
     private enum Key {
+        static let entry = "update.github.entry"
         static let eTag = "update.github.eTag"
         static let release = "update.github.release"
+        static let lastModified = "update.github.lastModified"
         static let checkedAt = "update.github.checkedAt"
     }
 
@@ -40,18 +48,26 @@ final class GitHubReleaseCache: @unchecked Sendable {
         self.defaults = defaults
     }
 
-    var eTag: String? {
+    var entry: Entry? {
         lock.withLock {
-            defaults.string(forKey: Key.eTag)
-        }
-    }
-
-    var release: GitHubRelease? {
-        lock.withLock {
+            if let data = defaults.data(forKey: Key.entry),
+               let entry = try? JSONDecoder().decode(Entry.self, from: data) {
+                return entry
+            }
             guard let data = defaults.data(forKey: Key.release) else {
                 return nil
             }
-            return try? JSONDecoder().decode(GitHubRelease.self, from: data)
+            guard let release = try? JSONDecoder().decode(
+                GitHubRelease.self,
+                from: data
+            ) else {
+                return nil
+            }
+            return Entry(
+                release: release,
+                eTag: defaults.string(forKey: Key.eTag),
+                lastModified: defaults.string(forKey: Key.lastModified)
+            )
         }
     }
 
@@ -61,16 +77,24 @@ final class GitHubReleaseCache: @unchecked Sendable {
         }
     }
 
-    func save(release: GitHubRelease, eTag: String?, checkedAt: Date) {
+    func save(
+        release: GitHubRelease,
+        eTag: String?,
+        lastModified: String?,
+        checkedAt: Date
+    ) {
         lock.withLock {
-            if let data = try? JSONEncoder().encode(release) {
-                defaults.set(data, forKey: Key.release)
+            let entry = Entry(
+                release: release,
+                eTag: eTag,
+                lastModified: lastModified
+            )
+            if let data = try? JSONEncoder().encode(entry) {
+                defaults.set(data, forKey: Key.entry)
             }
-            if let eTag {
-                defaults.set(eTag, forKey: Key.eTag)
-            } else {
-                defaults.removeObject(forKey: Key.eTag)
-            }
+            defaults.removeObject(forKey: Key.release)
+            defaults.removeObject(forKey: Key.eTag)
+            defaults.removeObject(forKey: Key.lastModified)
             defaults.set(checkedAt, forKey: Key.checkedAt)
         }
     }
@@ -101,13 +125,29 @@ struct GitHubReleaseClient: Sendable {
         self.now = now
     }
 
-    func fetchLatestRelease() async throws -> GitHubReleaseResponse {
+    func fetchLatestRelease(
+        forceRefresh: Bool = false
+    ) async throws -> GitHubReleaseResponse {
+        try await fetchLatestRelease(
+            forceRefresh: forceRefresh,
+            mayRetryWithoutCache: true
+        )
+    }
+
+    private func fetchLatestRelease(
+        forceRefresh: Bool,
+        mayRetryWithoutCache: Bool
+    ) async throws -> GitHubReleaseResponse {
+        let cachedEntry = cache.entry
         var request = URLRequest(url: Self.latestReleaseURL)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = 15
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("2022-11-28", forHTTPHeaderField: "X-GitHub-Api-Version")
         request.setValue("OmniDock-Update-Checker", forHTTPHeaderField: "User-Agent")
-        if let eTag = cache.eTag {
+        if forceRefresh {
+            request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        } else if let eTag = cachedEntry?.eTag {
             request.setValue(eTag, forHTTPHeaderField: "If-None-Match")
         }
 
@@ -126,6 +166,9 @@ struct GitHubReleaseClient: Sendable {
             cache.save(
                 release: release,
                 eTag: response.value(forHTTPHeaderField: "ETag"),
+                lastModified: response.value(
+                    forHTTPHeaderField: "Last-Modified"
+                ),
                 checkedAt: checkedAt
             )
             return GitHubReleaseResponse(
@@ -134,14 +177,28 @@ struct GitHubReleaseClient: Sendable {
                 wasNotModified: false
             )
         case 304:
-            guard let release = cache.release,
-                  release.version != nil
+            guard let cachedEntry,
+                  cachedEntry.release.version != nil
             else {
                 throw GitHubReleaseClientError.invalidResponse
             }
+            let responseLastModified = response.value(
+                forHTTPHeaderField: "Last-Modified"
+            )
+            guard cachedEntry.lastModified != nil,
+                  cachedEntry.lastModified == responseLastModified
+            else {
+                guard mayRetryWithoutCache else {
+                    throw GitHubReleaseClientError.invalidResponse
+                }
+                return try await fetchLatestRelease(
+                    forceRefresh: true,
+                    mayRetryWithoutCache: false
+                )
+            }
             cache.recordCheck(at: checkedAt)
             return GitHubReleaseResponse(
-                release: release,
+                release: cachedEntry.release,
                 checkedAt: checkedAt,
                 wasNotModified: true
             )

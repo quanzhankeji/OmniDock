@@ -23,7 +23,10 @@ final class GitHubReleaseClientTests: XCTestCase {
                         url: request.url!,
                         statusCode: 200,
                         httpVersion: nil,
-                        headerFields: ["ETag": "\"release-1\""]
+                        headerFields: [
+                            "ETag": "\"release-1\"",
+                            "Last-Modified": "Fri, 28 Aug 2026 08:11:27 GMT"
+                        ]
                     )!,
                     Self.releaseData(tag: "1.2.2")
                 )
@@ -34,7 +37,9 @@ final class GitHubReleaseClientTests: XCTestCase {
                     url: request.url!,
                     statusCode: 304,
                     httpVersion: nil,
-                    headerFields: nil
+                    headerFields: [
+                        "Last-Modified": "Fri, 28 Aug 2026 08:11:27 GMT"
+                    ]
                 )!,
                 Data()
             )
@@ -52,6 +57,97 @@ final class GitHubReleaseClientTests: XCTestCase {
         XCTAssertFalse(initial.wasNotModified)
         XCTAssertTrue(cached.wasNotModified)
         XCTAssertEqual(cached.checkedAt, responseDate)
+    }
+
+    func testClientRefetchesWhenGitHubReusesETagForANewerRelease() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
+        let cache = GitHubReleaseCache(defaults: defaults)
+        var requestCount = 0
+        defaults.set(
+            Self.releaseData(tag: "1.2.6"),
+            forKey: "update.github.release"
+        )
+        defaults.set(
+            "\"reused-etag\"",
+            forKey: "update.github.eTag"
+        )
+
+        UpdateURLProtocol.handler = { request in
+            requestCount += 1
+            switch requestCount {
+            case 1:
+                XCTAssertEqual(
+                    request.value(forHTTPHeaderField: "If-None-Match"),
+                    "\"reused-etag\""
+                )
+                return (
+                    HTTPURLResponse(
+                        url: request.url!,
+                        statusCode: 304,
+                        httpVersion: nil,
+                        headerFields: [
+                            "Last-Modified": "Tue, 01 Sep 2026 06:03:48 GMT"
+                        ]
+                    )!,
+                    Data()
+                )
+            default:
+                XCTAssertNil(request.value(forHTTPHeaderField: "If-None-Match"))
+                return (
+                    HTTPURLResponse(
+                        url: request.url!,
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: [
+                            "ETag": "\"reused-etag\"",
+                            "Last-Modified": "Tue, 01 Sep 2026 06:03:48 GMT"
+                        ]
+                    )!,
+                    Self.releaseData(tag: "1.2.8")
+                )
+            }
+        }
+
+        let client = GitHubReleaseClient(session: makeSession(), cache: cache)
+        let refreshed = try await client.fetchLatestRelease()
+
+        XCTAssertEqual(refreshed.release.version?.displayValue, "1.2.8")
+        XCTAssertFalse(refreshed.wasNotModified)
+        XCTAssertEqual(requestCount, 2)
+    }
+
+    func testForcedRefreshDoesNotSendCachedETag() async throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
+        let cache = GitHubReleaseCache(defaults: defaults)
+        var requestCount = 0
+
+        UpdateURLProtocol.handler = { request in
+            requestCount += 1
+            XCTAssertNil(request.value(forHTTPHeaderField: "If-None-Match"))
+            XCTAssertEqual(
+                request.value(forHTTPHeaderField: "Cache-Control"),
+                "no-cache"
+            )
+            return (
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: [
+                        "ETag": "\"release-\(requestCount)\"",
+                        "Last-Modified": "Tue, 01 Sep 2026 06:03:48 GMT"
+                    ]
+                )!,
+                Self.releaseData(tag: requestCount == 1 ? "1.2.6" : "1.2.8")
+            )
+        }
+
+        let client = GitHubReleaseClient(session: makeSession(), cache: cache)
+        _ = try await client.fetchLatestRelease(forceRefresh: true)
+        let refreshed = try await client.fetchLatestRelease(forceRefresh: true)
+
+        XCTAssertEqual(refreshed.release.version?.displayValue, "1.2.8")
+        XCTAssertEqual(requestCount, 2)
     }
 
     func testClientReportsRateLimit() async throws {

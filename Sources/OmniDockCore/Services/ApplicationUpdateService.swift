@@ -117,7 +117,9 @@ final class ApplicationUpdateService {
 
         setStatus(.checking)
         do {
-            let response = try await releaseClient.fetchLatestRelease()
+            let response = try await releaseClient.fetchLatestRelease(
+                forceRefresh: origin == .manual
+            )
             lastCheckedAt = response.checkedAt
             latestRelease = response.release
             guard let releaseVersion = response.release.version,
