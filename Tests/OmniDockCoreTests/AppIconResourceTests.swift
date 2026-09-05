@@ -2,11 +2,12 @@ import AppKit
 import XCTest
 
 final class AppIconResourceTests: XCTestCase {
-    func testBundleIconImagesHaveTransparentRoundedCorners() throws {
-        let iconset = repositoryRoot()
-            .appendingPathComponent("Resources", isDirectory: true)
-            .appendingPathComponent("AppIcon.iconset", isDirectory: true)
-
+    func testBundleIconImagesHaveBalancedTransparentInsets() throws {
+        let resources = repositoryRoot().appendingPathComponent("Resources", isDirectory: true)
+        let iconsets = [
+            resources.appendingPathComponent("AppIcon.iconset", isDirectory: true),
+            resources.appendingPathComponent("Assets.xcassets/AppIcon.appiconset", isDirectory: true)
+        ]
         let expectedIcons: [(name: String, size: Int)] = [
             ("icon_16x16.png", 16),
             ("icon_16x16@2x.png", 32),
@@ -20,20 +21,39 @@ final class AppIconResourceTests: XCTestCase {
             ("icon_512x512@2x.png", 1024)
         ]
 
-        for expectedIcon in expectedIcons {
-            let url = iconset.appendingPathComponent(expectedIcon.name)
-            let data = try Data(contentsOf: url)
-            let image = try XCTUnwrap(NSBitmapImageRep(data: data), expectedIcon.name)
+        for iconset in iconsets {
+            for expectedIcon in expectedIcons {
+                let url = iconset.appendingPathComponent(expectedIcon.name)
+                let data = try Data(contentsOf: url)
+                let image = try XCTUnwrap(NSBitmapImageRep(data: data), url.path)
+                let size = expectedIcon.size
+                let center = size / 2
 
-            XCTAssertTrue(image.hasAlpha, expectedIcon.name)
-            XCTAssertEqual(image.pixelsWide, expectedIcon.size, expectedIcon.name)
-            XCTAssertEqual(image.pixelsHigh, expectedIcon.size, expectedIcon.name)
-            XCTAssertLessThanOrEqual(image.colorAt(x: 0, y: 0)?.alphaComponent ?? 1, 0.01, expectedIcon.name)
-            XCTAssertGreaterThanOrEqual(
-                image.colorAt(x: expectedIcon.size / 2, y: expectedIcon.size / 2)?.alphaComponent ?? 0,
-                0.99,
-                expectedIcon.name
-            )
+                XCTAssertTrue(image.hasAlpha, url.path)
+                XCTAssertEqual(image.pixelsWide, size, url.path)
+                XCTAssertEqual(image.pixelsHigh, size, url.path)
+                XCTAssertLessThanOrEqual(image.colorAt(x: 0, y: 0)?.alphaComponent ?? 1, 0.01, url.path)
+                XCTAssertGreaterThanOrEqual(image.colorAt(x: center, y: center)?.alphaComponent ?? 0, 0.99, url.path)
+
+                let expectedInset = (Double(size) * 100 / 1024).rounded()
+                let edgeSamples: [(Int) -> (Int, Int)] = [
+                    { ($0, center) }, { (size - 1 - $0, center) },
+                    { (center, $0) }, { (center, size - 1 - $0) }
+                ]
+                for sample in edgeSamples {
+                    let inset = try XCTUnwrap((0..<center).first { offset in
+                        let (x, y) = sample(offset)
+                        return (image.colorAt(x: x, y: y)?.alphaComponent ?? 0) >= 0.5
+                    }, url.path)
+                    XCTAssertEqual(Double(inset), expectedInset, accuracy: 1, url.path)
+                }
+            }
+        }
+
+        for expectedIcon in expectedIcons {
+            let localIcon = try Data(contentsOf: iconsets[0].appendingPathComponent(expectedIcon.name))
+            let catalogIcon = try Data(contentsOf: iconsets[1].appendingPathComponent(expectedIcon.name))
+            XCTAssertEqual(localIcon, catalogIcon, expectedIcon.name)
         }
     }
 
