@@ -2,154 +2,104 @@
 
 # OmniDock
 
-OmniDock is a local-first macOS utility for faster window switching, app control, Finder workflows, clipboard history, window layouts, and menu bar organization.
+Everyday Mac tools, in one app. Get Dock window previews, click-to-hide, window layouts, clipboard history, Finder actions, and menu bar controls without keeping a separate utility for each job.
 
-## Features
+Coming from Windows? Bring some familiar window habits with you.
 
-- Hover over a Dock app icon to preview its open windows.
-- Click a running Dock app icon to bring it forward, then click again to hide it without creating minimized Dock window icons.
-- Optionally use minimize/restore instead of hide/show for repeated Dock clicks.
-- Click a preview thumbnail to focus that exact window.
-- Drag a file over a preview thumbnail to raise that window and continue dropping the file.
-- Optionally show static previews for the selected app while using the native Command-Tab switcher.
-- Optionally switch between individual windows with Alt-Tab (Option-Tab), using static previews and the same close and quit controls.
-- Assign per-app global shortcuts to launch, bring forward, or hide apps with the same toggle behavior.
-- Resize and position the frontmost window with global shortcuts, a green-button layout menu, or configurable drag zones.
-- Optionally add configurable Finder right-click commands for copying paths, creating empty files, showing or hiding hidden files, and opening selected items—or the current folder when nothing is selected—with chosen applications.
-- Optionally keep a local, searchable clipboard history for text, formatted content, links, images, and files, opened with `Command-Shift-C`.
-- Organize less-used menu bar icons behind an expandable divider, with manual reveal and optional automatic hiding.
-- Optionally launch OmniDock automatically when you log in on macOS 13 or later.
-- Choose English, Simplified Chinese, or the system language, with light, dark, or system appearance.
-- Check for official updates and verify their GitHub digest and Developer ID signature before installation.
-- Avoid browser tab navigation shortcuts so those shortcuts stay with the browser.
+[Download](https://github.com/quanzhankeji/OmniDock/releases/latest) · [Website](https://omnidock.app/en/) · [Support](SUPPORT.md)
 
-OmniDock does not include analytics, advertising SDKs, or third-party packages. It uses Apple system frameworks only.
+Free and open source · macOS 12.3+ · Apple silicon and Intel
 
-## Requirements
+## See It in Action
 
-- macOS 12.3 or later
-- Accessibility permission for Dock hit testing, app and window control, per-app hotkeys, and optional window layouts
-- Input Monitoring permission for Dock click detection, the optional Alt-Tab window switcher, and optional window drag zones
-- Screen Recording permission for window thumbnails, including live images and one-time static snapshots
-- Finder extension access and one-time destination-folder access for optional Finder commands
+### 01 · Dock window previews
 
-## Download
+See a window before switching to it. Hover over a running app's Dock icon, then select or close a window from its preview. Drag a file over a thumbnail to bring that window forward.
 
-Official releases are available from [GitHub Releases](https://github.com/quanzhankeji/OmniDock/releases/latest). Download `OmniDock-<version>.dmg` for the standard drag-to-Applications installer, or `OmniDock-<version>.zip` for a portable app archive. Both contain the same Universal app for Apple silicon and Intel Macs, signed with Developer ID and notarized by Apple. GitHub also provides ZIP and TAR.GZ archives of the corresponding source code for each release.
+https://github.com/user-attachments/assets/5033facb-ec33-4f57-8e00-a177198431e7
 
-OmniDock checks GitHub Releases asynchronously shortly after launch. When a newer signed release is available, OmniDock can download, verify, replace, and restart a writable installation. Apps running from a read-only disk image, App Translocation, or another non-writable location use the DMG-based manual installation flow instead. Updates can also be checked manually from the Settings tab.
+### 02 · App hotkeys
 
-To install with Homebrew:
+Give each app a shortcut to launch it or bring it forward. Turn on repeated-trigger hiding to put the app away with the same keys. The combinations in the demo are examples, not fixed defaults.
 
-```bash
-brew tap quanzhankeji/tap
-brew install --cask omnidock
-```
+https://github.com/user-attachments/assets/38aa4f77-c2ba-4e10-bcc8-c480344b7681
 
-## Build And Run
+### 03 · Window layouts
 
-```bash
-./script/build_and_run.sh
-```
+Drag a window into a screen zone to snap it into place. Use shortcuts or the green-button layout menu too, with halves, corners, thirds, multiple displays, and custom layouts.
 
-The script builds the complete `OmniDock.app`, including its Finder Sync extension, installs it to `/Applications`, and launches it. When one Developer ID Application identity is available, the local Release build is re-signed with that stable identity so existing macOS privacy permissions remain attached across rebuilds.
+https://github.com/user-attachments/assets/3713f313-0cb9-4976-926e-99d441bc82ae
 
-Building the complete app requires Xcode, an Apple Development team, and a Swift 5.9-compatible toolchain. If no Developer ID identity is available, the installation keeps its Apple Development signature. Once a Developer ID build is installed, the script refuses to replace it with a development-signed build unless `OMNIDOCK_ALLOW_SIGNING_IDENTITY_CHANGE=1` is explicitly set, because changing identities detaches macOS privacy permissions. If more than one Developer ID identity is available, set `OMNIDOCK_LOCAL_DEVELOPER_IDENTITY` explicitly.
+### 04 · Clipboard history
 
-Set `OMNIDOCK_APP_DIR` to change the staging directory. Set `OMNIDOCK_BUILD_CONFIGURATION=debug` to force a debug build.
+Find something you copied earlier. Enable local history, then press `Command-Shift-C` to search saved text, formatted content, links, images, and files. Delete individual entries or clear the history whenever you like.
 
-To install the complete local app into Applications:
+https://github.com/user-attachments/assets/ea674a12-7c00-4d44-a994-a9bd7fadf6aa
 
-```bash
-./script/build_and_run.sh --install
-```
+### 05 · Finder right-click actions
 
-The explicit Finder extension command remains available as an alias:
+Create a blank file, copy one or more paths, reveal hidden items, or open a selection with an app you've chosen—all from a supported Finder folder.
 
-```bash
-./script/build_and_run.sh --install-finder-extension
-```
+https://github.com/user-attachments/assets/85807a3b-611c-4151-946e-8ae6f29318cd
 
-## Window Previews And App Control
+### 06 · Menu bar organization
 
-Dock previews show the normal windows that macOS makes available to OmniDock. Preview cards can focus the exact window, close that window, quit its application, or raise it while a file is being dragged. Live previews can be disabled to use static snapshots and reduce resource use. Hidden and minimized windows may use a recent static image or a text-only state when macOS cannot provide a current frame.
+Hold `Command` and drag less-used icons behind the divider. Click to reveal them, then close the section yourself or let it close after 5–60 seconds. You choose the icons; OmniDock doesn't sort them automatically.
 
-Dock click toggling applies only to running applications. A short click brings a background application forward, while a second click on the frontmost visible application hides it. Unlaunched apps, long presses, and Dock icon rearrangement remain under macOS control. Minimize/restore can be selected instead of hide/show.
+https://github.com/user-attachments/assets/7f29d5c2-4206-4151-9332-691f6e9a89df
 
-The optional Command-Tab preview augments the native macOS application switcher without replacing it. The separate Alt-Tab window switcher uses Option-Tab to navigate individual windows with static previews. Per-app hotkeys can launch an app that is not running, bring it forward, or hide it when it is already frontmost.
+### More window controls
 
-## Finder Right-Click Extension
+- **Click again to hide:** click a running app's Dock icon to bring it forward, then click again to hide it. Optional minimize/restore mode acts on the app's controllable normal windows.
+- **Switch between windows:** use `Option-Tab` for individual windows, or add window previews to the native `Command-Tab` app switcher.
 
-The Finder extension is off by default. Open `OD` > `Settings` > `Finder Extension`, then turn on `Enable`. macOS may open its extension management page; enable OmniDock there to let Finder load the menu.
+Choose English or Simplified Chinese, light or dark appearance, or follow your system settings. Launch at login is available on macOS 13 and later.
 
-When enabled, right-clicking an empty area in a Finder Sync-monitored local folder offers **Copy Path**, a configurable **New File** submenu, commands for showing or hiding hidden files, and optional shortcuts for opening the current folder with chosen applications. Text and Markdown are included by default, and additional file types can be added in OmniDock settings. Right-clicking selected items offers **Copy Path** and optional shortcuts for opening the selection with chosen applications; hidden-file commands remain on folder-background menus. Copied selections place every path on a separate line, and new files use an available `NewFile.<extension>` name without overwriting existing files before entering inline rename.
+Some windows can't be captured or resized. Hidden or minimized windows may show recent static images or a text-only state. Finder Sync commands may be unavailable in File Provider-managed cloud folders. See [Support](SUPPORT.md) for setup and limits.
 
-OmniDock registers the local Desktop, Documents, Downloads, their iCloud Drive counterparts when present, and other local folders that you explicitly authorize. Finder ultimately controls menu availability in provider-managed locations, so some cloud folders may not expose these commands.
+## Install
 
-## Clipboard History
+1. Download the latest **DMG** from [GitHub Releases](https://github.com/quanzhankeji/OmniDock/releases/latest) and drag OmniDock into Applications. A ZIP app archive is also available.
+2. Launch OmniDock, click `OD` in the menu bar, and enable the tools you want.
 
-Clipboard History is off by default. Enable it from `OD` > `Settings` > `Clipboard History`. While enabled, OmniDock checks the system pasteboard for changes and stores supported entries locally on this Mac. Press `Command-Shift-C` to search the history, use the arrow keys to select an entry, and press Return to copy it back. Hold Option while confirming to paste into the app that was active before the history panel opened.
+Official GitHub downloads are Universal apps, signed with Developer ID and notarized by Apple. Updates check GitHub's digest and the app's signing identity before installation. Read-only or non-writable installations use the manual DMG update flow.
 
-Pasteboard entries explicitly marked as temporary, concealed, or automatically generated are ignored. The history limit can be set from 1 to 999 entries, and individual entries or the entire history can be deleted from settings.
+## Permissions and Privacy
 
-## Window Layout
+Grant only the permissions needed for the features you enable.
 
-Window Layout is optional. Enable it from `OD` > `Settings` > `Window Layout` to resize and position the frontmost resizable window with global shortcuts, a layout menu shown by hovering over the green window button, or drag zones that apply a layout when the window is released.
+| Permission | Used for |
+| --- | --- |
+| Accessibility | Dock and window control, app hotkeys, window layouts, and optional clipboard auto-paste |
+| Input Monitoring | Dock clicks, Option-Tab, and window drag zones |
+| Screen Recording | Live and static window thumbnails |
+| Finder Extension and folder access | Finder commands and creating files in a folder you approve |
 
-Built-in layouts include halves, corners, thirds, two-thirds, maximize, center, restore, and moving a window between displays. Custom layouts can define their own size and position, keyboard shortcut, and drag activation zone. Full-screen windows, system panels, and windows whose apps restrict movement or resizing remain subject to macOS and app behavior.
+No account, analytics, or advertising SDKs. Settings and optional clipboard history stay on your Mac; preview images stay in memory. OmniDock contacts GitHub for update checks and downloads you approve, without uploading those contents.
 
-## Menu Bar Icon Organizer
+Clipboard history is off by default. Items explicitly marked by their source app as temporary, concealed, or automatically generated are skipped, but this won't catch every sensitive item. Read the [privacy policy](PRIVACY.md) for storage details and limits.
 
-Enable Hidden Bar from `OD` > `Settings` > `Hidden Bar` to place less-used menu bar icons behind an expandable divider. Hold Command while dragging menu bar icons across the divider to arrange them, then reveal them manually or let OmniDock hide them again after a configurable delay.
+## Build and Contribute
 
-This feature needs no additional privacy permission. Some system-controlled menu bar items cannot be moved because macOS owns their placement.
+The project uses Swift 5.9-compatible tools and Apple system frameworks, with no third-party package dependencies. Building the complete app also requires Xcode and an Apple Development signing team.
 
-To launch only the staged bundle:
-
-```bash
-./script/build_and_run.sh --stage
-```
-
-To run the test suite:
+From the repository root:
 
 ```bash
 swift test
+./script/build_and_run.sh
 ```
 
-To assemble, sign, and verify a staged app without installing or launching it:
+The second command builds the app with its Finder Sync extension, installs it to `/Applications`, and launches it. Staging, verification, signing options, and the project structure are in [Development](docs/DEVELOPMENT.md); official distribution steps are in [Releasing](docs/RELEASING.md).
 
-```bash
-./script/build_and_run.sh --verify
-```
+See [Contributing](CONTRIBUTING.md) before submitting changes. Code and documentation contributions require acceptance of the [Contributor License Agreement](CLA.md).
 
-## Development
+For help, see [Support](SUPPORT.md). Report security vulnerabilities through the private process in [SECURITY.md](SECURITY.md), not a public issue.
 
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the project structure, core interaction flows, and regression checklist.
+## License
 
-Maintainers can find generic signing and distribution guidance in [docs/RELEASING.md](docs/RELEASING.md).
+Source code and documentation are licensed under GNU GPL version 3 only (`GPL-3.0-only`), unless a file states otherwise. Official GitHub release binaries are also distributed under GPL v3. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
-Contributions are welcome under the process in [CONTRIBUTING.md](CONTRIBUTING.md). Code and documentation contributions require acceptance of the [Contributor License Agreement](CLA.md).
+App Store and other Developer ID distributions may use separate end-user terms from Chengdu Quanzhan Technology Co., Ltd. The terms bundled with the exact artifact apply; see [LICENSING.md](LICENSING.md) for dual licensing and earlier MIT-licensed versions.
 
-## Privacy
-
-OmniDock runs locally on your Mac. Preferences, shortcut bindings, and optional clipboard history are stored locally. A shortcut binding includes the selected app's name, bundle identifier, application URL or path, shortcut keys, and enabled state. Clipboard History remains disabled until the user turns it on and can be cleared at any time.
-
-One-time preview snapshot cache entries expire 45 seconds after capture so hidden-window previews can be shown briefly. If a cached preview is open when its entry expires, OmniDock releases its displayed image references during the next preview validation pass. Preview images are not written to disk. OmniDock does not collect or transmit personal data.
-
-For Finder's New File command, OmniDock temporarily passes only the user-selected destination folder to its containing app and removes the request after it is consumed or expires. It does not scan Finder folders or request broad file-system access.
-
-The update checker sends a standard HTTPS request to GitHub's public Releases API containing no OmniDock settings, clipboard contents, window information, or other user data. Downloaded updates must match GitHub's SHA-256 digest and OmniDock's existing code-signing identity before installation.
-
-See [PRIVACY.md](PRIVACY.md) for the full privacy policy.
-
-## Support
-
-See [SUPPORT.md](SUPPORT.md) for setup notes, troubleshooting, and support guidance.
-
-Report potential vulnerabilities through the private process in [SECURITY.md](SECURITY.md), not through a public bug report.
-
-## Licensing
-
-The public source code is licensed under GNU GPL version 3 only (`GPL-3.0-only`). Official GitHub release binaries are also distributed under GPL v3. App Store and other Developer ID binaries may be offered under separate end-user terms by Chengdu Quanzhan Technology Co., Ltd. See [LICENSING.md](LICENSING.md) for the dual-licensing model and treatment of earlier MIT-licensed versions.
-
-The GPL source license does not grant rights to the OmniDock name, logo, or app icon. See [TRADEMARKS.md](TRADEMARKS.md).
+The source license does not grant rights to the OmniDock name, logo, or app icon. See [TRADEMARKS.md](TRADEMARKS.md).

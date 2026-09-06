@@ -2,6 +2,52 @@
 
 This document summarizes the project structure and the behavior that should stay stable when changing OmniDock.
 
+## Build and Run
+
+Use a Mac with a Swift 5.9-compatible toolchain. The complete app, including its Finder Sync extension, also requires Xcode and an Apple Development signing team.
+
+Run the tests without installing the app:
+
+```bash
+swift test
+```
+
+Build the complete app, install it to `/Applications`, and launch it:
+
+```bash
+./script/build_and_run.sh
+```
+
+This also registers the Finder Sync extension and restarts Finder. The `--install` and `--install-finder-extension` options are aliases for the same complete-app installation flow.
+
+For a staged SwiftPM app without installing the complete Finder extension build:
+
+```bash
+./script/build_and_run.sh --stage
+```
+
+This builds and launches the staged app. To assemble, sign, and verify the staged bundle without installing or launching it, use:
+
+```bash
+./script/build_and_run.sh --verify
+```
+
+### Local Signing and Build Settings
+
+When one Developer ID Application identity is available, the complete local Release build is re-signed with that stable identity so macOS privacy permissions remain associated with it across rebuilds. Without a Developer ID identity, the complete app keeps its Apple Development signature. A local signed build is not automatically an official, notarized release.
+
+| Variable | Purpose |
+| --- | --- |
+| `OMNIDOCK_DEVELOPMENT_TEAM` | Select the Apple Development team for the complete app when it cannot be detected automatically. |
+| `OMNIDOCK_LOCAL_DEVELOPER_IDENTITY` | Select a Developer ID Application identity explicitly, including when more than one is available. |
+| `OMNIDOCK_APP_DIR` | Change the staged app directory. |
+| `OMNIDOCK_BUILD_CONFIGURATION=debug` | Use Debug for the staged SwiftPM build. |
+| `OMNIDOCK_XCODE_INSTALL_CONFIGURATION=Debug` | Use Debug for the complete Xcode installation build. |
+
+Once a Developer ID build is installed, the script refuses to replace it with a development-signed build. Set `OMNIDOCK_ALLOW_SIGNING_IDENTITY_CHANGE=1` only for an intentional identity change: doing so can detach existing macOS privacy permissions and require granting them again.
+
+Official signing, notarization, license packaging, and distribution steps are in [RELEASING.md](RELEASING.md).
+
 ## Project Structure
 
 - `Sources/OmniDockCore/AppDelegate.swift` wires the menu bar app, settings window, Dock interaction, previews, permissions, and hotkeys.
@@ -21,7 +67,7 @@ Use this map before editing so changes stay narrow:
 | Window hide/show | `WindowControlService`, `WindowFiltering` | Prefer one central toggle path for Dock clicks and shortcuts. |
 | Window inventory | `WindowInventoryService`, `PreviewWindowSnapshot`, `PreviewWindowCatalog` | Maintain a public-API window fact cache keyed by `owner PID + CGWindowID`; invalid events make records unavailable until reconciliation, rather than guessing. |
 | Window previews | `ScreenCapturePreviewService`, `PreviewWindowSnapshot`, `PreviewCaptureSessionRegistry`, `PreviewWindowCatalog`, `PreviewPanelController` | Reuse streams by stable window identity and stop them as soon as previews close or switch target. |
-| Window cycling | `WindowCycleService`, `WindowInventoryService`, `PreviewPanelController` | Option-Tab opens OmniDock's window-level cycle. It owns its Carbon registration and a short-lived input monitor, and uses static images only. |
+| Window cycling | `WindowCycleService`, `WindowInventoryService`, `PreviewCaptureSessionRegistry`, `PreviewPanelController` | Option-Tab opens OmniDock's window-level cycle. It owns its Carbon registration and a short-lived input monitor, and follows the shared live-preview setting. |
 | Finder right-click extension | `FinderSync`, `FinderExtensionCommandService`, `FinderExtensionShared` | Keep menu construction lightweight and read the Finder target synchronously. The extension queues only explicit New File requests; it never scans directories. |
 | Settings and persistence | `SettingsStore`, `SettingsWindowController` | Keep stored keys compatible with existing users. |
 | Shortcuts | `AppHotkeyService`, `AppHotkeyBinding`, `ShortcutRecorderView`, `HotkeyShortcutPolicy` | Global shortcuts use Apple system APIs and should remain dependency-free. |
@@ -39,7 +85,7 @@ Use this map before editing so changes stay narrow:
 - Preview capture identity is `owner PID + CGWindowID`. Title, frame, AX order, and raw AX counts are presentation or validation metadata, not stable stream identity. Confirm an identity-set change twice before applying it; keep sessions in the intersection and start or stop only the difference.
 - `WindowInventoryService` is the shared window-fact layer for Dock previews, Command-Tab previews, and future window navigation. It observes only public workspace and Accessibility events, tracks metadata and MRU history, and never owns panels or capture sessions. Its short-lived ScreenCaptureKit mapping is reused only while fresh; AX/workspace invalidation falls back to the existing AX + ScreenCaptureKit reconciliation path without starting a capture stream.
 - Window Cycle is a separate OmniDock interaction, not a replacement for the system Command-Tab switcher. It reads the MRU window list from `WindowInventoryService`, starts on the previous window, and owns its Carbon registration and input monitor only while the chooser is open. Releasing Option confirms the selected window; Escape cancels. Keep its transient selection state out of inventory and out of Command-Tab observation.
-- Window Cycle paints cached images first, then requests up to three static images concurrently: the selected card and its immediate neighbors are first, followed by the remaining windows in MRU order. It never starts live ScreenCaptureKit streams, and ending the cycle cancels every pending static capture before the panel is hidden.
+- Window Cycle paints cached images first, then requests captures in MRU priority order, starting with the selected card and its immediate neighbors. When live previews are enabled, it uses the shared capture-session policy and configured live-window limit; ending the cycle stops every active capture before the panel is hidden.
 - Keep window event handling separate from image capture. Create, destroy, minimize, restore, focus, and Space changes invalidate immediately; move, resize, and title changes are coalesced for 100ms. Do not add private WindowServer APIs or turn inventory events into background screenshot work.
 - Preview window actions use conservative identity matching. Thumbnail focus and close operations prefer exact window IDs, use unique titles only when AX does not expose IDs, and never guess among ambiguous windows.
 - Command-Tab preview is an adapter over the shared preview UI. Keep its system-switcher observation, event handling, and coordinate conversion inside its own service; do not change shared panel configuration or Dock thumbnail interaction to support Command-Tab behavior. Command-Tab and Window Cycle must remain separate presentation contexts.
