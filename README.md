@@ -2,13 +2,19 @@
 
 # OmniDock
 
-Everyday Mac tools, in one app. Get Dock window previews, click-to-hide, window layouts, clipboard history, Finder actions, and menu bar controls without keeping a separate utility for each job.
+Bring everyday Dock and window tasks together in one Mac app. Preview and switch windows, hide or show apps from the Dock, arrange windows, and add clipboard, Finder, or menu bar tools when they fit your workflow.
 
-Coming from Windows? Bring some familiar window habits with you.
+Coming from Windows? Keep familiar habits like choosing a window from a thumbnail or dragging it into a layout.
 
 [Download](https://github.com/quanzhankeji/OmniDock/releases/latest) · [Website](https://omnidock.app/en/) · [Support](SUPPORT.md)
 
 Free and open source · macOS 12.3+ · Apple silicon and Intel
+
+## Start with one task
+
+- **See the window before switching:** [Dock window previews](https://omnidock.app/en/features/dock-previews/)
+- **Click a Dock icon again to hide an app:** [Dock click controls](https://omnidock.app/en/features/dock-click/)
+- **Want fewer utilities without giving up your favorite tools?** [One app or separate Mac utilities?](https://omnidock.app/en/guides/one-app-or-separate-mac-utilities/)
 
 ## See It in Action
 
@@ -16,11 +22,15 @@ Free and open source · macOS 12.3+ · Apple silicon and Intel
 
 See a window before switching to it. Hover over a running app's Dock icon, then select or close a window from its preview. Drag a file over a thumbnail to bring that window forward.
 
+[Dock preview details](https://omnidock.app/en/features/dock-previews/)
+
 https://github.com/user-attachments/assets/5033facb-ec33-4f57-8e00-a177198431e7
 
 ### 02 · App hotkeys
 
 Give each app a shortcut to launch it or bring it forward. Turn on repeated-trigger hiding to put the app away with the same keys. The combinations in the demo are examples, not fixed defaults.
+
+[App hotkey details](https://omnidock.app/en/features/app-hotkeys/)
 
 https://github.com/user-attachments/assets/38aa4f77-c2ba-4e10-bcc8-c480344b7681
 
@@ -28,11 +38,15 @@ https://github.com/user-attachments/assets/38aa4f77-c2ba-4e10-bcc8-c480344b7681
 
 Drag a window into a screen zone to snap it into place. Use shortcuts or the green-button layout menu too, with halves, corners, thirds, multiple displays, and custom layouts.
 
+[Window layout details](https://omnidock.app/en/features/window-layouts/)
+
 https://github.com/user-attachments/assets/3713f313-0cb9-4976-926e-99d441bc82ae
 
 ### 04 · Clipboard history
 
 Find something you copied earlier. Enable local history, then press `Command-Shift-C` to search saved text, formatted content, links, images, and files. Delete individual entries or clear the history whenever you like.
+
+[Clipboard history details](https://omnidock.app/en/features/clipboard-history/)
 
 https://github.com/user-attachments/assets/ea674a12-7c00-4d44-a994-a9bd7fadf6aa
 
@@ -40,17 +54,21 @@ https://github.com/user-attachments/assets/ea674a12-7c00-4d44-a994-a9bd7fadf6aa
 
 Create a blank file, copy one or more paths, reveal hidden items, or open a selection with an app you've chosen—all from a supported Finder folder.
 
+[Finder action details](https://omnidock.app/en/features/finder-actions/)
+
 https://github.com/user-attachments/assets/85807a3b-611c-4151-946e-8ae6f29318cd
 
 ### 06 · Menu bar organization
 
 Hold `Command` and drag less-used icons behind the divider. Click to reveal them, then close the section yourself or let it close after 5–60 seconds. You choose the icons; OmniDock doesn't sort them automatically.
 
+[Menu bar details](https://omnidock.app/en/features/menu-bar/)
+
 https://github.com/user-attachments/assets/7f29d5c2-4206-4151-9332-691f6e9a89df
 
 ### More window controls
 
-- **Click again to hide:** click a running app's Dock icon to bring it forward, then click again to hide it. Optional minimize/restore mode acts on the app's controllable normal windows.
+- **Click again to hide the app:** click a running app's Dock icon to bring it forward, then click again to hide it. Hiding removes the whole app from view; it is different from minimizing one window to the Dock. Optional minimize/restore mode acts on the app's controllable normal windows.
 - **Switch between windows:** use `Option-Tab` for individual windows, or add window previews to the native `Command-Tab` app switcher.
 
 Choose English or Simplified Chinese, light or dark appearance, or follow your system settings. Launch at login is available on macOS 13 and later.

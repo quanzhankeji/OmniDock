@@ -2,13 +2,19 @@
 
 # OmniDock
 
-把 Dock 预览、点击隐藏、窗口分屏、剪贴板和 Finder 右键这些常用操作，放进一个 Mac 应用里，不用为每件小事都装一个工具。
+把日常的 Dock 与窗口操作放进一个 Mac 应用：先预览再切换窗口，从 Dock 显示或隐藏应用，安排窗口位置，再按需开启剪贴板、Finder 右键和菜单栏整理。
 
-刚从 Windows 换过来，也能保留一些熟悉的窗口操作习惯。
+刚从 Windows 换过来？先看缩略图再选窗口、拖动窗口分屏，这些熟悉的操作也能带到 Mac 上。
 
 [下载](https://github.com/quanzhankeji/OmniDock/releases/latest) · [官网](https://omnidock.app/zh/) · [使用帮助](SUPPORT.md)
 
 免费开源 · macOS 12.3 或更高版本 · 支持 Apple 芯片和 Intel Mac
+
+## 从一个问题开始
+
+- **切换前先看清窗口：**[了解 Dock 窗口预览](https://omnidock.app/zh/features/dock-previews/)
+- **再点一次 Dock 图标隐藏应用：**[了解 Dock 点击控制](https://omnidock.app/zh/features/dock-click/)
+- **想少装几个工具，又不想丢掉顺手的功能？**[一个应用还是多个 Mac 工具？](https://omnidock.app/zh/guides/one-app-or-separate-mac-utilities/)
 
 ## 看看这些功能怎么用
 
@@ -16,11 +22,15 @@
 
 窗口还没切过去，就能先看见。把鼠标停在运行中的应用图标上，点预览切到目标窗口，也可以直接关闭窗口。拖文件时，先拖到缩略图上，就能把目标窗口带到前台。
 
+[了解 Dock 窗口预览](https://omnidock.app/zh/features/dock-previews/)
+
 https://github.com/user-attachments/assets/5033facb-ec33-4f57-8e00-a177198431e7
 
 ### 02 · 应用快捷键
 
 给常用应用各设一组快捷键，没打开就启动，已经运行就切到前台。开启重复触发时隐藏后，再按一次还能把应用收起来。演示中的按键组合只是示例，可以按自己的习惯设置。
+
+[了解应用快捷键](https://omnidock.app/zh/features/app-hotkeys/)
 
 https://github.com/user-attachments/assets/38aa4f77-c2ba-4e10-bcc8-c480344b7681
 
@@ -28,11 +38,15 @@ https://github.com/user-attachments/assets/38aa4f77-c2ba-4e10-bcc8-c480344b7681
 
 把窗口拖到设好的屏幕区域，松手就能摆好。也可以用快捷键或绿色按钮的布局菜单，完成半屏、四角、三分屏、多显示器移动和自定义布局。
 
+[了解窗口布局](https://omnidock.app/zh/features/window-layouts/)
+
 https://github.com/user-attachments/assets/3713f313-0cb9-4976-926e-99d441bc82ae
 
 ### 04 · 剪贴板历史
 
 刚才复制的内容，不用再找一遍。开启本机历史后，按 `Command-Shift-C` 搜索保存过的文字、富文本、链接、图片和文件记录。不想保留的，可以单独删除或全部清空。
+
+[了解剪贴板历史](https://omnidock.app/zh/features/clipboard-history/)
 
 https://github.com/user-attachments/assets/ea674a12-7c00-4d44-a994-a9bd7fadf6aa
 
@@ -40,17 +54,21 @@ https://github.com/user-attachments/assets/ea674a12-7c00-4d44-a994-a9bd7fadf6aa
 
 在支持的 Finder 文件夹里，点右键就能新建空白文件、复制一个或多个路径、显示隐藏项目，或者用指定应用打开选中内容。
 
+[了解 Finder 右键操作](https://omnidock.app/zh/features/finder-actions/)
+
 https://github.com/user-attachments/assets/85807a3b-611c-4151-946e-8ae6f29318cd
 
 ### 06 · 菜单栏整理
 
 按住 `Command`，把不常用的图标拖到分界线后面。需要时点一下展开，用完手动收起，也可以设为 5–60 秒后自动收起。哪些图标放进去，由你决定，不会自动分类。
 
+[了解菜单栏整理](https://omnidock.app/zh/features/menu-bar/)
+
 https://github.com/user-attachments/assets/7f29d5c2-4206-4151-9332-691f6e9a89df
 
 ### 还有这些顺手的窗口操作
 
-- **再点一次就隐藏：**点击运行中的应用图标，把它带到前台；再点一次就隐藏。也可选择最小化与恢复，作用于该应用可控制的普通窗口。
+- **再点一次隐藏整个应用：**点击运行中的应用图标，把它带到前台；再点一次就隐藏。隐藏会让这个应用的全部窗口暂时离开屏幕，与把某一个窗口最小化到 Dock 不同。也可选择最小化与恢复，作用于该应用可控制的普通窗口。
 - **直接切换窗口：**用 `Option-Tab` 选择单个窗口，或给系统原生 `Command-Tab` 加上窗口预览。
 
 界面支持简体中文和英文，语言和深浅外观都能跟随系统，也可以自己选。macOS 13 及以上还可以设置登录后自动启动。
