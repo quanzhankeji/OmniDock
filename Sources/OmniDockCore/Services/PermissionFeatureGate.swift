@@ -67,15 +67,13 @@ public enum PermissionFeatureGate {
             disabled.append(.dockClick)
         }
 
+        // Only the feature's own switch is turned off. Clearing the live
+        // capture and switcher switches alongside it discarded choices nobody
+        // made: the switcher has its own check below, and live capture means
+        // nothing while previews are off, so neither needed saying.
         if settings.showDockPreviews,
            !isSatisfied(for: .dockPreview, in: snapshot) {
             settings.showDockPreviews = false
-            settings.liveDockPreviewsEnabled = false
-            settings.windowCycleEnabled = false
-            disabled.append(.dockPreview)
-        } else if settings.liveDockPreviewsEnabled,
-                  !isSatisfied(for: .dockPreview, in: snapshot) {
-            settings.liveDockPreviewsEnabled = false
             disabled.append(.dockPreview)
         }
 
@@ -113,6 +111,38 @@ public enum PermissionFeatureGate {
         missingPermissions(for: feature, in: snapshot).first
     }
 
+    /// Gives back a feature that a permission lapse took away, and nothing
+    /// more. Whatever else was set around it was never taken, so restoring it
+    /// would be this app deciding something the user already had an answer to.
+    static func restoreSatisfiedFeatures(
+        _ features: Set<PermissionFeature>,
+        in settings: SettingsStore,
+        snapshot: PermissionSnapshot
+    ) -> Set<PermissionFeature> {
+        let satisfied = Set(features.filter { isSatisfied(for: $0, in: snapshot) })
+
+        for feature in PermissionFeature.allCases where satisfied.contains(feature) {
+            switch feature {
+            case .dockClick:
+                settings.toggleAppVisibilityOnDockClick = true
+            case .dockPreview:
+                settings.showDockPreviews = true
+            case .windowCycle:
+                settings.windowCycleEnabled = true
+            case .hotkeys:
+                settings.hotkeysEnabled = true
+            case .finderExtension:
+                settings.finderExtensionEnabled = true
+            case .windowPlacement:
+                settings.windowPlacementEnabled = true
+            }
+        }
+
+        return satisfied
+    }
+
+    /// Turns a feature on because someone asked for it, which includes the
+    /// switches it needs to be useful.
     static func enableSatisfiedFeatures(
         _ features: Set<PermissionFeature>,
         in settings: SettingsStore,
@@ -185,12 +215,19 @@ enum PermissionMonitorRecoveryPolicy {
 struct PermissionFeatureActivationQueue {
     private(set) var pendingFeatures: Set<PermissionFeature> = []
 
+    /// Which of the pending features someone asked for, as opposed to had
+    /// taken away. Not carried across launches: after a restart the cautious
+    /// reading is that the feature was lost rather than wanted, and giving
+    /// back only what was taken is the answer that assumes less.
+    private var requestedFeatures: Set<PermissionFeature> = []
+
     init(pendingFeatures: Set<PermissionFeature> = []) {
         self.pendingFeatures = pendingFeatures
     }
 
     mutating func request(_ feature: PermissionFeature) {
         pendingFeatures.insert(feature)
+        requestedFeatures.insert(feature)
     }
 
     mutating func preserveIntent(for features: some Sequence<PermissionFeature>) {
@@ -202,12 +239,21 @@ struct PermissionFeatureActivationQueue {
         in settings: SettingsStore,
         snapshot: PermissionSnapshot
     ) -> Set<PermissionFeature> {
+        let asked = pendingFeatures.intersection(requestedFeatures)
+        let taken = pendingFeatures.subtracting(requestedFeatures)
         let enabled = PermissionFeatureGate.enableSatisfiedFeatures(
-            pendingFeatures,
+            asked,
             in: settings,
             snapshot: snapshot
+        ).union(
+            PermissionFeatureGate.restoreSatisfiedFeatures(
+                taken,
+                in: settings,
+                snapshot: snapshot
+            )
         )
         pendingFeatures.subtract(enabled)
+        requestedFeatures.subtract(enabled)
         return enabled
     }
 }

@@ -39,7 +39,10 @@ final class PermissionFeatureGateTests: XCTestCase {
         XCTAssertEqual(disabled, [.dockPreview])
         XCTAssertTrue(store.toggleAppVisibilityOnDockClick)
         XCTAssertFalse(store.showDockPreviews)
-        XCTAssertFalse(store.liveDockPreviewsEnabled)
+        // Left as it was. Live capture means nothing while previews are off,
+        // so turning it off says nothing either - and it would be read back as
+        // a choice once previews return.
+        XCTAssertTrue(store.liveDockPreviewsEnabled)
         XCTAssertTrue(store.hotkeysEnabled)
     }
 
@@ -199,6 +202,81 @@ final class PermissionFeatureGateTests: XCTestCase {
         XCTAssertEqual(enabled, [.dockClick])
         XCTAssertTrue(store.toggleAppVisibilityOnDockClick)
         XCTAssertTrue(queue.pendingFeatures.isEmpty)
+    }
+
+    func testLosingPreviewsDoesNotDiscardTheSwitcherTheUserHadOn() {
+        let store = SettingsStore(defaults: isolatedDefaults(), livePreviewLimitProvider: { 8 })
+        store.showDockPreviews = true
+        store.windowCycleEnabled = true
+
+        // Screen recording goes away - a re-signed build, a revoked grant.
+        let withoutRecording = PermissionSnapshot(
+            accessibility: true,
+            screenRecording: false,
+            inputMonitoring: true,
+            finderExtension: true,
+            folderAccess: true
+        )
+        var queue = PermissionFeatureActivationQueue()
+        queue.preserveIntent(
+            for: PermissionFeatureGate.disableUnavailableFeatures(
+                in: store,
+                snapshot: withoutRecording
+            )
+        )
+
+        // ... and comes back.
+        let restored = PermissionSnapshot(
+            accessibility: true,
+            screenRecording: true,
+            inputMonitoring: true,
+            finderExtension: true,
+            folderAccess: true
+        )
+        queue.resolve(in: store, snapshot: restored)
+
+        XCTAssertTrue(store.showDockPreviews)
+        XCTAssertTrue(
+            store.windowCycleEnabled,
+            "The switcher was on before the permission lapsed and nothing asked for it to be off."
+        )
+    }
+
+    func testRegainingPreviewsDoesNotTurnOnLiveCaptureTheUserHadOff() {
+        let store = SettingsStore(defaults: isolatedDefaults(), livePreviewLimitProvider: { 8 })
+        store.showDockPreviews = true
+        store.liveDockPreviewsEnabled = false
+
+        let withoutRecording = PermissionSnapshot(
+            accessibility: true,
+            screenRecording: false,
+            inputMonitoring: true,
+            finderExtension: true,
+            folderAccess: true
+        )
+        var queue = PermissionFeatureActivationQueue()
+        queue.preserveIntent(
+            for: PermissionFeatureGate.disableUnavailableFeatures(
+                in: store,
+                snapshot: withoutRecording
+            )
+        )
+        queue.resolve(
+            in: store,
+            snapshot: PermissionSnapshot(
+                accessibility: true,
+                screenRecording: true,
+                inputMonitoring: true,
+                finderExtension: true,
+                folderAccess: true
+            )
+        )
+
+        XCTAssertTrue(store.showDockPreviews)
+        XCTAssertFalse(
+            store.liveDockPreviewsEnabled,
+            "Live capture was off by choice; restoring previews must not decide otherwise."
+        )
     }
 
     func testActivationQueuePreservesTemporarilyUnavailableFeatureIntent() {
