@@ -11,6 +11,12 @@ swift test -Xswiftc -warnings-as-errors
 ./script/generate_xcode_project.py --check
 ```
 
+Neither of those runs the app. Work through
+[Release verification](RELEASE_VERIFICATION.md) on the hardware you are
+releasing from and append the outcome to its evidence log; the questions it
+asks — a monitor left installed after a display was unplugged, a window list
+that outlived a sleep — cannot be answered from a test suite.
+
 The generated Xcode project intentionally does not contain a development team. Contributors who need a signed Xcode build select their own team locally in Xcode. Do not commit account-specific signing changes.
 
 The repository source is licensed under `GPL-3.0-only`. An official GitHub binary may use the same GPL terms, while other company binaries may use separate end-user terms under the dual-licensing model in `LICENSING.md`. Never treat the repository `LICENSE` file as the EULA for a separately licensed binary.
