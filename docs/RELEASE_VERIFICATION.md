@@ -36,9 +36,10 @@ this list is looking for only goes wrong in one arrangement:
 | S5 | Enter and leave a full-screen Space | Full-screen windows are listed as such, not as missing |
 | S6 | Toggle *Displays have separate Spaces* | Space membership stays readable; unknown is shown as unknown, never as another Space |
 
-Nothing in the app currently observes sleep, wake, or display-parameter
-changes — see [Known gaps](#known-gaps) — so S1–S4 are the scenarios most
-likely to find something.
+The window inventory and Dock interaction do not currently observe sleep,
+wake, or display-parameter changes. Display changes are observed by the
+window-placement size indicator only; see [Known gaps](#known-gaps).
+S1–S4 therefore need particular attention.
 
 ### Window lifecycle
 
@@ -58,13 +59,16 @@ while it is on screen — are both failures here. Note which.
 |---|---|---|
 | T1 | Open and dismiss the switcher quickly, many times | No capture session survives the last dismissal |
 | T2 | Turn each feature off in Settings | Its event tap and its captures stop |
-| T3 | Revoke a permission while the app runs | The feature stops; the switch keeps the value the user set (OD-21) |
-| T4 | Grant it again | The feature works without a relaunch |
+| T3 | Revoke a permission while the app runs | The feature stops and its own switch is temporarily disabled; pending intent and unrelated choices are preserved (OD-21) |
+| T4 | Grant it again | Previously enabled features return without a relaunch; unrelated choices, such as live capture being off, stay unchanged |
 | T5 | Quit the app with a preview open | Nothing is left behind: no tap, no capture, no panel |
 
 T1 and T2 are looking for a leak the tests cannot see. The teardown paths were
 read for this list and are sound on paper; that is not the same as watching
 them run.
+
+Keeping the switch visually enabled while the feature is unavailable is
+separate work (OD-22), not part of the current OD-21 implementation.
 
 ### Menu bar shelf
 
@@ -107,3 +111,31 @@ has passed on three machines and fails on a fourth is worth being able to see.
 - **Not run:** every scenario in this document. No sleep, wake, display change,
   Space change, or lifecycle scenario was exercised on hardware. This entry is
   an audit, not a verification, and does not satisfy the release check.
+
+### 2026-09-21 · local build and installation check
+
+- Source: `2732cea`, including the permission recovery fix `66713c1`;
+  version `1.2.9`, build `19`, Release configuration.
+- Host: macOS `26.6.2` (`25G83`), Apple silicon (`Mac17,9`), arm64 build.
+  Display arrangement and effective permissions were not verified in the UI.
+- Passed: 708 tests with warnings treated as errors; strict SwiftPM Release
+  and Xcode app/extension builds; generated-project consistency; staged bundle
+  validation; installed app and nested extension strict signature checks.
+- Replaced the installed `1.2.8` with `1.2.9` after archiving the old bundle.
+  Both new signatures satisfy the old bundles' designated requirements and
+  retain Developer ID signing. No privacy permissions were reset.
+- The new app and Finder extension processes started from the installed
+  location. Finder Sync lists one registration for that location. A short
+  process sample showed the main run loop processing events and waiting for
+  work, with no sustained main-thread stall during that sample.
+- Fourteen selected preference keys, including pending permission intent,
+  were unchanged across installation. This is not a live permission-revocation
+  test and does not establish that every feature currently has permission.
+- Packaging note: File Provider metadata on a bundle staged under Documents
+  caused strict signature validation to fail. Staging in the system temporary
+  directory passed. The local app ZIP passed its archive integrity check.
+- **Not run:** all S/W/T/M scenarios above, complete GUI regression, and other
+  macOS versions. The UI inspection connection timed out before and after
+  installation. No Universal 2 distribution build, notarization, Gatekeeper
+  assessment, push, or Release publication was performed. These installation
+  checks do not satisfy the full release gate.
