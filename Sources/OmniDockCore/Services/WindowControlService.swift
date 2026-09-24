@@ -728,28 +728,70 @@ public final class WindowControlService {
         return best
     }
 
-    public func focusWindow(processIdentifier: pid_t, title: String?, windowID: CGWindowID?) {
+    public func cancelPendingWindowFocus() {
+        _ = reserveForegroundOperation()
+    }
+
+    public func focusWindow(
+        processIdentifier: pid_t,
+        title: String?,
+        windowID: CGWindowID?,
+        completion: @escaping (WindowFocusResult) -> Void
+    ) {
         let token = operationTracker.begin(.focus, for: processIdentifier)
-        let desktopRevealResolution = resolvePendingDesktopReveal(for: processIdentifier)
-        if desktopRevealResolution == .restore {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
-                self?.focusWindow(
-                    processIdentifier: processIdentifier,
-                    title: title,
-                    windowID: windowID,
-                    operationToken: token,
-                    settlePassesRemaining: 2
-                )
-            }
+        guard let app = NSRunningApplication(processIdentifier: processIdentifier),
+              !app.isTerminated else {
+            rememberedWindowTargets.removeValue(forKey: processIdentifier)
+            completion(.unavailable)
             return
         }
-        focusWindow(
-            processIdentifier: processIdentifier,
-            title: title,
-            windowID: windowID,
-            operationToken: token,
-            settlePassesRemaining: 2
+        let initialFrontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        var reachedTargetApplication = false
+        let launchDate = app.launchDate
+        let appElement = AccessibilityElementFactory.application(processIdentifier: processIdentifier)
+        // Resolve once, then retain the AX identity. A retry must not choose a
+        // replacement window after the original closes or changes its title.
+        var target: AXUIElement?
+        let attempt = WindowFocusAttempt(
+            isCurrent: { [weak self] in
+                guard self?.operationTracker.isForegroundCurrent(token) == true else { return false }
+                let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+                if frontmostPID == processIdentifier {
+                    reachedTargetApplication = true
+                    return true
+                }
+                return !reachedTargetApplication && frontmostPID == initialFrontmostPID
+            },
+            observe: { [weak self] in
+                guard let self else { return .unavailable }
+                return self.observeWindowFocus(
+                    app: app,
+                    launchDate: launchDate,
+                    appElement: appElement,
+                    target: &target,
+                    title: title,
+                    windowID: windowID
+                )
+            },
+            raise: { [weak self] in
+                guard let self, let target else { return }
+                AXUIElementSetAttributeValue(target, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+                self.activateApplicationForWindowFocus(app, appElement: appElement)
+                self.raiseAndFocus(target, appElement: appElement)
+            },
+            completion: { [weak self] result in
+                if result == .focused, let self, let target {
+                    self.rememberedWindowTargets[processIdentifier] = RememberedWindowTarget(
+                        title: self.stringAttribute(kAXTitleAttribute, from: target) ?? title,
+                        windowID: self.intAttribute("AXWindowNumber", from: target).map(CGWindowID.init),
+                        applicationLaunchDate: launchDate
+                    )
+                }
+                completion(result)
+            }
         )
+        let desktopRevealResolution = resolvePendingDesktopReveal(for: processIdentifier)
+        attempt.start(after: desktopRevealResolution == .restore ? 0.08 : 0)
     }
 
     public func closeWindow(
@@ -940,63 +982,51 @@ public final class WindowControlService {
         )
     }
 
-    private func focusWindow(
-        processIdentifier: pid_t,
+    private func observeWindowFocus(
+        app: NSRunningApplication,
+        launchDate: Date?,
+        appElement: AXUIElement,
+        target: inout AXUIElement?,
         title: String?,
-        windowID: CGWindowID?,
-        operationToken: WindowOperationToken,
-        settlePassesRemaining: Int
-    ) {
-        guard operationToken.processIdentifier == processIdentifier,
-              operationTracker.isForegroundCurrent(operationToken)
-        else {
-            return
+        windowID: CGWindowID?
+    ) -> WindowFocusState {
+        let processIdentifier = app.processIdentifier
+        guard !app.isTerminated,
+              let running = NSRunningApplication(processIdentifier: processIdentifier),
+              running.launchDate == launchDate else {
+            return .unavailable
         }
-        guard let app = NSRunningApplication(processIdentifier: processIdentifier) else {
-            rememberedWindowTargets.removeValue(forKey: processIdentifier)
-            return
+        let query = queryWindows(for: appElement)
+        guard query.succeeded else { return .unreadable }
+        let candidates = normalWindowCandidates(in: query.windows)
+        if target == nil {
+            target = focusWindowMatch(in: candidates, title: title, windowID: windowID)
+        }
+        guard let target, candidates.contains(where: { CFEqual($0, target) }) else {
+            return .unavailable
         }
 
-        let appElement = AccessibilityElementFactory.application(
-            processIdentifier: processIdentifier
-        )
-        let candidates = normalWindowCandidates(in: windows(for: appElement))
-        if let target = focusWindowMatch(
-            in: candidates,
-            title: title,
-            windowID: windowID
-        ) {
-            if focusTargetWindow(
-                target,
-                app: app,
-                appElement: appElement,
-                fallbackTitle: title,
-                fallbackWindowID: windowID
-            ) {
-                return
+        var focusedValue: CFTypeRef?
+        var focusedWindowMatches = false
+        if AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &focusedValue) == .success,
+           let focusedValue, CFGetTypeID(focusedValue) == AXUIElementGetTypeID() {
+            let focused = focusedValue as! AXUIElement
+            var owner: pid_t = 0
+            if AXUIElementGetPid(focused, &owner) == .success, owner == processIdentifier {
+                let targetID = intAttribute("AXWindowNumber", from: target)
+                let focusedID = intAttribute("AXWindowNumber", from: focused)
+                focusedWindowMatches = CFEqual(focused, target)
+                    || (targetID != nil && targetID == focusedID)
             }
-        } else {
-            activateApplicationForWindowFocus(app, appElement: appElement)
         }
-
-        guard settlePassesRemaining > 0 else {
-            return
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
-            guard let self,
-                  self.operationTracker.isForegroundCurrent(operationToken)
-            else {
-                return
-            }
-            self.focusWindow(
-                processIdentifier: processIdentifier,
-                title: title,
-                windowID: windowID,
-                operationToken: operationToken,
-                settlePassesRemaining: settlePassesRemaining - 1
-            )
-        }
+        return WindowFocusObservation(
+            applicationIsCurrent: true,
+            querySucceeded: true,
+            targetIsPresent: true,
+            targetIsMinimized: boolAttribute(kAXMinimizedAttribute, from: target),
+            isFrontmost: NSWorkspace.shared.frontmostApplication?.processIdentifier == processIdentifier,
+            focusedWindowMatches: focusedWindowMatches
+        ).state
     }
 
     private func focusWindowMatch(
@@ -1147,27 +1177,6 @@ public final class WindowControlService {
         return BulkWindowDeduplicationPolicy.uniqueIndices(in: candidates).compactMap { index in
             windows.indices.contains(index) ? windows[index] : nil
         }
-    }
-
-    @discardableResult
-    private func focusTargetWindow(
-        _ target: AXUIElement,
-        app: NSRunningApplication,
-        appElement: AXUIElement,
-        fallbackTitle: String?,
-        fallbackWindowID: CGWindowID?
-    ) -> Bool {
-        AXUIElementSetAttributeValue(target, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
-        activateApplicationForWindowFocus(app, appElement: appElement)
-        guard raiseAndFocus(target, appElement: appElement) else {
-            return false
-        }
-        rememberedWindowTargets[app.processIdentifier] = RememberedWindowTarget(
-            title: stringAttribute(kAXTitleAttribute, from: target) ?? fallbackTitle,
-            windowID: intAttribute("AXWindowNumber", from: target).map { CGWindowID($0) } ?? fallbackWindowID,
-            applicationLaunchDate: app.launchDate
-        )
-        return true
     }
 
     private func activateApplicationForWindowFocus(

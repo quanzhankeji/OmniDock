@@ -261,6 +261,22 @@ final class WindowControlPoliciesTests: XCTestCase {
         )
     }
 
+    func testFocusMatchDoesNotReplaceAClosedNamedWindowWithTheOnlyOtherWindow() {
+        XCTAssertNil(WindowFocusMatchPolicy.matchingIndex(
+            in: [WindowFocusCandidate(index: 0, windowID: nil, title: "Other document")],
+            title: "Closed document",
+            windowID: nil
+        ))
+    }
+
+    func testFocusMatchDoesNotConfirmANamedTargetUsingAnUntitledWindow() {
+        XCTAssertNil(WindowFocusMatchPolicy.matchingIndex(
+            in: [WindowFocusCandidate(index: 0, windowID: nil, title: nil)],
+            title: "Document",
+            windowID: nil
+        ))
+    }
+
     func testCloseMatchUsesExactWindowIdentifier() {
         let candidates = [
             WindowCloseCandidate(index: 0, windowID: 10, title: "Document"),

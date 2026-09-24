@@ -304,6 +304,7 @@ enum AppStringKey: String, CaseIterable {
     case previewNeedsScreenRecording
     case previewNoWindows
     case previewCloseFailed
+    case previewFocusFailed
     case previewHiddenNoStatic
     case previewMinimizedClickRestore
     case previewCloseWindow

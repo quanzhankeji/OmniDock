@@ -46,7 +46,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         settings: settings,
         permissionService: permissionService,
         windowInventory: windowInventory,
-        windowControlService: windowControlService,
         previewService: previewService,
         previewPanelController: previewPanelController,
         registrationStatus: windowCycleRegistrationStatus,

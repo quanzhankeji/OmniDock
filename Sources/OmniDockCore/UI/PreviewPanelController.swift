@@ -1,6 +1,11 @@
 import AppKit
 
-typealias PreviewWindowFocusRequest = (pid_t, String?, CGWindowID?) -> Void
+typealias PreviewWindowFocusRequest = (
+    pid_t,
+    String?,
+    CGWindowID?,
+    @escaping (WindowFocusResult) -> Void
+) -> Void
 typealias PreviewWindowCloseRequest = (
     pid_t,
     String?,
@@ -40,6 +45,7 @@ public final class PreviewPanelController {
     }
 
     private let requestWindowFocus: PreviewWindowFocusRequest
+    private let cancelWindowFocus: () -> Void
     private let requestWindowClose: PreviewWindowCloseRequest
     private let requestApplicationQuit: PreviewApplicationQuitRequest
     private var panel: NSPanel?
@@ -59,17 +65,19 @@ public final class PreviewPanelController {
     private var pendingWindowCloseIdentities: Set<PreviewWindowIdentity> = []
     private var pendingApplicationQuitProcessIdentifiers: Set<pid_t> = []
     private var targetGeneration: UInt64 = 0
+    private var focusRequestGeneration: UInt64 = 0
     private var themeObserver: NSObjectProtocol?
 
     private var presentationHandlers: [PreviewAnchorKind: PresentationHandler] = [:]
 
     public convenience init(windowControlService: WindowControlService) {
         self.init(
-            requestWindowFocus: { processIdentifier, title, windowID in
+            requestWindowFocus: { processIdentifier, title, windowID, completion in
                 windowControlService.focusWindow(
                     processIdentifier: processIdentifier,
                     title: title,
-                    windowID: windowID
+                    windowID: windowID,
+                    completion: completion
                 )
             },
             requestWindowClose: { processIdentifier, title, windowID, completion in
@@ -85,6 +93,9 @@ public final class PreviewPanelController {
                     processIdentifier: processIdentifier,
                     completion: completion
                 )
+            },
+            cancelWindowFocus: {
+                windowControlService.cancelPendingWindowFocus()
             }
         )
     }
@@ -92,9 +103,11 @@ public final class PreviewPanelController {
     init(
         requestWindowFocus: @escaping PreviewWindowFocusRequest,
         requestWindowClose: @escaping PreviewWindowCloseRequest,
-        requestApplicationQuit: @escaping PreviewApplicationQuitRequest = { _, _ in false }
+        requestApplicationQuit: @escaping PreviewApplicationQuitRequest = { _, _ in false },
+        cancelWindowFocus: @escaping () -> Void = {}
     ) {
         self.requestWindowFocus = requestWindowFocus
+        self.cancelWindowFocus = cancelWindowFocus
         self.requestWindowClose = requestWindowClose
         self.requestApplicationQuit = requestApplicationQuit
         themeObserver = NotificationCenter.default.addObserver(
@@ -418,7 +431,7 @@ public final class PreviewPanelController {
         transientMessageWorkItem = nil
         messageField = nil
 
-        let root = PreviewPanelRootView(frame: panel?.contentView?.bounds ?? .zero)
+        let root = PreviewPanelRootView(frame: CGRect(origin: .zero, size: panel?.frame.size ?? .zero))
         root.autoresizingMask = [.width, .height]
 
         if windows.isEmpty {
@@ -527,6 +540,7 @@ public final class PreviewPanelController {
     }
 
     func focusWindowAndHidePreview(_ info: PreviewWindowInfo) {
+        let feedbackTarget = currentTarget
         let presentationHandler = currentTarget.flatMap {
             presentationHandlers[$0.previewAnchorKind]
         }
@@ -536,7 +550,41 @@ public final class PreviewPanelController {
             onPreviewLifecycleEndRequested?()
         }
         hide()
-        requestWindowFocus(info.processIdentifier, info.title, info.windowID)
+        focusWindowAfterPreviewDismissal(info, feedbackTarget: feedbackTarget)
+    }
+
+    func cancelPendingWindowFocus() {
+        focusRequestGeneration &+= 1
+        cancelWindowFocus()
+    }
+
+    func focusWindowAfterPreviewDismissal(_ info: PreviewWindowInfo, feedbackTarget: DockAppTarget?) {
+        focusRequestGeneration &+= 1
+        let requestGeneration = focusRequestGeneration
+        let presentationGeneration = targetGeneration
+        requestWindowFocus(info.processIdentifier, info.title, info.windowID) { [weak self] result in
+            Task { @MainActor [weak self] in
+                guard let self,
+                      result == .unavailable || result == .unconfirmed,
+                      requestGeneration == self.focusRequestGeneration,
+                      presentationGeneration == self.targetGeneration,
+                      self.currentTarget == nil,
+                      let feedbackTarget else {
+                    return
+                }
+                self.show(target: feedbackTarget, windows: [], message: AppStrings.text(.previewFocusFailed))
+                let feedbackGeneration = self.targetGeneration
+                let workItem = DispatchWorkItem { [weak self] in
+                    guard let self,
+                          self.targetGeneration == feedbackGeneration else {
+                        return
+                    }
+                    self.hide()
+                }
+                self.transientMessageWorkItem = workItem
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: workItem)
+            }
+        }
     }
 
     func closeWindowFromPreview(_ info: PreviewWindowInfo) {

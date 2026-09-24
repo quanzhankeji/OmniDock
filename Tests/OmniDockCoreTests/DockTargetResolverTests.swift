@@ -285,5 +285,171 @@ final class DockTargetResolverTests: XCTestCase {
         XCTAssertNil(match)
     }
 
+    func testSharedBundleSuffixCannotOverrideExactApplicationNames() {
+        let unrelatedApp = DockRunningApplicationCandidate(
+            processIdentifier: 101,
+            bundleIdentifier: "com.example.desktop",
+            localizedName: "Market Viewer"
+        )
+        let desktopApps = [
+            DockRunningApplicationCandidate(
+                processIdentifier: 202,
+                bundleIdentifier: "com.example.containerdesktop",
+                localizedName: "Container Desktop"
+            ),
+            DockRunningApplicationCandidate(
+                processIdentifier: 303,
+                bundleIdentifier: "com.example.virtual.console",
+                localizedName: "Virtual Desktop"
+            )
+        ]
+
+        for app in desktopApps {
+            for runningApps in [[unrelatedApp] + desktopApps, desktopApps + [unrelatedApp]] {
+                let match = DockTargetResolver.matchingTarget(
+                    for: [app.localizedName!],
+                    runningApps: runningApps
+                )
+                XCTAssertEqual(match?.app, app)
+            }
+        }
+    }
+
+    func testNonRunningApplicationCannotMatchAnotherApplicationsBundleSuffix() {
+        let unrelatedApp = DockRunningApplicationCandidate(
+            processIdentifier: 101,
+            bundleIdentifier: "com.example.desktop",
+            localizedName: "Market Viewer"
+        )
+
+        for title in ["Container Desktop", "Virtual Desktop", "Dock Extra (Container Desktop.app)"] {
+            XCTAssertNil(DockTargetResolver.matchingTarget(
+                for: [title],
+                runningApps: [unrelatedApp]
+            ))
+        }
+    }
+
+    func testExactApplicationNameWinsOverShorterApplicationName() {
+        let shortNameApp = DockRunningApplicationCandidate(
+            processIdentifier: 101,
+            bundleIdentifier: "com.example.Note",
+            localizedName: "Note"
+        )
+        let fullNameApp = DockRunningApplicationCandidate(
+            processIdentifier: 202,
+            bundleIdentifier: "com.example.NoteStudio",
+            localizedName: "Note Studio"
+        )
+
+        XCTAssertEqual(DockTargetResolver.matchingTarget(
+            for: ["Note Studio, running"],
+            runningApps: [shortNameApp, fullNameApp]
+        )?.app, fullNameApp)
+    }
+
+    func testExactNameInLaterAttributeWinsOverEarlierPartialMatch() {
+        let shortNameApp = DockRunningApplicationCandidate(
+            processIdentifier: 101,
+            bundleIdentifier: "com.example.Note",
+            localizedName: "Note"
+        )
+        let fullNameApp = DockRunningApplicationCandidate(
+            processIdentifier: 202,
+            bundleIdentifier: "com.example.NoteStudio",
+            localizedName: "Note Studio"
+        )
+
+        XCTAssertEqual(DockTargetResolver.matchingTarget(
+            for: ["Dock Extra (Note Studio.app)", "Note Studio"],
+            runningApps: [shortNameApp, fullNameApp]
+        )?.app, fullNameApp)
+    }
+
+    func testDuplicateApplicationNamesDoNotSelectFirstProcess() {
+        let apps = [101, 202].map { processIdentifier in
+            DockRunningApplicationCandidate(
+                processIdentifier: pid_t(processIdentifier),
+                bundleIdentifier: "com.example.editor\(processIdentifier)",
+                localizedName: "Sample Editor"
+            )
+        }
+
+        XCTAssertNil(DockTargetResolver.matchingTarget(
+            for: ["Sample Editor"],
+            runningApps: apps
+        ))
+    }
+
+    func testAmbiguousWrappedApplicationNamesDoNotSelectFirstProcess() {
+        let apps = [
+            DockRunningApplicationCandidate(
+                processIdentifier: 101,
+                bundleIdentifier: "com.example.Note",
+                localizedName: "Note"
+            ),
+            DockRunningApplicationCandidate(
+                processIdentifier: 202,
+                bundleIdentifier: "com.example.NoteStudio",
+                localizedName: "Note Studio"
+            )
+        ]
+
+        XCTAssertNil(DockTargetResolver.matchingTarget(
+            for: ["Dock Extra (Note Studio.app)"],
+            runningApps: apps
+        ))
+    }
+
+    func testBundleSuffixFallbackRequiresWholeDockTitle() {
+        let app = DockRunningApplicationCandidate(
+            processIdentifier: 101,
+            bundleIdentifier: "com.example.SampleEditor",
+            localizedName: "Localized Editor"
+        )
+
+        XCTAssertEqual(DockTargetResolver.matchingTarget(
+            for: ["SampleEditor, running"],
+            runningApps: [app]
+        )?.app, app)
+        XCTAssertNil(DockTargetResolver.matchingTarget(
+            for: ["Another SampleEditor"],
+            runningApps: [app]
+        ))
+    }
+
+    func testApplicationNameWinsOverExactBundleSuffixFallback() {
+        let unrelatedApp = DockRunningApplicationCandidate(
+            processIdentifier: 101,
+            bundleIdentifier: "com.example.Editor",
+            localizedName: "Market Viewer"
+        )
+        let app = DockRunningApplicationCandidate(
+            processIdentifier: 202,
+            bundleIdentifier: "com.example.TextEditor",
+            localizedName: "Editor"
+        )
+
+        XCTAssertEqual(DockTargetResolver.matchingTarget(
+            for: ["Editor"],
+            runningApps: [unrelatedApp, app]
+        )?.app, app)
+    }
+
+    func testAmbiguousBundleSuffixFallbackDoesNotSelectFirstProcess() {
+        let apps = [101, 202].map { processIdentifier in
+            DockRunningApplicationCandidate(
+                processIdentifier: pid_t(processIdentifier),
+                bundleIdentifier: "com.example\(processIdentifier).editor",
+                localizedName: "Application \(processIdentifier)"
+            )
+        }
+
+        XCTAssertNil(DockTargetResolver.matchingTarget(
+            for: ["Editor"],
+            runningApps: apps
+        ))
+    }
+
     private func requireSendable<T: Sendable>(_ type: T.Type) {}
 }

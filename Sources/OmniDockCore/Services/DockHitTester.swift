@@ -606,14 +606,22 @@ enum DockTargetResolver {
         for texts: [String],
         runningApps: [DockRunningApplicationCandidate]
     ) -> DockTargetResolution? {
-        for text in texts {
-            if let match = runningApps.first(where: {
-                DockTitleMatcher.matches(
-                    dockTitle: text,
-                    appName: $0.localizedName,
-                    bundleIdentifier: $0.bundleIdentifier
-                )
-            }) {
+        // Prefer complete app names across AX attributes before weaker aliases.
+        for kind in DockTitleMatcher.MatchKind.allCases {
+            for text in texts {
+                let matches = runningApps.filter {
+                    DockTitleMatcher.matchKind(
+                        dockTitle: text,
+                        appName: $0.localizedName,
+                        bundleIdentifier: $0.bundleIdentifier
+                    ) == kind
+                }
+                guard !matches.isEmpty else {
+                    continue
+                }
+                guard matches.count == 1, let match = matches.first else {
+                    return nil
+                }
                 return DockTargetResolution(app: match)
             }
         }
@@ -639,6 +647,12 @@ enum DockTargetResolver {
 }
 
 public enum DockTitleMatcher {
+    fileprivate enum MatchKind: CaseIterable {
+        case exactName
+        case wrappedName
+        case bundleName
+    }
+
     public static func normalized(_ value: String?) -> String {
         guard let value else {
             return ""
@@ -655,14 +669,31 @@ public enum DockTitleMatcher {
     }
 
     public static func matches(dockTitle: String, appName: String?, bundleIdentifier: String?) -> Bool {
+        matchKind(dockTitle: dockTitle, appName: appName, bundleIdentifier: bundleIdentifier) != nil
+    }
+
+    fileprivate static func matchKind(
+        dockTitle: String,
+        appName: String?,
+        bundleIdentifier: String?
+    ) -> MatchKind? {
         let title = normalized(dockTitle)
         let app = normalized(appName)
-        let bundleName = normalized(bundleIdentifier?.split(separator: ".").last.map(String.init))
         guard !title.isEmpty else {
-            return false
+            return nil
         }
-        return tokenSequence(app, appearsIn: title)
-            || tokenSequence(bundleName, appearsIn: title)
+        if !app.isEmpty, title == app {
+            return .exactName
+        }
+        if tokenSequence(app, appearsIn: title) {
+            return .wrappedName
+        }
+        // Bundle suffixes such as "desktop" are not unique application names.
+        let bundleName = normalized(bundleIdentifier?.split(separator: ".").last.map(String.init))
+        if !bundleName.isEmpty, title == bundleName {
+            return .bundleName
+        }
+        return nil
     }
 
     public static func matchesWindowScope(windowTitle: String?, dockTitle: String) -> Bool {

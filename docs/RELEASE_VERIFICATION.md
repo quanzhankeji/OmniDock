@@ -53,6 +53,27 @@ S1–S4 therefore need particular attention.
 A ghost window — one listed after it is gone — and a lost window — one missing
 while it is on screen — are both failures here. Note which.
 
+### Exact window focus
+
+Repeat these through a Dock thumbnail, an enhanced Command-Tab thumbnail,
+and an Option-Tab selection. Native Command-Tab release remains a system action.
+
+| # | Do this | Expect |
+|---|---|---|
+| F1 | Select each of two windows with the same title | Only the selected window becomes focused; an ambiguous identity does not select another window |
+| F2 | Select a hidden or minimised window | Its application becomes frontmost, and that exact window is focused and no longer minimised |
+| F3 | Start another switch immediately after making a selection | The older retry stops, including when the new switcher is still loading its window list |
+| F4 | Close the target between selection and confirmation | No remaining window is substituted for the closed target |
+| F5 | Quit and relaunch the target application during selection | No old request acts on the new process instance |
+| F6 | Select a stale or unresolvable target | An unconfirmed result is not remembered as success; brief failure feedback disappears without reopening capture sessions |
+| F7 | Open a new preview while old failure feedback is pending | The old result cannot replace the new cards, and its expiry cannot hide them |
+
+Focus confirmation reads the application's focused AX window, foreground
+process, and minimised state. Accepting an AX raise request is not sufficient.
+Retries remain bounded to three attempts; new OmniDock foreground requests or
+switcher sessions cancel them. Automated tests use controlled observations and do not establish that
+third-party applications expose accurate AX state on every macOS version.
+
 ### Teardown
 
 | # | Do this | Expect |
@@ -139,3 +160,95 @@ has passed on three machines and fails on a fourth is worth being able to see.
   installation. No Universal 2 distribution build, notarization, Gatekeeper
   assessment, push, or Release publication was performed. These installation
   checks do not satisfy the full release gate.
+
+### 2026-09-23 · exact-focus implementation and automated regression
+
+- Source: working changes based on `c7be95e`; version `1.2.9`, build `19`.
+  Scope is exact focus verification (OD-01) and the regression baseline
+  (OD-02). Permission capability redesign is not included.
+- Host: macOS `26.6.2` (`25G83`), Apple silicon (`Mac17,9`), arm64 builds.
+  Display arrangement and effective privacy grants were not verified.
+- Regression-first evidence: two new matching tests failed before the fix,
+  showing that a missing named target could select the sole remaining window
+  with a different or absent title. Both now pass. A message-panel geometry
+  test also reproduced invalid text bounds after dismissal; using the panel's
+  actual size corrected the bounds and removed the layout warning.
+- Passed: all 729 tests with warnings treated as errors, strict SwiftPM Release
+  build, strict Xcode Release app/extension build, generated-project
+  consistency, staged resource/signature validation, and diff-format checks.
+- New tests cover bounded confirmation attempts, delayed confirmation,
+  unavailable or unreadable targets, exact-window rather than application-only
+  success, superseded requests, cancellation while a new switcher loads,
+  stale UI results, message expiry, and preview-content teardown. The focus
+  observations are injected in tests; they are not live AX compatibility tests.
+- The SwiftPM staged app passed Developer ID signature validation. The separate
+  Xcode app and Finder extension passed strict signature verification with
+  Apple Development signing. Both builds stayed in a temporary directory;
+  the installed application was not replaced or launched from these artifacts.
+- **Not run:** F1-F7 against real application windows, all S/W/T/M hardware
+  scenarios, and other macOS versions. Desktop UI inspection timed out, so no
+  UI acceptance is claimed. No permission reset, Universal 2 distribution
+  build, notarization, Gatekeeper assessment, commit, push, or release was
+  performed. OD-01 still needs live application acceptance; OD-02 remains open.
+
+### 2026-09-23 · local installation of exact-focus changes
+
+- After the checks above, rebuilt and installed the working changes through
+  the local installer. Version remains `1.2.9`, build `19`; no release version
+  was changed. All 729 tests passed again before installation.
+- Archived the previous installed bundle and verified the archive before
+  replacement. The new installed executable differs from the previous one
+  and byte-matches the freshly built installation candidate.
+- The main app and Finder extension retain Developer ID signing, pass strict
+  signature verification, and satisfy their previous designated requirements.
+  Their entitlements are unchanged. The installer did not reset privacy
+  permissions or delete Library data.
+- The new app and extension processes started from `/Applications/OmniDock.app`.
+  Finder Sync lists one registered extension, at the installed path. A
+  three-second process sample showed the main run loop waiting for and
+  processing events, with no sustained main-thread stall in that sample.
+- The installation build succeeded. Xcode emitted the metadata-extraction
+  warning for targets without an App Intents dependency; no compiler error
+  blocked the build.
+- **Not run:** interactive F/S/W/T/M acceptance. The desktop UI inspection
+  connection still timed out. This confirms build, installation, signing and
+  process startup, not full feature compatibility. No commit, push, remote
+  release, notarization, or virtual-machine installation was performed.
+
+### 2026-09-23 · Dock application identity matching
+
+- Reproduced a pre-existing target-selection bug: a running application's
+  bundle suffix such as `desktop` could match a word in another Dock tile's
+  title. Selection depended on running-application order, so unrelated tiles
+  could display the same application's windows. This resolver is shared by
+  hover previews and Dock click routing.
+- Complete application names now take priority over wrapped names and bundle
+  aliases. Bundle suffix fallback requires the whole normalized Dock title;
+  ambiguous matches no longer select the first process. No application-specific
+  exceptions were added, and capture, cache, and focus behavior are unchanged
+  by this fix.
+- Added nine regression tests. They failed against the previous resolver;
+  after the fix, all 72 focused Dock tests and all 738 tests passed with
+  warnings treated as errors. The strict SwiftPM Release build and local
+  Xcode app/extension build passed. The Xcode build emitted only the existing
+  App Intents metadata-extraction warnings for targets without that dependency.
+- Rebuilt, backed up the previous app, and replaced and launched
+  `/Applications/OmniDock.app`. Version remains `1.2.9`, build `19`. The new
+  executable differs from the previous installation and matches the fresh
+  build candidate. Both the main app and extension pass strict signature
+  verification and their previous designated requirements; entitlements are
+  unchanged. Finder Sync has one registered extension at the installed path.
+- **Not run:** live hover/click acceptance and other macOS versions. The
+  desktop UI connection timed out. Confirm both affected Dock tiles display
+  only their own windows, and that moving onto an app without previewable
+  windows dismisses the previous preview. No privacy reset, Library data
+  cleanup, commit, push, notarization, or release was performed.
+
+### 2026-09-23 · local preview confirmation
+
+- After installing the Dock identity fix, the local tester reported that
+  previews now work correctly. This confirms the reported wrong-application
+  preview symptom is resolved in that local check.
+- This report does not establish that the complete exact-focus, lifecycle,
+  permission, display, or cross-version matrix passed. Those broader
+  acceptance items remain open.

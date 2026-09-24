@@ -303,6 +303,7 @@
 "previewNeedsScreenRecording" = "Enable Screen Recording permission to show window thumbnails, including live images and one-time static snapshots";
 "previewNoWindows" = "No windows to preview";
 "previewCloseFailed" = "Unable to close this window";
+"previewFocusFailed" = "Could not confirm this window is in front. Please try again.";
 "previewHiddenNoStatic" = "Hidden\nNo static preview";
 "previewMinimizedClickRestore" = "Minimized\nClick to restore";
 "previewCloseWindow" = "Close window";

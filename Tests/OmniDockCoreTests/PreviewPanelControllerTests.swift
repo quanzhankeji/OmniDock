@@ -44,7 +44,7 @@ final class PreviewPanelControllerTests: XCTestCase {
         var events: [String] = []
         var focusedWindowID: CGWindowID?
         let controller = PreviewPanelController(
-            requestWindowFocus: { _, _, windowID in
+            requestWindowFocus: { _, _, windowID, _ in
                 events.append("focus")
                 focusedWindowID = windowID
             },
@@ -65,7 +65,7 @@ final class PreviewPanelControllerTests: XCTestCase {
         let info = previewInfo()
         var events: [String] = []
         let controller = PreviewPanelController(
-            requestWindowFocus: { _, _, _ in
+            requestWindowFocus: { _, _, _, _ in
                 events.append("focus")
             },
             requestWindowClose: { _, _, _, _ in }
@@ -89,7 +89,7 @@ final class PreviewPanelControllerTests: XCTestCase {
 
     func testHideReleasesInstalledPreviewContentAndPanelCanBeReused() {
         let controller = PreviewPanelController(
-            requestWindowFocus: { _, _, _ in },
+            requestWindowFocus: { _, _, _, _ in },
             requestWindowClose: { _, _, _, _ in }
         )
         controller.show(target: dockTarget(), windows: [previewInfo()], message: nil)
@@ -108,12 +108,172 @@ final class PreviewPanelControllerTests: XCTestCase {
         controller.hide()
     }
 
+    func testFailedFocusReportsTheSameResultForEachPreviewEntryWithoutRestoringCards() async {
+        for target in [dockTarget(), commandTabTarget(), windowCycleTarget()] {
+            let info = previewInfo()
+            var focusCompletion: ((WindowFocusResult) -> Void)?
+            var lifecycleEnds = 0
+            let controller = PreviewPanelController(
+                requestWindowFocus: { _, _, _, completion in focusCompletion = completion },
+                requestWindowClose: { _, _, _, _ in }
+            )
+            defer { controller.hide() }
+            controller.onPreviewLifecycleEndRequested = { lifecycleEnds += 1 }
+            controller.show(target: target, windows: [info], message: nil)
+
+            if target.previewAnchorKind == .windowCycle {
+                controller.hide()
+                controller.focusWindowAfterPreviewDismissal(info, feedbackTarget: target)
+            } else {
+                controller.focusWindowAndHidePreview(info)
+                XCTAssertEqual(lifecycleEnds, 1)
+            }
+            XCTAssertNil(controller.frame)
+            XCTAssertFalse(controller.hasInstalledContentView)
+            focusCompletion?(.unconfirmed)
+            await settleMainActor()
+
+            XCTAssertEqual(controller.displayedWindowCount, 0)
+            XCTAssertEqual(controller.displayedMessage, AppStrings.text(.previewFocusFailed))
+            XCTAssertNotNil(controller.frame)
+        }
+    }
+
+    func testConfirmedOrSupersededFocusDoesNotReopenPreview() async {
+        for result in [WindowFocusResult.focused, .superseded] {
+            let controller = PreviewPanelController(
+                requestWindowFocus: { _, _, _, completion in completion(result) },
+                requestWindowClose: { _, _, _, _ in }
+            )
+            controller.show(target: dockTarget(), windows: [previewInfo()], message: nil)
+            controller.focusWindowAndHidePreview(previewInfo())
+            await settleMainActor()
+
+            XCTAssertNil(controller.frame)
+            XCTAssertFalse(controller.hasInstalledContentView)
+        }
+    }
+
+    func testOldFocusFailureCannotReplaceANewerPreview() async {
+        var focusCompletion: ((WindowFocusResult) -> Void)?
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, _, completion in focusCompletion = completion },
+            requestWindowClose: { _, _, _, _ in }
+        )
+        defer { controller.hide() }
+        controller.show(target: dockTarget(), windows: [previewInfo()], message: nil)
+        controller.focusWindowAndHidePreview(previewInfo())
+        controller.show(target: commandTabTarget(), windows: [previewInfo(windowID: 43)], message: nil)
+
+        focusCompletion?(.unavailable)
+        await settleMainActor()
+
+        XCTAssertEqual(controller.displayedWindowCount, 1)
+        XCTAssertNil(controller.displayedMessage)
+    }
+
+    func testStartingNextSwitchCancelsFocusAndPendingFailureFeedback() async {
+        var focusCompletion: ((WindowFocusResult) -> Void)?
+        var cancellations = 0
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, _, completion in focusCompletion = completion },
+            requestWindowClose: { _, _, _, _ in },
+            cancelWindowFocus: { cancellations += 1 }
+        )
+        controller.show(target: dockTarget(), windows: [previewInfo()], message: nil)
+        controller.focusWindowAndHidePreview(previewInfo())
+
+        controller.cancelPendingWindowFocus()
+        focusCompletion?(.unconfirmed)
+        await settleMainActor()
+
+        XCTAssertEqual(cancellations, 1)
+        XCTAssertNil(controller.frame)
+        XCTAssertFalse(controller.hasInstalledContentView)
+    }
+
+    func testNewFocusRequestDiscardsThePreviousFailure() async {
+        var completions: [(WindowFocusResult) -> Void] = []
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, _, completion in completions.append(completion) },
+            requestWindowClose: { _, _, _, _ in }
+        )
+        controller.focusWindowAfterPreviewDismissal(previewInfo(), feedbackTarget: dockTarget())
+        controller.focusWindowAfterPreviewDismissal(previewInfo(windowID: 43), feedbackTarget: dockTarget())
+
+        completions[1](.focused)
+        completions[0](.unavailable)
+        await settleMainActor()
+
+        XCTAssertNil(controller.frame)
+        XCTAssertFalse(controller.hasInstalledContentView)
+    }
+
+    func testFocusFailureMessageDismissesEvenIfNextSwitchHasNotPresentedYet() async throws {
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, _, completion in completion(.unavailable) },
+            requestWindowClose: { _, _, _, _ in }
+        )
+        defer { controller.hide() }
+        controller.focusWindowAfterPreviewDismissal(previewInfo(), feedbackTarget: dockTarget())
+        await settleMainActor()
+        XCTAssertEqual(controller.displayedMessage, AppStrings.text(.previewFocusFailed))
+        controller.cancelPendingWindowFocus()
+
+        try await Task.sleep(nanoseconds: 2_100_000_000)
+
+        XCTAssertNil(controller.frame)
+        XCTAssertFalse(controller.hasInstalledContentView)
+    }
+
+    func testMessageOnlyPanelHasValidTextGeometryAfterPreviewDismissal() throws {
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, _, _ in },
+            requestWindowClose: { _, _, _, _ in }
+        )
+        defer { controller.hide() }
+        controller.show(target: dockTarget(), windows: [previewInfo()], message: nil)
+        controller.hide()
+        let message = "Window focus verification message"
+        controller.show(target: dockTarget(), windows: [], message: message)
+
+        let label = NSApplication.shared.windows
+            .compactMap(\.contentView)
+            .flatMap(\.subviews)
+            .compactMap { $0 as? NSTextField }
+            .first { $0.stringValue == message }
+        let field = try XCTUnwrap(label)
+        let root = try XCTUnwrap(field.superview)
+        XCTAssertTrue(field.frame.origin.x.isFinite)
+        XCTAssertTrue(field.frame.origin.y.isFinite)
+        XCTAssertGreaterThan(field.frame.width, 0)
+        XCTAssertGreaterThan(field.frame.height, 0)
+        XCTAssertTrue(root.bounds.contains(field.frame))
+    }
+
+    func testFocusFailureDismissalDoesNotHideNewContentForTheSameTarget() async throws {
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, _, completion in completion(.unconfirmed) },
+            requestWindowClose: { _, _, _, _ in }
+        )
+        defer { controller.hide() }
+        controller.focusWindowAfterPreviewDismissal(previewInfo(), feedbackTarget: dockTarget())
+        await settleMainActor()
+        controller.show(target: dockTarget(), windows: [previewInfo()], message: nil)
+
+        try await Task.sleep(nanoseconds: 2_100_000_000)
+
+        XCTAssertNotNil(controller.frame)
+        XCTAssertEqual(controller.displayedWindowCount, 1)
+        XCTAssertNil(controller.displayedMessage)
+    }
+
     func testConfirmedCloseRemovesWindowOnlyAfterCompletion() async {
         let info = previewInfo()
         var closeRequests = 0
         var closeCompletion: ((Bool) -> Void)?
         let controller = PreviewPanelController(
-            requestWindowFocus: { _, _, _ in },
+            requestWindowFocus: { _, _, _, _ in },
             requestWindowClose: { _, _, _, completion in
                 closeRequests += 1
                 closeCompletion = completion
@@ -147,7 +307,7 @@ final class PreviewPanelControllerTests: XCTestCase {
         var dockCloseCount = 0
         var commandTabCloseCount = 0
         let controller = PreviewPanelController(
-            requestWindowFocus: { _, _, _ in },
+            requestWindowFocus: { _, _, _, _ in },
             requestWindowClose: { _, _, _, completion in
                 closeCompletion = completion
             }
@@ -180,7 +340,7 @@ final class PreviewPanelControllerTests: XCTestCase {
         var events: [String] = []
         var quitCompletion: ((Bool) -> Void)?
         let controller = PreviewPanelController(
-            requestWindowFocus: { _, _, _ in },
+            requestWindowFocus: { _, _, _, _ in },
             requestWindowClose: { _, _, _, _ in },
             requestApplicationQuit: { processIdentifier, completion in
                 events.append("quit:\(processIdentifier)")
@@ -226,7 +386,7 @@ final class PreviewPanelControllerTests: XCTestCase {
         var events: [String] = []
         var quitCompletion: ((Bool) -> Void)?
         let controller = PreviewPanelController(
-            requestWindowFocus: { _, _, _ in },
+            requestWindowFocus: { _, _, _, _ in },
             requestWindowClose: { _, _, _, _ in },
             requestApplicationQuit: { processIdentifier, completion in
                 events.append("quit:\(processIdentifier)")
@@ -257,7 +417,7 @@ final class PreviewPanelControllerTests: XCTestCase {
     func testFailedQuitKeepsPreviewAndShowsFeedback() {
         let info = previewInfo()
         let controller = PreviewPanelController(
-            requestWindowFocus: { _, _, _ in },
+            requestWindowFocus: { _, _, _, _ in },
             requestWindowClose: { _, _, _, _ in },
             requestApplicationQuit: { _, _ in false }
         )
@@ -274,7 +434,7 @@ final class PreviewPanelControllerTests: XCTestCase {
         let info = previewInfo()
         var quitCompletion: ((Bool) -> Void)?
         let controller = PreviewPanelController(
-            requestWindowFocus: { _, _, _ in },
+            requestWindowFocus: { _, _, _, _ in },
             requestWindowClose: { _, _, _, _ in },
             requestApplicationQuit: { _, completion in
                 quitCompletion = completion
@@ -297,7 +457,7 @@ final class PreviewPanelControllerTests: XCTestCase {
         let second = previewInfo(id: "window-2", windowID: 43, title: "Same")
         var closedWindowID: CGWindowID?
         let controller = PreviewPanelController(
-            requestWindowFocus: { _, _, _ in },
+            requestWindowFocus: { _, _, _, _ in },
             requestWindowClose: { _, _, windowID, _ in
                 closedWindowID = windowID
             }
@@ -313,7 +473,7 @@ final class PreviewPanelControllerTests: XCTestCase {
     func testCommandTabButtonTargetsUsePanelCoordinatesAndKeepQuitOnTheLeft() throws {
         let info = previewInfo()
         let controller = PreviewPanelController(
-            requestWindowFocus: { _, _, _ in },
+            requestWindowFocus: { _, _, _, _ in },
             requestWindowClose: { _, _, _, _ in }
         )
         defer { controller.hide() }
@@ -344,7 +504,7 @@ final class PreviewPanelControllerTests: XCTestCase {
         var closeCompletion: ((Bool) -> Void)?
         var closedWindowCount = 0
         let controller = PreviewPanelController(
-            requestWindowFocus: { _, _, _ in },
+            requestWindowFocus: { _, _, _, _ in },
             requestWindowClose: { _, _, _, completion in
                 closeCompletion = completion
             }
@@ -379,7 +539,7 @@ final class PreviewPanelControllerTests: XCTestCase {
         )
         var closeCompletion: ((Bool) -> Void)?
         let controller = PreviewPanelController(
-            requestWindowFocus: { _, _, _ in },
+            requestWindowFocus: { _, _, _, _ in },
             requestWindowClose: { _, _, _, completion in
                 closeCompletion = completion
             }
@@ -430,6 +590,19 @@ final class PreviewPanelControllerTests: XCTestCase {
             dockItemFrame: CGRect(x: 72, y: 272, width: 56, height: 56),
             dockTileIdentifierOverride: "command-tab:123",
             previewAnchorKind: .commandTab
+        )
+    }
+
+    private func windowCycleTarget() -> DockAppTarget {
+        DockAppTarget(
+            processIdentifier: 123,
+            bundleIdentifier: "com.example.app",
+            localizedName: "Example",
+            dockElementTitle: "Example",
+            hitPoint: CGPoint(x: 600, y: 400),
+            dockItemFrame: CGRect(x: 572, y: 372, width: 56, height: 56),
+            dockTileIdentifierOverride: "window-cycle:1",
+            previewAnchorKind: .windowCycle
         )
     }
 

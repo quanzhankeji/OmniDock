@@ -74,6 +74,7 @@
 		4A1F0124BC7683D80ABB93FB /* WindowControlService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F35C9782DD9C01A55D3D2BD /* WindowControlService.swift */; };
 		0253BDD35777A7AFE97F616E /* WindowCycleService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4603BBDE86DBBB9D01B3CB11 /* WindowCycleService.swift */; };
 		FAAEEC974BABA0B6A433F675 /* WindowFiltering.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1997E504C411BA05460BBEBB /* WindowFiltering.swift */; };
+		D70D7F096217A140CE781BE4 /* WindowFocusVerification.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE766F916DB12985AEB29C0B /* WindowFocusVerification.swift */; };
 		347430DBF8ACA48593ADE9BB /* WindowInventoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 236B7CCCF870D1DD05A010A4 /* WindowInventoryService.swift */; };
 		F9268A0DC93009A53816864A /* WindowOperationGeneration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D6DBAA062C905D55EECF74C /* WindowOperationGeneration.swift */; };
 		6319D52012A096725B303571 /* WindowPlacementAccessibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = 353B207639E843870BA24A37 /* WindowPlacementAccessibility.swift */; };
@@ -203,6 +204,7 @@
 		0F35C9782DD9C01A55D3D2BD /* WindowControlService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowControlService.swift"; sourceTree = SOURCE_ROOT; };
 		4603BBDE86DBBB9D01B3CB11 /* WindowCycleService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowCycleService.swift"; sourceTree = SOURCE_ROOT; };
 		1997E504C411BA05460BBEBB /* WindowFiltering.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowFiltering.swift"; sourceTree = SOURCE_ROOT; };
+		DE766F916DB12985AEB29C0B /* WindowFocusVerification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowFocusVerification.swift"; sourceTree = SOURCE_ROOT; };
 		236B7CCCF870D1DD05A010A4 /* WindowInventoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowInventoryService.swift"; sourceTree = SOURCE_ROOT; };
 		8D6DBAA062C905D55EECF74C /* WindowOperationGeneration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowOperationGeneration.swift"; sourceTree = SOURCE_ROOT; };
 		353B207639E843870BA24A37 /* WindowPlacementAccessibility.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/WindowPlacementAccessibility.swift"; sourceTree = SOURCE_ROOT; };
@@ -393,6 +395,7 @@
 				0F35C9782DD9C01A55D3D2BD /* WindowControlService.swift */,
 				4603BBDE86DBBB9D01B3CB11 /* WindowCycleService.swift */,
 				1997E504C411BA05460BBEBB /* WindowFiltering.swift */,
+				DE766F916DB12985AEB29C0B /* WindowFocusVerification.swift */,
 				236B7CCCF870D1DD05A010A4 /* WindowInventoryService.swift */,
 				8D6DBAA062C905D55EECF74C /* WindowOperationGeneration.swift */,
 				353B207639E843870BA24A37 /* WindowPlacementAccessibility.swift */,
@@ -706,6 +709,7 @@
 				4A1F0124BC7683D80ABB93FB /* WindowControlService.swift in Sources */,
 				0253BDD35777A7AFE97F616E /* WindowCycleService.swift in Sources */,
 				FAAEEC974BABA0B6A433F675 /* WindowFiltering.swift in Sources */,
+				D70D7F096217A140CE781BE4 /* WindowFocusVerification.swift in Sources */,
 				347430DBF8ACA48593ADE9BB /* WindowInventoryService.swift in Sources */,
 				F9268A0DC93009A53816864A /* WindowOperationGeneration.swift in Sources */,
 				6319D52012A096725B303571 /* WindowPlacementAccessibility.swift in Sources */,

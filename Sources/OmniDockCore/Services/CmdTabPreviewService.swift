@@ -110,6 +110,7 @@ final class CmdTabPreviewService {
         guard !isInteractionActive else {
             return
         }
+        previewPanelController.cancelPendingWindowFocus()
         isInteractionActive = true
         onActivityChanged(true)
         resetPresentation()

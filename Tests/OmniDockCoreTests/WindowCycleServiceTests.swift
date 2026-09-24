@@ -291,7 +291,6 @@ final class WindowCycleTests: XCTestCase {
             settings: settings,
             permissionService: PermissionService(),
             windowInventory: windowInventory,
-            windowControlService: windowControlService,
             previewService: previewService,
             previewPanelController: PreviewPanelController(windowControlService: windowControlService),
             registrationStatus: status ?? WindowCycleRegistrationStatusStore(),

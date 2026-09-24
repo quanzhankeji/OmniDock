@@ -439,7 +439,6 @@ final class WindowCycleService {
     private let settings: SettingsStore
     private let permissionSnapshotProvider: () -> PermissionSnapshot
     private let windowInventory: WindowInventoryService
-    private let windowControlService: WindowControlService
     private let previewService: ScreenCapturePreviewService
     private let previewPanelController: PreviewPanelController
     private let registrationStatus: WindowCycleRegistrationStatusStore
@@ -472,7 +471,6 @@ final class WindowCycleService {
         settings: SettingsStore,
         permissionService: PermissionService,
         windowInventory: WindowInventoryService,
-        windowControlService: WindowControlService,
         previewService: ScreenCapturePreviewService,
         previewPanelController: PreviewPanelController,
         registrationStatus: WindowCycleRegistrationStatusStore,
@@ -485,7 +483,6 @@ final class WindowCycleService {
             permissionService.snapshot()
         }
         self.windowInventory = windowInventory
-        self.windowControlService = windowControlService
         self.previewService = previewService
         self.previewPanelController = previewPanelController
         self.registrationStatus = registrationStatus
@@ -607,6 +604,7 @@ final class WindowCycleService {
         guard !isAwaitingInventory else {
             return
         }
+        previewPanelController.cancelPendingWindowFocus()
         inventoryRefreshGeneration &+= 1
         let refreshGeneration = inventoryRefreshGeneration
         let records = windowInventory.allWindows()
@@ -1047,6 +1045,7 @@ final class WindowCycleService {
     }
 
     private func endSession(focusing window: PreviewWindowInfo? = nil) {
+        let feedbackTarget = sessionTarget
         let wasActive = session != nil || sessionTarget != nil || inputMonitor.isMonitoring
         inventoryRefreshGeneration &+= 1
         sessionGeneration &+= 1
@@ -1072,11 +1071,7 @@ final class WindowCycleService {
         guard let window else {
             return
         }
-        windowControlService.focusWindow(
-            processIdentifier: window.processIdentifier,
-            title: window.title,
-            windowID: window.windowID
-        )
+        previewPanelController.focusWindowAfterPreviewDismissal(window, feedbackTarget: feedbackTarget)
     }
 
     private func observeInventoryChanges() {

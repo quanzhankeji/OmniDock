@@ -303,6 +303,7 @@
 "previewNeedsScreenRecording" = "需要开启屏幕录制权限后显示窗口缩略图，包括实时画面和一次性静态截图";
 "previewNoWindows" = "没有可预览的窗口";
 "previewCloseFailed" = "无法关闭这个窗口";
+"previewFocusFailed" = "未能确认目标窗口已切到前台，请重试。";
 "previewHiddenNoStatic" = "已隐藏\n无静态预览";
 "previewMinimizedClickRestore" = "已最小化\n点击恢复";
 "previewCloseWindow" = "关闭窗口";

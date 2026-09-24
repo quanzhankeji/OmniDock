@@ -212,6 +212,7 @@ enum WindowFocusMatchPolicy {
             if titleMatches.count == 1 {
                 return titleMatches[0].index
             }
+            return nil
         }
 
         return candidates.count == 1 ? candidates[0].index : nil
