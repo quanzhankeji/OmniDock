@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import OmniDockCore
 
@@ -27,5 +28,33 @@ final class HotkeyRowsSignatureTests: XCTestCase {
         let before = HotkeyRowsSignature(bindings: [one], warnings: [:])
         let after = HotkeyRowsSignature(bindings: [one], warnings: [one.id: "clash"])
         XCTAssertNotEqual(before, after)
+    }
+}
+
+@MainActor
+final class FeaturePermissionStatusViewTests: XCTestCase {
+    func testMissingPermissionAndMetadataOnlyProvideTheCorrectGrantAction() throws {
+        _ = NSApplication.shared
+        let view = FeaturePermissionStatusView()
+        var requested: PermissionKind?
+        view.onRequestPermission = { requested = $0 }
+        let button = try XCTUnwrap(view.arrangedSubviews.compactMap { $0 as? NSButton }.first)
+        view.update(.unavailable([.accessibility, .inputMonitoring]))
+        XCTAssertFalse(view.isHidden)
+        button.performClick(nil)
+        XCTAssertEqual(requested, .accessibility)
+        view.update(.metadataOnly)
+        XCTAssertFalse(view.isHidden)
+        button.performClick(nil)
+        XCTAssertEqual(requested, .screenRecording)
+    }
+
+    func testDisabledAndAvailableFeaturesDoNotShowPermissionWarnings() {
+        let view = FeaturePermissionStatusView()
+        for state in [PermissionFeatureAvailability.disabled, .available] {
+            view.update(state)
+            XCTAssertTrue(view.isHidden)
+            XCTAssertNil(view.permissionToRequest)
+        }
     }
 }

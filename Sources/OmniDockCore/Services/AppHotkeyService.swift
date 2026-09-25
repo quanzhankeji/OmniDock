@@ -41,6 +41,12 @@ public final class AppHotkeyService {
             name: SettingsStore.changedNotification,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(permissionsChanged),
+            name: PermissionService.changedNotification,
+            object: nil
+        )
         reconcileRegisteredShortcuts()
     }
 
@@ -60,8 +66,18 @@ public final class AppHotkeyService {
         reconcileRegisteredShortcuts()
     }
 
+    @objc private func permissionsChanged() {
+        reconcileRegisteredShortcuts()
+    }
+
+    private var canRun: Bool {
+        isStarted && PermissionFeatureGate.availability(
+            for: .hotkeys, settings: settings, snapshot: permissionService.snapshot()
+        ).canRun
+    }
+
     private func reconcileRegisteredShortcuts() {
-        guard settings.hotkeysEnabled else {
+        guard canRun else {
             clearRegisteredShortcuts()
             registrationStatus.clear()
             return
@@ -107,7 +123,7 @@ public final class AppHotkeyService {
     }
 
     private func performConfiguredAction(for binding: AppHotkeyBinding) {
-        guard let url = binding.bundleURL else {
+        guard canRun, let url = binding.bundleURL else {
             return
         }
 
@@ -163,6 +179,7 @@ public final class AppHotkeyService {
                 }
 
                 guard let self,
+                      self.canRun,
                       let processIdentifier = app?.processIdentifier ?? fallbackProcessIdentifier
                 else {
                     return

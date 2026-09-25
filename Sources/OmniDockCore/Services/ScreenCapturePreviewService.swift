@@ -14,6 +14,7 @@ enum ShareableContentReusePolicy {
 }
 
 public final class ScreenCapturePreviewService {
+    typealias ShareableContentLoader = (@escaping (SCShareableContent?, Error?) -> Void) -> Void
     private struct CachedShareableContent {
         let content: SCShareableContent
         let capturedAt: Date
@@ -23,6 +24,9 @@ public final class ScreenCapturePreviewService {
 
     private let ciContext = CIContext()
     private let windowInventory: WindowInventoryService?
+    private let hasScreenRecordingPermission: () -> Bool
+    private let accessibilityWindows: (DockAppTarget) -> [PreviewWindowInfo]
+    private let shareableContentLoader: ShareableContentLoader
     private let snapshotCache = PreviewSnapshotCache()
     private let snapshotRequests = PreviewCaptureRequestRegistry<any PreviewCaptureSession> { session in
         session.stop()
@@ -31,21 +35,34 @@ public final class ScreenCapturePreviewService {
     private var cachedShareableContent: CachedShareableContent?
     private var pendingShareableContentCompletions: [(SCShareableContent?, Error?) -> Void] = []
     private var isLoadingShareableContent = false
+    private var shareableContentGeneration: UInt64 = 0
 
     public convenience init() {
         self.init(windowInventory: nil)
     }
 
-    init(windowInventory: WindowInventoryService?) {
+    init(
+        windowInventory: WindowInventoryService?,
+        hasScreenRecordingPermission: @escaping () -> Bool = { CGPreflightScreenCaptureAccess() },
+        accessibilityWindows: @escaping (DockAppTarget) -> [PreviewWindowInfo] = {
+            AccessibilityPreviewWindowReader.windows(for: $0.processIdentifier, appName: $0.localizedName)
+        },
+        shareableContentLoader: @escaping ShareableContentLoader = {
+            SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false, completionHandler: $0)
+        }
+    ) {
         self.windowInventory = windowInventory
+        self.hasScreenRecordingPermission = hasScreenRecordingPermission
+        self.accessibilityWindows = accessibilityWindows
+        self.shareableContentLoader = shareableContentLoader
     }
 
     func cachedSnapshotWindows(for target: DockAppTarget) -> [PreviewWindowInfo] {
-        snapshotCache.windows(for: target.processIdentifier)
+        cachedSnapshotWindows(for: target.processIdentifier)
     }
 
     func cachedSnapshotWindows(for processIdentifier: pid_t) -> [PreviewWindowInfo] {
-        snapshotCache.windows(for: processIdentifier)
+        hasScreenRecordingPermission() ? snapshotCache.windows(for: processIdentifier) : []
     }
 
     func storeCachedSnapshotWindows(
@@ -53,6 +70,7 @@ public final class ScreenCapturePreviewService {
         for processIdentifier: pid_t
     ) {
         dispatchPrecondition(condition: .onQueue(.main))
+        guard hasScreenRecordingPermission() else { return }
         snapshotCache.store(processIdentifier: processIdentifier, windows: windows)
         scheduleSnapshotCacheCleanup()
     }
@@ -82,6 +100,7 @@ public final class ScreenCapturePreviewService {
 
     func clearAllCachedSnapshots() {
         dispatchPrecondition(condition: .onQueue(.main))
+        shareableContentGeneration &+= 1
         snapshotCache.clearAll()
         cachedShareableContent = nil
         snapshotCleanupWorkItem?.cancel()
@@ -96,6 +115,10 @@ public final class ScreenCapturePreviewService {
         completion: @escaping () -> Void
     ) {
         dispatchPrecondition(condition: .onQueue(.main))
+        guard hasScreenRecordingPermission() else {
+            completion()
+            return
+        }
         let request = snapshotRequests.begin(
             processIdentifier: target.processIdentifier,
             completion: completion
@@ -110,6 +133,10 @@ public final class ScreenCapturePreviewService {
 
         func finish() {
             guard snapshotRequests.isCurrent(request) else {
+                return
+            }
+            guard hasScreenRecordingPermission() else {
+                snapshotRequests.finish(request)
                 return
             }
 
@@ -193,6 +220,11 @@ public final class ScreenCapturePreviewService {
         completion: @escaping (PreviewWindowSnapshot) -> Void
     ) {
         dispatchPrecondition(condition: .onQueue(.main))
+        guard hasScreenRecordingPermission() else {
+            clearAllCachedSnapshots()
+            completion(metadataSnapshot(for: target))
+            return
+        }
         if allowsInventoryReuse,
            let snapshot = MainActor.assumeIsolated({
                windowInventory?.previewSnapshot(for: target)
@@ -207,6 +239,11 @@ public final class ScreenCapturePreviewService {
 
         shareableContent { [weak self] content, error in
             guard let self else {
+                return
+            }
+            guard self.hasScreenRecordingPermission() else {
+                self.clearAllCachedSnapshots()
+                completion(self.metadataSnapshot(for: target))
                 return
             }
 
@@ -313,13 +350,16 @@ public final class ScreenCapturePreviewService {
             return
         }
         isLoadingShareableContent = true
-        SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { [weak self] content, error in
+        let generation = shareableContentGeneration
+        shareableContentLoader { [weak self] content, error in
             DispatchQueue.main.async {
                 guard let self else {
                     return
                 }
                 self.isLoadingShareableContent = false
-                if let content {
+                let content = generation == self.shareableContentGeneration && self.hasScreenRecordingPermission()
+                    ? content : nil
+                if let content, self.hasScreenRecordingPermission() {
                     self.cachedShareableContent = CachedShareableContent(
                         content: content,
                         capturedAt: Date()
@@ -356,7 +396,8 @@ public final class ScreenCapturePreviewService {
         imageHandler: @escaping (CGWindowID, NSImage) -> Void,
         errorHandler: @escaping (String) -> Void
     ) -> [PreviewCaptureSession] {
-        PreviewCaptureCandidatePolicy.identities(
+        guard hasScreenRecordingPermission() else { return [] }
+        return PreviewCaptureCandidatePolicy.identities(
             for: windows,
             availableIdentities: Set(captureWindows.keys),
             maximumCount: policy.maxStreamCount
@@ -387,7 +428,8 @@ public final class ScreenCapturePreviewService {
         imageHandler: @escaping (CGWindowID, NSImage) -> Void,
         errorHandler: @escaping (String) -> Void
     ) -> [PreviewCaptureSession] {
-        PreviewCaptureCandidatePolicy.identities(
+        guard hasScreenRecordingPermission() else { return [] }
+        return PreviewCaptureCandidatePolicy.identities(
             for: windows,
             availableIdentities: Set(captureWindows.keys),
             maximumCount: policy.maxStreamCount
@@ -417,7 +459,7 @@ public final class ScreenCapturePreviewService {
         imageHandler: @escaping (CGWindowID, NSImage) -> Void,
         errorHandler: @escaping (String) -> Void
     ) -> (any PreviewCaptureSession)? {
-        guard let windowID = identity.windowID else {
+        guard hasScreenRecordingPermission(), let windowID = identity.windowID else {
             return nil
         }
 
@@ -461,21 +503,21 @@ public final class ScreenCapturePreviewService {
     }
 
     private func loadAXWindows(for target: DockAppTarget) -> [PreviewWindowInfo] {
-        loadAXWindows(
-            processIdentifier: target.processIdentifier,
-            appName: target.localizedName,
-            target: target
-        )
+        accessibilityWindows(target)
     }
 
-    private func loadAXWindows(
-        processIdentifier: pid_t,
-        appName: String?,
-        target: DockAppTarget
-    ) -> [PreviewWindowInfo] {
-        AccessibilityPreviewWindowReader.windows(
-            for: processIdentifier,
-            appName: appName ?? target.localizedName
+    private func metadataSnapshot(for target: DockAppTarget) -> PreviewWindowSnapshot {
+        let windows = PreviewWindowCatalog.stableDisplayOrder(loadAXWindows(for: target)).map {
+            windowInfo(
+                $0,
+                staticPreviewImage: nil,
+                placeholderText: AppStrings.text($0.isMinimized ? .previewMinimizedClickRestore : .previewMetadataOnly)
+            )
+        }
+        return PreviewWindowSnapshot(
+            windows: windows,
+            captureWindows: [:],
+            message: windows.isEmpty ? AppStrings.text(.previewNoNormalWindow) : nil
         )
     }
 

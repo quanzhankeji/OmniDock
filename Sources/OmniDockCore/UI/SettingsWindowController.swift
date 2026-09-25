@@ -131,6 +131,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     private var hotkeyBindingCountField: NSTextField?
     private var renderedHotkeyRowsSignature: HotkeyRowsSignature?
     private var permissionViews: [PermissionKind: [PermissionStatusView]] = [:]
+    private var featurePermissionViews: [PermissionFeature: FeaturePermissionStatusView] = [:]
     private var hotkeyRowsStack: NSStackView?
     private var hotkeyWarnings: [UUID: String] = [:]
     private var applicationPicker: ApplicationPickerWindowController?
@@ -336,6 +337,9 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         refreshHotkeyGuidanceVisibility()
 
         let snapshot = permissionService.snapshot()
+        for (feature, view) in featurePermissionViews {
+            view.update(PermissionFeatureGate.availability(for: feature, settings: settings, snapshot: snapshot))
+        }
         for kind in PermissionKind.allCases {
             for view in permissionViews[kind] ?? [] {
                 view.update(isGranted: permissionService.isGranted(kind, in: snapshot))
@@ -399,15 +403,8 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     }
 
     @objc private func togglePreview(_ sender: NSSwitch) {
-        if sender.state == .on {
-            guard canEnable(.dockPreview, sender: sender) else {
-                return
-            }
-            settings.showDockPreviews = true
-        } else {
-            settings.showDockPreviews = false
-            settings.windowCycleEnabled = false
-        }
+        settings.showDockPreviews = sender.state == .on
+        if settings.showDockPreviews { requestMissingPermission(for: .dockPreview) }
         livePreviewSwitch?.isEnabled = settings.showDockPreviews
         commandTabPreviewSwitch?.isEnabled = settings.showDockPreviews
         windowCycleSwitch?.isEnabled = settings.showDockPreviews
@@ -415,39 +412,17 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     }
 
     @objc private func toggleCommandTabPreview(_ sender: NSSwitch) {
-        if sender.state == .on {
-            guard canEnable(.dockPreview, sender: sender) else {
-                return
-            }
-            settings.showCommandTabPreviews = true
-        } else {
-            settings.showCommandTabPreviews = false
-        }
+        settings.showCommandTabPreviews = sender.state == .on
+        if settings.showCommandTabPreviews { requestMissingPermission(for: .dockPreview) }
     }
 
     @objc private func toggleWindowCycle(_ sender: NSSwitch) {
-        if sender.state == .on {
-            guard settings.showDockPreviews,
-                  canEnable(.windowCycle, sender: sender)
-            else {
-                sender.state = .off
-                return
-            }
-            settings.windowCycleEnabled = true
-        } else {
-            settings.windowCycleEnabled = false
-        }
+        settings.windowCycleEnabled = sender.state == .on
+        if settings.windowCycleEnabled { requestMissingPermission(for: .windowCycle) }
     }
 
     @objc private func toggleLivePreview(_ sender: NSSwitch) {
-        if sender.state == .on {
-            guard canEnable(.dockPreview, sender: sender) else {
-                return
-            }
-            settings.liveDockPreviewsEnabled = true
-        } else {
-            settings.liveDockPreviewsEnabled = false
-        }
+        settings.liveDockPreviewsEnabled = sender.state == .on
         refreshLivePreviewLimitControls()
     }
 
@@ -706,14 +681,8 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     }
 
     @objc private func toggleDockClick(_ sender: NSSwitch) {
-        if sender.state == .on {
-            guard canEnable(.dockClick, sender: sender) else {
-                return
-            }
-            settings.toggleAppVisibilityOnDockClick = true
-        } else {
-            settings.toggleAppVisibilityOnDockClick = false
-        }
+        settings.toggleAppVisibilityOnDockClick = sender.state == .on
+        if settings.toggleAppVisibilityOnDockClick { requestMissingPermission(for: .dockClick) }
         minimizeDockClickSwitch?.isEnabled = settings.toggleAppVisibilityOnDockClick
     }
 
@@ -722,14 +691,8 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     }
 
     @objc private func toggleHotkeys(_ sender: NSSwitch) {
-        if sender.state == .on {
-            guard canEnable(.hotkeys, sender: sender) else {
-                return
-            }
-            settings.hotkeysEnabled = true
-        } else {
-            settings.hotkeysEnabled = false
-        }
+        settings.hotkeysEnabled = sender.state == .on
+        if settings.hotkeysEnabled { requestMissingPermission(for: .hotkeys) }
         hotkeyHideOnRepeatedTriggerSwitch?.isEnabled = settings.hotkeysEnabled
         refreshHotkeyGuidanceVisibility()
     }
@@ -738,16 +701,22 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         settings.hotkeyHideOnRepeatedTrigger = sender.state == .on
     }
 
-    private func canEnable(_ feature: PermissionFeature, sender: NSSwitch) -> Bool {
+    private func requestMissingPermission(for feature: PermissionFeature) {
         let snapshot = permissionService.snapshot()
-        guard PermissionFeatureGate.isSatisfied(for: feature, in: snapshot) else {
-            sender.state = .off
+        if !PermissionFeatureGate.isSatisfied(for: feature, in: snapshot) {
             onPermissionGateRequired(feature)
             schedulePermissionRefreshes()
-            refresh()
-            return false
         }
-        return true
+    }
+
+    private func makeFeaturePermissionView(_ feature: PermissionFeature) -> FeaturePermissionStatusView {
+        let view = FeaturePermissionStatusView()
+        view.onRequestPermission = { [weak self] in self?.openPermissionSettings($0) }
+        view.update(PermissionFeatureGate.availability(
+            for: feature, settings: settings, snapshot: permissionService.snapshot()
+        ))
+        featurePermissionViews[feature] = view
+        return view
     }
 
     @objc private func addApplication(_ sender: NSButton) {
@@ -892,6 +861,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
 
     private func rebuildContentView(in window: NSWindow) {
         permissionViews.removeAll()
+        featurePermissionViews.removeAll()
         generalContentView = nil
         previewContentView = nil
         hotkeysContentView = nil
@@ -1072,6 +1042,9 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         commandTabPreviewSwitch.target = self
         commandTabPreviewSwitch.action = #selector(toggleCommandTabPreview(_:))
         self.commandTabPreviewSwitch = commandTabPreviewSwitch
+        let previewPermissionView = makeFeaturePermissionView(.dockPreview)
+        toggles.addArrangedSubview(previewPermissionView)
+        previewPermissionView.widthAnchor.constraint(equalTo: toggles.widthAnchor).isActive = true
         toggles.addArrangedSubview(makeIndentedSettingRow(
             title: AppStrings.text(.settingsCommandTabPreviewTitle),
             detail: AppStrings.text(.settingsCommandTabPreviewDetail),
@@ -1096,6 +1069,9 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         switcherWarning.isHidden = true
         self.windowCycleWarningField = switcherWarning
         toggles.addArrangedSubview(makeIndentedAuxiliaryTextRow(switcherWarning))
+        let cyclePermissionView = makeFeaturePermissionView(.windowCycle)
+        toggles.addArrangedSubview(cyclePermissionView)
+        cyclePermissionView.widthAnchor.constraint(equalTo: toggles.widthAnchor).isActive = true
 
         let livePreviewSwitch = NSSwitch()
         livePreviewSwitch.target = self
@@ -1121,6 +1097,9 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         minimizeDockClickSwitch.target = self
         minimizeDockClickSwitch.action = #selector(toggleMinimizeDockClick(_:))
         self.minimizeDockClickSwitch = minimizeDockClickSwitch
+        let clickPermissionView = makeFeaturePermissionView(.dockClick)
+        toggles.addArrangedSubview(clickPermissionView)
+        clickPermissionView.widthAnchor.constraint(equalTo: toggles.widthAnchor).isActive = true
         toggles.addArrangedSubview(makeIndentedSettingRow(
             title: AppStrings.text(.settingsMinimizeTitle),
             detail: AppStrings.text(.settingsMinimizeDetail),
@@ -1252,6 +1231,9 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         toolbar.addSubview(hideOnRepeatedTriggerRow)
         toolbar.addSubview(guidanceField)
         stack.addArrangedSubview(toolbar)
+        let hotkeyPermissionView = makeFeaturePermissionView(.hotkeys)
+        stack.addArrangedSubview(hotkeyPermissionView)
+        hotkeyPermissionView.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
 
         let scrollView = NSScrollView()
         scrollView.borderType = .noBorder
@@ -1779,10 +1761,11 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             if windowPlacementContentView == nil {
                 let settingsView = WindowPlacementSettingsView(
                     settings: settings,
-                    registrationStatus: windowPlacementRegistrationStatus
+                    registrationStatus: windowPlacementRegistrationStatus,
+                    permissionStatusView: makeFeaturePermissionView(.windowPlacement)
                 )
-                settingsView.onEnableRequest = { [weak self] sender in
-                    self?.canEnable(.windowPlacement, sender: sender) ?? false
+                settingsView.onEnable = { [weak self] in
+                    self?.requestMissingPermission(for: .windowPlacement)
                 }
                 windowPlacementSettingsView = settingsView
                 windowPlacementContentView = makeScrollableTab(settingsView)
@@ -1800,8 +1783,8 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
 
     private func makeFinderExtensionSettingsView() -> FinderExtensionSettingsView {
         let settingsView = FinderExtensionSettingsView(settings: settings)
-        settingsView.onEnableRequest = { [weak self] sender in
-            self?.canEnable(.finderExtension, sender: sender) ?? false
+        settingsView.onEnable = { [weak self] in
+            self?.requestMissingPermission(for: .finderExtension)
         }
         settingsView.onOpenExtensionManagement = {
             FinderExtensionActivation.showManagementInterface()

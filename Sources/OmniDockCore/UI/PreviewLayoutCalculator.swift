@@ -54,7 +54,7 @@ public enum PreviewLayoutCalculator {
         }
 
         let width = contentWidth(for: tileSizes)
-        let height = tileSize.height + margin * 2
+        let height = (tileSizes.map(\.height).max() ?? tileSize.height) + margin * 2
 
         return panelFrame(
             size: CGSize(width: width, height: height),
@@ -75,7 +75,7 @@ public enum PreviewLayoutCalculator {
         }
 
         let width = contentWidth(for: tileSizes)
-        let height = tileSize.height + margin * 2
+        let height = (tileSizes.map(\.height).max() ?? tileSize.height) + margin * 2
         return panelFrame(
             size: CGSize(width: width, height: height),
             anchor: anchor,
@@ -127,7 +127,7 @@ public enum PreviewLayoutCalculator {
         screenFrame: CGRect
     ) -> CGRect {
         let width = min(contentWidth(for: tileSizes), maximumPanelWidth(screenFrame: screenFrame))
-        let height = tileSize.height + margin * 2
+        let height = (tileSizes.map(\.height).max() ?? tileSize.height) + margin * 2
         return CGRect(
             x: screenFrame.midX - width / 2,
             y: screenFrame.midY - height / 2,

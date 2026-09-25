@@ -100,6 +100,25 @@ final class PreviewLayoutCalculatorTests: XCTestCase {
         )
     }
 
+    func testPanelHeightIncludesApplicationIdentityRows() {
+        let sizes = [CGSize(width: 220, height: 150), CGSize(width: 220, height: 174)]
+        let screen = CGRect(x: 0, y: 0, width: 1200, height: 800)
+        let anchor = CGPoint(x: 600, y: 300)
+        var frames = [
+            PreviewLayoutCalculator.panelFrame(tileSizes: sizes, anchor: anchor, screenFrame: screen),
+            PreviewLayoutCalculator.centeredPanelFrame(tileSizes: sizes, screenFrame: screen)
+        ]
+        for orientation in [DockOrientation.bottom, .left, .right] {
+            frames.append(PreviewLayoutCalculator.panelFrame(
+                tileSizes: sizes, anchor: anchor, screenFrame: screen, orientation: orientation
+            ))
+        }
+
+        for frame in frames {
+            XCTAssertEqual(frame.height, 174 + PreviewLayoutCalculator.margin * 2)
+        }
+    }
+
     func testLargeWindowSetCapsPanelWidthButKeepsScrollableContentWidth() {
         let screenFrame = CGRect(x: 0, y: 0, width: 1200, height: 700)
         let sizes = Array(repeating: PreviewLayoutCalculator.tileSize, count: 20)

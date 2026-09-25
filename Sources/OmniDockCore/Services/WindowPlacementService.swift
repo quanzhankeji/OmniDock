@@ -95,7 +95,7 @@ final class WindowPlacementService {
             self?.toggleMaximize(for: target)
         }
         pointerMonitor.onDragBegan = { [weak self] target, screens in
-            guard let self else {
+            guard let self, self.canRun else {
                 return
             }
             self.paletteController.showDragRegions(
@@ -122,7 +122,8 @@ final class WindowPlacementService {
             _ = self?.apply(command, to: target, preferredScreen: screen)
         }
         pointerMonitor.onDragSizeChanged = { [weak self] size, point in
-            self?.sizeHUDController.show(size: size, near: point)
+            guard let self, self.canRun else { return }
+            self.sizeHUDController.show(size: size, near: point)
         }
         pointerMonitor.onDragSizePointMoved = { [weak self] point in
             self?.sizeHUDController.move(near: point)
@@ -149,6 +150,10 @@ final class WindowPlacementService {
             selector: #selector(settingsChanged(_:)),
             name: SettingsStore.changedNotification,
             object: settings
+        )
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(permissionsChanged),
+            name: PermissionService.changedNotification, object: nil
         )
         terminationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didTerminateApplicationNotification,
@@ -184,6 +189,16 @@ final class WindowPlacementService {
         restoreFrames.removeAll()
     }
 
+    @objc private func permissionsChanged() {
+        refresh()
+    }
+
+    private var canRun: Bool {
+        isStarted && PermissionFeatureGate.availability(
+            for: .windowPlacement, settings: settings, snapshot: permissionService.snapshot()
+        ).canRun
+    }
+
     func refresh() {
         guard isStarted else {
             return
@@ -199,6 +214,7 @@ final class WindowPlacementService {
             hotkeyRegistry.unregisterAll()
             pointerMonitor.stop()
             paletteController.hide()
+            sizeHUDController.hide()
             registrationStatus.setWarning(nil)
             return
         }
@@ -245,6 +261,7 @@ final class WindowPlacementService {
 
     @discardableResult
     func perform(commandID: UUID) -> WindowPlacementExecutionResult {
+        guard canRun else { return .unsupportedWindow }
         guard let target = WindowPlacementAccessibility.focusedWindow() else {
             return .noWindow
         }
@@ -270,7 +287,7 @@ final class WindowPlacementService {
         to target: WindowPlacementTarget,
         preferredScreen: WindowPlacementScreen? = nil
     ) -> WindowPlacementExecutionResult {
-        guard !target.isFullScreen,
+        guard canRun, !target.isFullScreen,
               target.canMove,
               command.behavior == .center
                 || command.behavior == .restore

@@ -9,8 +9,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let clipboardHistoryRegistrationStatus = ClipboardHistoryRegistrationStatus()
     private let windowPlacementRegistrationStatus = WindowPlacementRegistrationStatusStore()
     private let presentationCoordinator = ApplicationPresentationCoordinator()
-    private var permissionFeatureActivationQueue = PermissionFeatureActivationQueue()
     private var isRefreshingPermissionState = false
+    private var lastPermissionSnapshot: PermissionSnapshot?
     private lazy var windowControlService = WindowControlService()
     private lazy var dockHitTester = DockHitTester(permissionService: permissionService)
     private lazy var windowInventory = WindowInventoryService()
@@ -129,9 +129,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        permissionFeatureActivationQueue = PermissionFeatureActivationQueue(
-            pendingFeatures: settings.pendingPermissionFeatures
-        )
+        PermissionFeatureGate.restorePendingPreferences(in: settings)
         preparePermissionBackedFeaturesForLaunch()
         applicationMainMenuController.install()
         statusMenuController.install()
@@ -194,21 +192,20 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         defer { isRefreshingPermissionState = false }
 
         let snapshot = permissionService.snapshot()
-        _ = resolvePendingPermissionFeatures(snapshot: snapshot)
-        disableUnavailableFeaturesPreservingIntent(snapshot: snapshot)
+        if snapshot != lastPermissionSnapshot {
+            lastPermissionSnapshot = snapshot
+            refreshAfterPermissionChange()
+        }
         maybeRelaunchIfPermissionRefreshDidNotAttach()
     }
 
     private func preparePermissionBackedFeaturesForLaunch() {
         let snapshot = permissionService.snapshot()
-        _ = resolvePendingPermissionFeatures(snapshot: snapshot)
+        lastPermissionSnapshot = snapshot
         if PermissionFeatureGate.allOnboardingPermissionsGranted(in: snapshot),
            !settings.permissionOnboardingSkipped {
             settings.permissionOnboardingCompleted = true
-            return
         }
-
-        disableUnavailableFeaturesPreservingIntent(snapshot: snapshot)
     }
 
     private func showPermissionOnboardingIfNeeded() {
@@ -221,15 +218,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { [weak self] in
                 self?.permissionOnboardingController.show(mode: .initialSetup)
             }
-        } else if settings.permissionOnboardingCompleted {
-            DispatchQueue.main.async { [weak self] in
-                self?.permissionOnboardingController.show(mode: .review)
-            }
         }
     }
 
     private func showPermissionOnboarding(for feature: PermissionFeature) {
-        requestPermissionFeature(feature)
         let snapshot = permissionService.snapshot()
         let missingPermission = PermissionFeatureGate.firstMissingPermission(for: feature, in: snapshot)
         permissionOnboardingController.show(
@@ -238,34 +230,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func requestPermissionFeature(_ feature: PermissionFeature) {
-        permissionFeatureActivationQueue.request(feature)
-        settings.pendingPermissionFeatures = permissionFeatureActivationQueue.pendingFeatures
-    }
-
-    private func resolvePendingPermissionFeatures(
-        snapshot: PermissionSnapshot
-    ) -> Set<PermissionFeature> {
-        let enabled = permissionFeatureActivationQueue.resolve(in: settings, snapshot: snapshot)
-        settings.pendingPermissionFeatures = permissionFeatureActivationQueue.pendingFeatures
-        return enabled
-    }
-
     private func enterRestrictedModeForCurrentPermissions() {
-        let snapshot = permissionService.snapshot()
-        disableUnavailableFeaturesPreservingIntent(snapshot: snapshot)
         refreshAfterPermissionChange()
-    }
-
-    private func disableUnavailableFeaturesPreservingIntent(
-        snapshot: PermissionSnapshot
-    ) {
-        let disabledFeatures = PermissionFeatureGate.disableUnavailableFeatures(
-            in: settings,
-            snapshot: snapshot
-        )
-        permissionFeatureActivationQueue.preserveIntent(for: disabledFeatures)
-        settings.pendingPermissionFeatures = permissionFeatureActivationQueue.pendingFeatures
     }
 
     private func schedulePermissionRecheckAfterLaunch() {
@@ -277,8 +243,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private func refreshAfterPermissionChange() {
         windowInventory.refreshAccessibilityTracking()
         coordinator.refreshPermissionsAndMonitors()
-        windowCycleService.refreshRegistration()
-        windowPlacementService.refresh()
     }
 
     private func maybeRelaunchIfPermissionRefreshDidNotAttach() {

@@ -80,16 +80,33 @@ third-party applications expose accurate AX state on every macOS version.
 |---|---|---|
 | T1 | Open and dismiss the switcher quickly, many times | No capture session survives the last dismissal |
 | T2 | Turn each feature off in Settings | Its event tap and its captures stop |
-| T3 | Revoke a permission while the app runs | The feature stops and its own switch is temporarily disabled; pending intent and unrelated choices are preserved (OD-21) |
-| T4 | Grant it again | Previously enabled features return without a relaunch; unrelated choices, such as live capture being off, stay unchanged |
+| T3 | Revoke a permission while the app runs | The feature's switch keeps the user's choice. Missing basic permissions stop the affected service; missing Screen Recording stops capture but retains title/icon navigation. Settings shows the missing capability and an authorization action |
+| T4 | Grant it again | Enabled features reconcile automatically when the process observes the grant; unrelated choices, such as live capture being off, stay unchanged. Record any system-required relaunch separately |
 | T5 | Quit the app with a preview open | Nothing is left behind: no tap, no capture, no panel |
 
 T1 and T2 are looking for a leak the tests cannot see. The teardown paths were
 read for this list and are sound on paper; that is not the same as watching
 them run.
 
-Keeping the switch visually enabled while the feature is unavailable is
-separate work (OD-22), not part of the current OD-21 implementation.
+### Preview permission capabilities
+
+Test all three entries: Dock hover, enhanced Command-Tab, and Option-Tab.
+Only windows exposed by the target application's Accessibility interface can
+appear without Screen Recording; an empty inventory must not create an empty
+preview panel.
+
+| # | Do this | Expect |
+|---|---|---|
+| P1 | Grant Accessibility, but not Screen Recording or Input Monitoring | Dock hover and enhanced Command-Tab offer window titles, app icons, minimized state and exact-window selection without starting capture. Option-Tab and Dock click toggling remain unavailable |
+| P2 | Also grant Input Monitoring, still without Screen Recording | Option-Tab offers the same metadata-only navigation. No cached or newly captured window image appears in any of the three entries |
+| P3 | Revoke Screen Recording with each preview open | Captures stop, late image callbacks are ignored, old images are cleared, and metadata remains available after permission reconciliation |
+| P4 | Grant Screen Recording again | Image previews resume according to the saved live/static preference when the grant becomes visible to the process. Record a macOS-required restart as such |
+| P5 | Revoke a basic permission, then turn the affected feature off before granting it again | Its saved switch stays off; granting permission does not override that choice |
+| P6 | Change permissions while enhanced Command-Tab is open and Option-Tab is disabled | The inactive service does not dismiss the other entry's shared panel |
+
+P1-P6 require real permission changes, not only injected snapshots in unit
+tests. Include first-launch and upgraded settings with pending permission
+intent; upgrading should restore only the feature's own saved choice once.
 
 ### Menu bar shelf
 
@@ -98,6 +115,22 @@ separate work (OD-22), not part of the current OD-21 implementation.
 | M1 | Turn the shelf off and on several times | Both items come back every time |
 | M2 | Drag the divider past the arrow, then collapse | The controls return rather than disappearing with the icons |
 | M3 | Hold Command and drag icons for longer than the auto-hide delay | The shelf stays open until the dragging stops |
+
+### Dock-to-preview pointer movement
+
+| # | Do this | Expect |
+|---|---|---|
+| H1 | Move straight or diagonally from a Dock icon to the near and far cards of a wide preview, both slowly and quickly | The preview remains usable along the route |
+| H2 | Move into empty desktop space beside the icon and outside the route to the panel | The preview closes after the existing short exit grace; the empty corners of the icon/panel bounding rectangle do not keep capture alive |
+| H3 | Move onto another running app, an unopened app, or a non-previewable Dock item while a preview request is pending | The old preview is dismissed; a late response does not reopen it |
+| H4 | Drag the preview list horizontally, then drag a file onto a card | Horizontal scrolling does not activate a window; file entry still activates the matched window and dismisses the preview |
+| H5 | Repeat H1-H3 with left/right Dock placement, magnification, auto-hide and an external screen | The route follows the actual icon and panel; no stuck panel or inaccessible cards |
+| H6 | Stop or disable Dock previews with a visible panel or pending response | Dock-owned content and captures are released; pending responses are invalidated |
+| H7 | Stop Dock preview monitoring while enhanced Command-Tab or Option-Tab owns the shared panel | The active switcher's panel remains intact until its own lifecycle ends |
+
+Geometry tests with rotated rectangles and negative coordinates cover the
+retention calculation, not real Dock animation or multi-display behavior.
+H1-H7 still require pointer-based acceptance on the installed build.
 
 ## Known gaps
 
@@ -252,3 +285,118 @@ has passed on three machines and fails on a fourth is worth being able to see.
 - This report does not establish that the complete exact-focus, lifecycle,
   permission, display, or cross-version matrix passed. Those broader
   acceptance items remain open.
+
+### 2026-09-24 · permission capabilities and preference preservation
+
+- Source: working changes based on `58e944b`; version `1.2.9`, build `19`.
+  Scope is metadata-only navigation (OD-03) and preserving feature preferences
+  while permissions are unavailable (OD-22).
+- Host: macOS `26.6.2` (`25G83`), Apple silicon (`Mac17,9`), arm64 builds.
+  Display arrangement and effective privacy grants were not verified.
+- Passed: all 746 tests with warnings treated as errors, strict SwiftPM
+  Release build, Xcode Release app/extension build with compiler warnings
+  treated as errors, generated-project consistency, staged SwiftPM bundle
+  resource/plist/signature validation, and `git diff --check`.
+- Automated coverage includes all 32 permission combinations, preserving
+  switches, one-time restoration of older pending intent, a manual off choice
+  surviving reauthorization, and no ScreenCaptureKit query or image-cache
+  reuse without recording permission. Injected mid-request revocation falls
+  back to Accessibility metadata; reauthorization can query capture again on
+  the same service instance.
+- Regression-first tests also reproduced an inactive switcher dismissing
+  another entry's shared panel, metadata cards exceeding their panel height,
+  and an old screenshot surviving replacement by a metadata-only card. These
+  cases now pass, including first presentation and panel reuse.
+- The staged SwiftPM app was ad-hoc signed for local bundle validation. The
+  Xcode app/extension build used `CODE_SIGNING_ALLOWED=NO`; this is compilation
+  evidence, not distribution-signing or Gatekeeper evidence. Xcode emitted
+  its metadata-extraction warning for targets without an App Intents
+  dependency; no compiler warnings or errors blocked the build.
+- **Not run:** real TCC grant/revocation (P1-P6), complete F/S/W/T/M interactive
+  acceptance, or other macOS versions. No installed app replacement, staged
+  app launch, privacy reset, Universal 2 distribution build, notarization,
+  Gatekeeper assessment, commit, push, or release was performed. OD-03 and
+  OD-22 remain open pending real permission-transition acceptance.
+
+### 2026-09-24 · local installation of permission-capability changes
+
+- Rebuilt the current working changes through the complete local installer
+  and replaced `/Applications/OmniDock.app`. Version remains `1.2.9`, build
+  `19`. All 746 tests passed again with compiler warnings treated as errors.
+- Archived the prior app bundle and verified archive integrity before
+  replacement. The installed executable differs from the previous executable
+  and matches the freshly built installation candidate byte-for-byte.
+- Main app and Finder extension retain Developer ID signing, pass strict
+  signature validation, and satisfy the prior bundles' designated
+  requirements. Both entitlement sets are unchanged. No privacy reset or
+  deletion of Library data was performed.
+- Both processes started from the installed bundle and remained running after
+  one minute. Finder Sync lists one registered extension at the installed
+  path. A three-second process sample showed the main thread waiting for and
+  processing events, without a sustained main-thread stall during the sample.
+- Build and generated-project checks passed. Xcode emitted only the known
+  metadata-extraction warnings for targets without an App Intents dependency.
+- **Not run:** real permission-transition scenarios P1-P6, complete interactive
+  regression, or other macOS versions. This is installation and startup
+  evidence, not full feature acceptance. No commit, push, notarization, or
+  Release publication was performed.
+
+### 2026-09-24 · Dock preview retention and stop cleanup
+
+- Source: working changes based on `58e944b`; version `1.2.9`, build `19`,
+  including the uncommitted permission-capability changes above. This batch
+  addresses pointer retention (OD-05) and a related lifecycle case (OD-02).
+- Host: macOS `26.6.2` (`25G83`), Apple silicon (`Mac17,9`), arm64 builds.
+  Display arrangement and effective privacy grants were not verified.
+- Regression-first tests reproduced unrelated desktop corners retaining a
+  wide preview, and stopping the Dock service leaving its panel and content
+  visible. Retention now follows the convex outline of the icon and preview,
+  preserving direct diagonal routes, the 18-point margin, and the existing
+  0.22-second exit grace. Stopping the service clears its hover state,
+  invalidates pending preview requests, and releases Dock-owned panel content
+  without dismissing a panel owned by another switcher.
+- Passed: 48 focused tests, all 752 tests with warnings treated as errors,
+  strict SwiftPM Release build, Xcode Release app/extension build with compiler
+  warnings treated as errors, generated-project consistency, staged SwiftPM
+  bundle resource/plist/signature validation, and diff-format checks.
+- Geometry tests cover direct diagonal routes, left and right Dock rotations,
+  negative screen coordinates, overlapping rectangles, and retention margins.
+  Lifecycle tests exercise native panels with injected callbacks; neither
+  these tests nor coordinate simulations establish real multi-display or
+  pointer-interaction acceptance.
+- The staged SwiftPM app used ad-hoc signing; the Xcode build used
+  `CODE_SIGNING_ALLOWED=NO`. Xcode emitted the known metadata-extraction
+  warnings for targets without an App Intents dependency. These checks are
+  compilation and local bundle validation, not distribution-signing evidence.
+- **Not run:** live pointer scenarios H1-H7, broader lifecycle and permission
+  acceptance, or other macOS versions. The desktop UI inspection connection
+  timed out. OD-05 remains open pending live pointer acceptance.
+- The installed executable's SHA-256 is unchanged. No installed app replacement,
+  staged app launch, privacy reset, commit, push, notarization, or release was
+  performed in this batch.
+
+### 2026-09-24 · local installation of preview-retention changes
+
+- Rebuilt and replaced `/Applications/OmniDock.app` through the complete local
+  installer. Version remains `1.2.9`, build `19`. All 752 tests passed again
+  with compiler warnings treated as errors before installation.
+- Archived the previous installed app and verified archive integrity. The new
+  installed executable differs from the previous one and byte-matches the
+  freshly built installation candidate. The installed Finder extension binary
+  also matches the candidate.
+- Main app and Finder extension retain Developer ID signing, pass strict
+  signature verification, and satisfy their prior designated requirements.
+  Both entitlement sets are unchanged. No privacy reset or deletion of
+  Library data was performed.
+- Both processes started from the installed bundle and remained running after
+  one minute. Finder Sync lists one registered extension at the installed
+  path. A three-second process sample showed the main run loop processing
+  events and waiting for work, without a sustained main-thread stall in that
+  sample.
+- Build, generated-project consistency, and diff-format checks passed. Xcode
+  emitted only the known metadata-extraction warnings for targets without an
+  App Intents dependency.
+- **Not run:** interactive H1-H7, broader permission and lifecycle regression,
+  or other macOS versions. Installation and startup checks do not establish
+  full feature acceptance. No commit, push, notarization, or release was
+  performed.

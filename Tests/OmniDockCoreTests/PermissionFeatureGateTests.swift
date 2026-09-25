@@ -4,7 +4,8 @@ import XCTest
 final class PermissionFeatureGateTests: XCTestCase {
     func testFeaturePermissionRequirements() {
         XCTAssertEqual(PermissionFeature.dockClick.requiredPermissions, [.accessibility, .inputMonitoring])
-        XCTAssertEqual(PermissionFeature.dockPreview.requiredPermissions, [.accessibility, .screenRecording])
+        XCTAssertEqual(PermissionFeature.dockPreview.requiredPermissions, [.accessibility])
+        XCTAssertEqual(PermissionFeature.windowCycle.requiredPermissions, [.accessibility, .inputMonitoring])
         XCTAssertEqual(PermissionFeature.hotkeys.requiredPermissions, [.accessibility])
         XCTAssertEqual(PermissionFeature.windowPlacement.requiredPermissions, [.accessibility, .inputMonitoring])
         XCTAssertEqual(
@@ -21,305 +22,111 @@ final class PermissionFeatureGateTests: XCTestCase {
         )
 
         XCTAssertEqual(PermissionFeatureGate.missingPermissions(for: .dockClick, in: snapshot), [.inputMonitoring])
-        XCTAssertEqual(PermissionFeatureGate.missingPermissions(for: .dockPreview, in: snapshot), [.screenRecording])
+        XCTAssertTrue(PermissionFeatureGate.missingPermissions(for: .dockPreview, in: snapshot).isEmpty)
         XCTAssertTrue(PermissionFeatureGate.missingPermissions(for: .hotkeys, in: snapshot).isEmpty)
     }
 
-    func testDisableUnavailableFeaturesTurnsOffOnlyMissingPermissionFeatures() {
-        let defaults = isolatedDefaults()
-        let store = SettingsStore(defaults: defaults, livePreviewLimitProvider: { 8 })
-        let snapshot = PermissionSnapshot(
-            accessibility: true,
-            screenRecording: false,
-            inputMonitoring: true
+    func testAllPermissionCombinationsKeepPreferencesAndGateRuntimeIndependently() {
+        let store = SettingsStore(defaults: isolatedDefaults(), livePreviewLimitProvider: { 8 })
+        for feature in PermissionFeature.allCases { setEnabled(feature, in: store, to: true) }
+        store.showCommandTabPreviews = true
+        store.liveDockPreviewsEnabled = false
+        for bits in 0..<32 {
+            let snapshot = PermissionSnapshot(
+                accessibility: bits & 1 != 0,
+                screenRecording: bits & 2 != 0,
+                inputMonitoring: bits & 4 != 0,
+                finderExtension: bits & 8 != 0,
+                folderAccess: bits & 16 != 0
+            )
+            for feature in PermissionFeature.allCases {
+                let state = PermissionFeatureGate.availability(for: feature, settings: store, snapshot: snapshot)
+                XCTAssertEqual(state.canRun, PermissionFeatureGate.isSatisfied(for: feature, in: snapshot))
+                if state.canRun, feature == .dockPreview || feature == .windowCycle {
+                    XCTAssertEqual(state, snapshot.screenRecording ? .available : .metadataOnly)
+                }
+            }
+            XCTAssertTrue(store.showDockPreviews)
+            XCTAssertTrue(store.showCommandTabPreviews)
+            XCTAssertTrue(store.windowCycleEnabled)
+            XCTAssertTrue(store.toggleAppVisibilityOnDockClick)
+            XCTAssertTrue(store.hotkeysEnabled)
+            XCTAssertTrue(store.finderExtensionEnabled)
+            XCTAssertTrue(store.windowPlacementEnabled)
+            XCTAssertFalse(store.liveDockPreviewsEnabled)
+        }
+    }
+
+    func testUserCanDisableUnavailableFeaturesWithoutReenablingAfterPermissionRestoration() {
+        let store = SettingsStore(defaults: isolatedDefaults(), livePreviewLimitProvider: { 8 })
+        let denied = PermissionSnapshot(accessibility: false, screenRecording: false, inputMonitoring: false)
+        let granted = PermissionSnapshot(
+            accessibility: true, screenRecording: true, inputMonitoring: true,
+            finderExtension: true, folderAccess: true
         )
+        for feature in PermissionFeature.allCases {
+            store.showDockPreviews = true
+            setEnabled(feature, in: store, to: true)
+            XCTAssertFalse(PermissionFeatureGate.availability(for: feature, settings: store, snapshot: denied).canRun)
+            setEnabled(feature, in: store, to: false)
+            XCTAssertEqual(PermissionFeatureGate.availability(for: feature, settings: store, snapshot: granted), .disabled)
+        }
+    }
 
-        let disabled = PermissionFeatureGate.disableUnavailableFeatures(in: store, snapshot: snapshot)
+    func testLegacyPendingIntentIsRestoredOnlyOnceWithoutEnablingRelatedOptions() {
+        let store = SettingsStore(defaults: isolatedDefaults(), livePreviewLimitProvider: { 8 })
+        for feature in PermissionFeature.allCases { setEnabled(feature, in: store, to: false) }
+        store.liveDockPreviewsEnabled = false
+        store.showCommandTabPreviews = false
+        store.pendingPermissionFeatures = Set(PermissionFeature.allCases)
 
-        XCTAssertEqual(disabled, [.dockPreview])
+        PermissionFeatureGate.restorePendingPreferences(in: store)
+
+        XCTAssertTrue(store.showDockPreviews)
+        XCTAssertTrue(store.windowCycleEnabled)
         XCTAssertTrue(store.toggleAppVisibilityOnDockClick)
-        XCTAssertFalse(store.showDockPreviews)
-        // Left as it was. Live capture means nothing while previews are off,
-        // so turning it off says nothing either - and it would be read back as
-        // a choice once previews return.
-        XCTAssertTrue(store.liveDockPreviewsEnabled)
         XCTAssertTrue(store.hotkeysEnabled)
+        XCTAssertTrue(store.finderExtensionEnabled)
+        XCTAssertTrue(store.windowPlacementEnabled)
+        XCTAssertFalse(store.liveDockPreviewsEnabled)
+        XCTAssertFalse(store.showCommandTabPreviews)
+        XCTAssertTrue(store.pendingPermissionFeatures.isEmpty)
+        store.showDockPreviews = false
+        store.hotkeysEnabled = false
+        PermissionFeatureGate.restorePendingPreferences(in: store)
+        XCTAssertFalse(store.showDockPreviews)
+        XCTAssertFalse(store.hotkeysEnabled)
+    }
+
+    func testNoPendingIntentLeavesPreferencesUnchanged() {
+        let store = SettingsStore(defaults: isolatedDefaults(), livePreviewLimitProvider: { 8 })
+        store.showDockPreviews = false
+        store.windowCycleEnabled = true
+        PermissionFeatureGate.restorePendingPreferences(in: store)
+        XCTAssertFalse(store.showDockPreviews)
+        XCTAssertTrue(store.windowCycleEnabled)
     }
 
     func testAllOnboardingPermissionsGrantedRequiresEveryPermission() {
         XCTAssertTrue(PermissionFeatureGate.allOnboardingPermissionsGranted(in: PermissionSnapshot(
-            accessibility: true,
-            screenRecording: true,
-            inputMonitoring: true,
-            finderExtension: true,
-            folderAccess: true
+            accessibility: true, screenRecording: true, inputMonitoring: true,
+            finderExtension: true, folderAccess: true
         )))
-
         XCTAssertFalse(PermissionFeatureGate.allOnboardingPermissionsGranted(in: PermissionSnapshot(
-            accessibility: true,
-            screenRecording: true,
-            inputMonitoring: false,
-            finderExtension: true,
-            folderAccess: true
+            accessibility: true, screenRecording: false, inputMonitoring: true,
+            finderExtension: true, folderAccess: true
         )))
     }
 
-    func testRequestedFeatureTurnsOnAfterItsPermissionsAreGranted() {
-        let defaults = isolatedDefaults()
-        let store = SettingsStore(defaults: defaults, livePreviewLimitProvider: { 8 })
-        store.toggleAppVisibilityOnDockClick = false
-        store.hotkeysEnabled = false
-
-        var queue = PermissionFeatureActivationQueue()
-        queue.request(.dockClick)
-        queue.request(.hotkeys)
-
-        let firstEnabled = queue.resolve(
-            in: store,
-            snapshot: PermissionSnapshot(
-                accessibility: true,
-                screenRecording: false,
-                inputMonitoring: false
-            )
-        )
-
-        XCTAssertEqual(firstEnabled, [.hotkeys])
-        XCTAssertTrue(store.hotkeysEnabled)
-        XCTAssertFalse(store.toggleAppVisibilityOnDockClick)
-        XCTAssertEqual(queue.pendingFeatures, [.dockClick])
-
-        let secondEnabled = queue.resolve(
-            in: store,
-            snapshot: PermissionSnapshot(
-                accessibility: true,
-                screenRecording: false,
-                inputMonitoring: true
-            )
-        )
-
-        XCTAssertEqual(secondEnabled, [.dockClick])
-        XCTAssertTrue(store.toggleAppVisibilityOnDockClick)
-        XCTAssertTrue(queue.pendingFeatures.isEmpty)
-    }
-
-    func testPermissionRefreshDoesNotEnableFeaturesWithoutExplicitRequests() {
-        let defaults = isolatedDefaults()
-        let store = SettingsStore(defaults: defaults, livePreviewLimitProvider: { 8 })
-        store.showDockPreviews = false
-        store.liveDockPreviewsEnabled = false
-        store.toggleAppVisibilityOnDockClick = false
-        store.hotkeysEnabled = false
-
-        var queue = PermissionFeatureActivationQueue()
-        let enabled = queue.resolve(
-            in: store,
-            snapshot: PermissionSnapshot(
-                accessibility: true,
-                screenRecording: true,
-                inputMonitoring: true
-            )
-        )
-
-        XCTAssertTrue(enabled.isEmpty)
-        XCTAssertTrue(queue.pendingFeatures.isEmpty)
-        XCTAssertFalse(store.showDockPreviews)
-        XCTAssertFalse(store.liveDockPreviewsEnabled)
-        XCTAssertFalse(store.toggleAppVisibilityOnDockClick)
-        XCTAssertFalse(store.hotkeysEnabled)
-    }
-
-    func testRequestedPreviewRestoresParentAndLivePreviewSwitches() {
-        let defaults = isolatedDefaults()
-        let store = SettingsStore(defaults: defaults, livePreviewLimitProvider: { 8 })
-        store.showDockPreviews = false
-        store.liveDockPreviewsEnabled = false
-
-        var queue = PermissionFeatureActivationQueue()
-        queue.request(.dockPreview)
-
-        let enabled = queue.resolve(
-            in: store,
-            snapshot: PermissionSnapshot(
-                accessibility: true,
-                screenRecording: true,
-                inputMonitoring: false
-            )
-        )
-
-        XCTAssertEqual(enabled, [.dockPreview])
-        XCTAssertTrue(store.showDockPreviews)
-        XCTAssertTrue(store.liveDockPreviewsEnabled)
-    }
-
-    func testFinderExtensionEnablesOnlyAfterEveryRequiredPermissionIsReady() {
-        let defaults = isolatedDefaults()
-        let store = SettingsStore(defaults: defaults, livePreviewLimitProvider: { 8 })
-        var queue = PermissionFeatureActivationQueue()
-        queue.request(.finderExtension)
-
-        let pending = queue.resolve(
-            in: store,
-            snapshot: PermissionSnapshot(
-                accessibility: true,
-                screenRecording: true,
-                inputMonitoring: true,
-                finderExtension: true,
-                folderAccess: false
-            )
-        )
-        XCTAssertTrue(pending.isEmpty)
-        XCTAssertFalse(store.finderExtensionEnabled)
-
-        let enabled = queue.resolve(
-            in: store,
-            snapshot: PermissionSnapshot(
-                accessibility: false,
-                screenRecording: true,
-                inputMonitoring: true,
-                finderExtension: true,
-                folderAccess: true
-            )
-        )
-        XCTAssertEqual(enabled, [.finderExtension])
-        XCTAssertTrue(store.finderExtensionEnabled)
-    }
-
-    func testActivationQueueRestoresPendingFeaturesAfterRelaunch() {
-        let defaults = isolatedDefaults()
-        let store = SettingsStore(defaults: defaults, livePreviewLimitProvider: { 8 })
-        store.toggleAppVisibilityOnDockClick = false
-
-        var queue = PermissionFeatureActivationQueue(pendingFeatures: [.dockClick])
-        let enabled = queue.resolve(
-            in: store,
-            snapshot: PermissionSnapshot(
-                accessibility: true,
-                screenRecording: false,
-                inputMonitoring: true
-            )
-        )
-
-        XCTAssertEqual(enabled, [.dockClick])
-        XCTAssertTrue(store.toggleAppVisibilityOnDockClick)
-        XCTAssertTrue(queue.pendingFeatures.isEmpty)
-    }
-
-    func testLosingPreviewsDoesNotDiscardTheSwitcherTheUserHadOn() {
-        let store = SettingsStore(defaults: isolatedDefaults(), livePreviewLimitProvider: { 8 })
-        store.showDockPreviews = true
-        store.windowCycleEnabled = true
-
-        // Screen recording goes away - a re-signed build, a revoked grant.
-        let withoutRecording = PermissionSnapshot(
-            accessibility: true,
-            screenRecording: false,
-            inputMonitoring: true,
-            finderExtension: true,
-            folderAccess: true
-        )
-        var queue = PermissionFeatureActivationQueue()
-        queue.preserveIntent(
-            for: PermissionFeatureGate.disableUnavailableFeatures(
-                in: store,
-                snapshot: withoutRecording
-            )
-        )
-
-        // ... and comes back.
-        let restored = PermissionSnapshot(
-            accessibility: true,
-            screenRecording: true,
-            inputMonitoring: true,
-            finderExtension: true,
-            folderAccess: true
-        )
-        queue.resolve(in: store, snapshot: restored)
-
-        XCTAssertTrue(store.showDockPreviews)
-        XCTAssertTrue(
-            store.windowCycleEnabled,
-            "The switcher was on before the permission lapsed and nothing asked for it to be off."
-        )
-    }
-
-    func testRegainingPreviewsDoesNotTurnOnLiveCaptureTheUserHadOff() {
-        let store = SettingsStore(defaults: isolatedDefaults(), livePreviewLimitProvider: { 8 })
-        store.showDockPreviews = true
-        store.liveDockPreviewsEnabled = false
-
-        let withoutRecording = PermissionSnapshot(
-            accessibility: true,
-            screenRecording: false,
-            inputMonitoring: true,
-            finderExtension: true,
-            folderAccess: true
-        )
-        var queue = PermissionFeatureActivationQueue()
-        queue.preserveIntent(
-            for: PermissionFeatureGate.disableUnavailableFeatures(
-                in: store,
-                snapshot: withoutRecording
-            )
-        )
-        queue.resolve(
-            in: store,
-            snapshot: PermissionSnapshot(
-                accessibility: true,
-                screenRecording: true,
-                inputMonitoring: true,
-                finderExtension: true,
-                folderAccess: true
-            )
-        )
-
-        XCTAssertTrue(store.showDockPreviews)
-        XCTAssertFalse(
-            store.liveDockPreviewsEnabled,
-            "Live capture was off by choice; restoring previews must not decide otherwise."
-        )
-    }
-
-    func testActivationQueuePreservesTemporarilyUnavailableFeatureIntent() {
-        let defaults = isolatedDefaults()
-        let store = SettingsStore(defaults: defaults, livePreviewLimitProvider: { 8 })
-        store.showDockPreviews = false
-        store.liveDockPreviewsEnabled = false
-        store.toggleAppVisibilityOnDockClick = false
-        store.hotkeysEnabled = false
-        store.finderExtensionEnabled = true
-
-        let unavailableSnapshot = PermissionSnapshot(
-            accessibility: false,
-            screenRecording: false,
-            inputMonitoring: true,
-            finderExtension: false,
-            folderAccess: true
-        )
-        let disabled = PermissionFeatureGate.disableUnavailableFeatures(
-            in: store,
-            snapshot: unavailableSnapshot
-        )
-
-        var queue = PermissionFeatureActivationQueue()
-        queue.preserveIntent(for: disabled)
-
-        XCTAssertFalse(store.finderExtensionEnabled)
-        XCTAssertEqual(queue.pendingFeatures, [.finderExtension])
-
-        let restored = queue.resolve(
-            in: store,
-            snapshot: PermissionSnapshot(
-                accessibility: false,
-                screenRecording: false,
-                inputMonitoring: true,
-                finderExtension: true,
-                folderAccess: true
-            )
-        )
-
-        XCTAssertEqual(restored, [.finderExtension])
-        XCTAssertTrue(store.finderExtensionEnabled)
-        XCTAssertTrue(queue.pendingFeatures.isEmpty)
+    private func setEnabled(_ feature: PermissionFeature, in store: SettingsStore, to enabled: Bool) {
+        switch feature {
+        case .dockClick: store.toggleAppVisibilityOnDockClick = enabled
+        case .dockPreview: store.showDockPreviews = enabled
+        case .windowCycle: store.windowCycleEnabled = enabled
+        case .hotkeys: store.hotkeysEnabled = enabled
+        case .finderExtension: store.finderExtensionEnabled = enabled
+        case .windowPlacement: store.windowPlacementEnabled = enabled
+        }
     }
 
     func testPermissionMonitorRecoveryRequiresAnAttachmentFailure() {

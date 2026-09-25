@@ -4,6 +4,28 @@ import XCTest
 
 @MainActor
 final class PreviewPanelControllerTests: XCTestCase {
+    func testMetadataOnlyPanelFitsApplicationIdentityOnFirstPresentationAndReuse() throws {
+        let info = previewInfo()
+        let metadata = PreviewWindowInfo(
+            id: info.id, windowID: info.windowID, processIdentifier: info.processIdentifier,
+            appName: info.appName, title: info.title, frame: info.frame, isMinimized: false,
+            placeholderText: AppStrings.text(.previewMetadataOnly)
+        )
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, _, _ in }, requestWindowClose: { _, _, _, _ in }
+        )
+        defer { controller.hide() }
+        for target in [dockTarget(), commandTabTarget(), windowCycleTarget()] {
+            controller.show(target: target, windows: [metadata], message: nil)
+            XCTAssertEqual(try XCTUnwrap(controller.frame).height, 174 + PreviewLayoutCalculator.margin * 2, accuracy: 1)
+            controller.hide()
+        }
+
+        controller.show(target: dockTarget(), windows: [metadata], message: nil)
+        controller.show(target: dockTarget(), windows: [info], message: nil)
+        XCTAssertEqual(try XCTUnwrap(controller.frame).height, 150 + PreviewLayoutCalculator.margin * 2)
+    }
+
     func testIndependentSwitcherGridKeepsItsCardsForMetadataOnlyUpdates() {
         let current = [previewInfo()]
         let renamed = [previewInfo(title: "Updated title")]

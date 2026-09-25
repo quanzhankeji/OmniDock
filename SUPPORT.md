@@ -27,11 +27,13 @@ OmniDock may request these macOS permissions:
 
 - Accessibility: Dock item detection, app and window control, per-app hotkeys, optional window layouts, and optional clipboard auto-paste.
 - Input Monitoring: Dock click detection, the optional Alt-Tab switcher, and pointer gestures used by optional window drag zones.
-- Screen Recording: window thumbnails, including live images and one-time static snapshots.
+- Screen Recording: optional for window thumbnails, including live images and one-time static snapshots. Without it, Dock, Command-Tab, and Option-Tab can still display accessible window titles, app icons, and minimized state, and switch to those windows. Accessibility remains required; Option-Tab also requires Input Monitoring. Apps that do not expose their windows through Accessibility cannot be listed in this mode.
 - Finder Extension: adds OmniDock commands to Finder contextual menus.
 - Folder Access: grants New File access only to a folder selected by the user or one of its approved parents.
 
 You can review or change permissions in System Settings > Privacy & Security.
+
+Missing permissions do not turn off your feature switches. The affected settings show a temporary-unavailable message and a permission button. Enabled features refresh when permissions change; a feature you turn off while permission is missing stays off after permission is granted. Granting or revoking Screen Recording changes thumbnail availability without restarting OmniDock in the normal case. macOS may still request a restart for a privacy-permission change or a stale signed-app registration.
 
 Hidden Bar, ordinary clipboard-history search and copy, language selection, and appearance selection do not require additional privacy permissions.
 
@@ -40,7 +42,7 @@ Hidden Bar, ordinary clipboard-history search and copy, language selection, and 
 If Dock click toggling or previews stop working:
 
 1. Quit and reopen OmniDock.
-2. Confirm Accessibility, Input Monitoring, and Screen Recording are enabled for OmniDock.
+2. Confirm Accessibility is enabled. Dock click toggling also needs Input Monitoring. Screen Recording is needed only for thumbnails, not title/icon navigation.
 3. Remove and re-add OmniDock in the affected permission section if macOS still blocks the feature.
 4. Make sure you are running the installed app from `/Applications/OmniDock.app`.
 
@@ -49,12 +51,12 @@ If a per-app shortcut does not register:
 1. Choose a shortcut that includes Command, Control, or Option.
 2. Avoid browser tab navigation shortcuts and common system shortcuts.
 3. Remove duplicate shortcuts inside OmniDock.
-4. Reopen OmniDock after changing permissions.
+4. Check the permission status in Settings. Accessibility is required; granting it refreshes registrations without changing your preferences.
 
 If Alt-Tab does not open the window switcher:
 
 1. Confirm Alt-Tab Preview is enabled under `OD` > `Window Preview`.
-2. Confirm Accessibility, Input Monitoring, and Screen Recording are granted.
+2. Confirm Accessibility and Input Monitoring are granted. Screen Recording is optional and only adds thumbnails.
 3. Check whether another app has already registered Option-Tab.
 
 If Finder right-click commands do not appear:

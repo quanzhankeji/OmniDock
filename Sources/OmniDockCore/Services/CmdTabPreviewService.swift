@@ -34,6 +34,8 @@ final class CmdTabPreviewService {
     private var captureRetryCounts: [PreviewWindowIdentity: Int] = [:]
     private var currentTarget: DockAppTarget?
     private var isInteractionActive = false
+    private var permissionObserver: NSObjectProtocol?
+    private var lastPermissionSnapshot: PermissionSnapshot?
 
     private lazy var observer = CmdTabPreviewObserver(
         isFeatureEnabled: { [weak self] in
@@ -98,10 +100,27 @@ final class CmdTabPreviewService {
     }
 
     func start() {
+        lastPermissionSnapshot = permissionService.snapshot()
+        if let permissionObserver { NotificationCenter.default.removeObserver(permissionObserver) }
+        permissionObserver = NotificationCenter.default.addObserver(
+            forName: PermissionService.changedNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let snapshot = self.permissionService.snapshot()
+                let changed = self.lastPermissionSnapshot?.accessibility != snapshot.accessibility
+                    || self.lastPermissionSnapshot?.screenRecording != snapshot.screenRecording
+                self.lastPermissionSnapshot = snapshot
+                guard changed, self.isInteractionActive, let target = self.currentTarget else { return }
+                self.showPreview(for: target)
+            }
+        }
         observer.start()
     }
 
     func stop() {
+        if let permissionObserver { NotificationCenter.default.removeObserver(permissionObserver) }
+        permissionObserver = nil
         observer.stop()
         endInteraction()
     }
@@ -160,7 +179,11 @@ final class CmdTabPreviewService {
                     generation: generation,
                     targetIdentifier: targetIdentifier
                   ),
-                  self.isInteractionActive
+                  self.isInteractionActive,
+                  self.settings.showCommandTabPreviews,
+                  PermissionFeatureGate.availability(
+                    for: .dockPreview, settings: self.settings, snapshot: self.permissionService.snapshot()
+                  ).canRun
             else {
                 return
             }
@@ -195,6 +218,10 @@ final class CmdTabPreviewService {
         generation: UInt64,
         targetIdentifier: String
     ) {
+        guard permissionService.snapshot().screenRecording else {
+            captureSessionRegistry.stopAll()
+            return
+        }
         let identities = currentWindows.map(PreviewWindowIdentity.init)
         captureSessionRegistry.reconcile(
             orderedIdentities: identities,
@@ -292,7 +319,8 @@ final class CmdTabPreviewService {
         generation: UInt64,
         targetIdentifier: String
     ) {
-        guard requestState.accepts(
+        guard permissionService.snapshot().screenRecording,
+              requestState.accepts(
             generation: generation,
             targetIdentifier: targetIdentifier
         ),
@@ -306,8 +334,14 @@ final class CmdTabPreviewService {
     }
 
     private func refreshPanel(target: DockAppTarget, message: String?) {
+        let metadataOnly = !permissionService.snapshot().screenRecording
         let displayableWindows = currentWindows.compactMap { window -> PreviewWindowInfo? in
             let identity = PreviewWindowIdentity(window)
+            if metadataOnly {
+                return copy(window, image: nil, placeholderText: AppStrings.text(
+                    window.isMinimized ? .previewMinimizedClickRestore : .previewMetadataOnly
+                ))
+            }
             if let image = currentImages[identity] {
                 return copy(window, image: image, placeholderText: nil)
             }

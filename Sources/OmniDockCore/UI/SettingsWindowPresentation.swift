@@ -30,6 +30,59 @@ enum HotkeyRowWarningPresentation {
     }
 }
 
+final class FeaturePermissionStatusView: NSStackView {
+    var onRequestPermission: ((PermissionKind) -> Void)?
+    private(set) var permissionToRequest: PermissionKind?
+    private let label = NSTextField(wrappingLabelWithString: "")
+    private let button = NSButton()
+
+    init() {
+        super.init(frame: .zero)
+        orientation = .horizontal
+        alignment = .centerY
+        spacing = 12
+        setContentHuggingPriority(.required, for: .vertical)
+        label.font = .systemFont(ofSize: 12)
+        label.textColor = .secondaryLabelColor
+        label.maximumNumberOfLines = 3
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        button.title = AppStrings.text(.settingsGrantPermission)
+        button.bezelStyle = .rounded
+        button.target = self
+        button.action = #selector(requestPermission)
+        button.setContentCompressionResistancePriority(.required, for: .horizontal)
+        addArrangedSubview(label)
+        addArrangedSubview(button)
+        isHidden = true
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func update(_ availability: PermissionFeatureAvailability) {
+        switch availability {
+        case let .unavailable(missing):
+            permissionToRequest = missing.first
+            label.stringValue = AppStrings.format(
+                .settingsFeaturePermissionUnavailable,
+                missing.map(\.title).joined(separator: ", ")
+            )
+        case .metadataOnly:
+            permissionToRequest = .screenRecording
+            label.stringValue = AppStrings.text(.settingsPreviewMetadataOnly)
+        case .available, .disabled:
+            permissionToRequest = nil
+            label.stringValue = ""
+        }
+        isHidden = permissionToRequest == nil
+    }
+
+    @objc private func requestPermission() {
+        if let permissionToRequest { onRequestPermission?(permissionToRequest) }
+    }
+}
+
 final class PermissionStatusView: NSControl {
     var onRequestPermission: ((PermissionKind) -> Void)?
 

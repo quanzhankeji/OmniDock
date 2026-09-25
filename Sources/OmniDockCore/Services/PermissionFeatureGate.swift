@@ -14,15 +14,29 @@ public enum PermissionFeature: String, CaseIterable, Hashable {
         case .dockClick:
             return [.accessibility, .inputMonitoring]
         case .dockPreview:
-            return [.accessibility, .screenRecording]
+            return [.accessibility]
         case .windowCycle:
-            return [.accessibility, .screenRecording, .inputMonitoring]
+            return [.accessibility, .inputMonitoring]
         case .hotkeys:
             return [.accessibility]
         case .finderExtension:
             return [.finderExtension, .folderAccess]
         case .windowPlacement:
             return [.accessibility, .inputMonitoring]
+        }
+    }
+}
+
+enum PermissionFeatureAvailability: Equatable {
+    case disabled
+    case unavailable([PermissionKind])
+    case metadataOnly
+    case available
+
+    var canRun: Bool {
+        switch self {
+        case .available, .metadataOnly: return true
+        case .disabled, .unavailable: return false
         }
     }
 }
@@ -54,54 +68,27 @@ public enum PermissionFeatureGate {
         onboardingPermissions.allSatisfy { isGranted($0, in: snapshot) }
     }
 
-    @discardableResult
-    public static func disableUnavailableFeatures(
-        in settings: SettingsStore,
+    static func availability(
+        for feature: PermissionFeature,
+        settings: SettingsStore,
         snapshot: PermissionSnapshot
-    ) -> [PermissionFeature] {
-        var disabled: [PermissionFeature] = []
-
-        if settings.toggleAppVisibilityOnDockClick,
-           !isSatisfied(for: .dockClick, in: snapshot) {
-            settings.toggleAppVisibilityOnDockClick = false
-            disabled.append(.dockClick)
+    ) -> PermissionFeatureAvailability {
+        let isEnabled: Bool
+        switch feature {
+        case .dockClick: isEnabled = settings.toggleAppVisibilityOnDockClick
+        case .dockPreview: isEnabled = settings.showDockPreviews
+        case .windowCycle: isEnabled = settings.showDockPreviews && settings.windowCycleEnabled
+        case .hotkeys: isEnabled = settings.hotkeysEnabled
+        case .finderExtension: isEnabled = settings.finderExtensionEnabled
+        case .windowPlacement: isEnabled = settings.windowPlacementEnabled
         }
-
-        // Only the feature's own switch is turned off. Clearing the live
-        // capture and switcher switches alongside it discarded choices nobody
-        // made: the switcher has its own check below, and live capture means
-        // nothing while previews are off, so neither needed saying.
-        if settings.showDockPreviews,
-           !isSatisfied(for: .dockPreview, in: snapshot) {
-            settings.showDockPreviews = false
-            disabled.append(.dockPreview)
+        guard isEnabled else { return .disabled }
+        let missing = missingPermissions(for: feature, in: snapshot)
+        guard missing.isEmpty else { return .unavailable(missing) }
+        if (feature == .dockPreview || feature == .windowCycle), !snapshot.screenRecording {
+            return .metadataOnly
         }
-
-        if settings.hotkeysEnabled,
-           !isSatisfied(for: .hotkeys, in: snapshot) {
-            settings.hotkeysEnabled = false
-            disabled.append(.hotkeys)
-        }
-
-        if settings.windowCycleEnabled,
-           !isSatisfied(for: .windowCycle, in: snapshot) {
-            settings.windowCycleEnabled = false
-            disabled.append(.windowCycle)
-        }
-
-        if settings.finderExtensionEnabled,
-           !isSatisfied(for: .finderExtension, in: snapshot) {
-            settings.finderExtensionEnabled = false
-            disabled.append(.finderExtension)
-        }
-
-        if settings.windowPlacementEnabled,
-           !isSatisfied(for: .windowPlacement, in: snapshot) {
-            settings.windowPlacementEnabled = false
-            disabled.append(.windowPlacement)
-        }
-
-        return disabled
+        return .available
     }
 
     public static func firstMissingPermission(
@@ -111,17 +98,13 @@ public enum PermissionFeatureGate {
         missingPermissions(for: feature, in: snapshot).first
     }
 
-    /// Gives back a feature that a permission lapse took away, and nothing
-    /// more. Whatever else was set around it was never taken, so restoring it
-    /// would be this app deciding something the user already had an answer to.
-    static func restoreSatisfiedFeatures(
-        _ features: Set<PermissionFeature>,
-        in settings: SettingsStore,
-        snapshot: PermissionSnapshot
-    ) -> Set<PermissionFeature> {
-        let satisfied = Set(features.filter { isSatisfied(for: $0, in: snapshot) })
-
-        for feature in PermissionFeature.allCases where satisfied.contains(feature) {
+    // Older builds switched preferences off and saved their original intent here.
+    // Consume that intent once; permission refreshes must never write preferences.
+    static func restorePendingPreferences(in settings: SettingsStore) {
+        let pending = settings.pendingPermissionFeatures
+        guard !pending.isEmpty else { return }
+        settings.pendingPermissionFeatures = []
+        for feature in PermissionFeature.allCases where pending.contains(feature) {
             switch feature {
             case .dockClick:
                 settings.toggleAppVisibilityOnDockClick = true
@@ -138,38 +121,6 @@ public enum PermissionFeatureGate {
             }
         }
 
-        return satisfied
-    }
-
-    /// Turns a feature on because someone asked for it, which includes the
-    /// switches it needs to be useful.
-    static func enableSatisfiedFeatures(
-        _ features: Set<PermissionFeature>,
-        in settings: SettingsStore,
-        snapshot: PermissionSnapshot
-    ) -> Set<PermissionFeature> {
-        let satisfied = Set(features.filter { isSatisfied(for: $0, in: snapshot) })
-
-        for feature in PermissionFeature.allCases where satisfied.contains(feature) {
-            switch feature {
-            case .dockClick:
-                settings.toggleAppVisibilityOnDockClick = true
-            case .dockPreview:
-                settings.showDockPreviews = true
-                settings.liveDockPreviewsEnabled = true
-            case .windowCycle:
-                settings.showDockPreviews = true
-                settings.windowCycleEnabled = true
-            case .hotkeys:
-                settings.hotkeysEnabled = true
-            case .finderExtension:
-                settings.finderExtensionEnabled = true
-            case .windowPlacement:
-                settings.windowPlacementEnabled = true
-            }
-        }
-
-        return satisfied
     }
 
     private static func isGranted(_ kind: PermissionKind, in snapshot: PermissionSnapshot) -> Bool {
@@ -209,51 +160,5 @@ enum PermissionMonitorRecoveryPolicy {
             return true
         }
         return now.timeIntervalSince(lastRelaunchAttemptAt) >= relaunchCooldown
-    }
-}
-
-struct PermissionFeatureActivationQueue {
-    private(set) var pendingFeatures: Set<PermissionFeature> = []
-
-    /// Which of the pending features someone asked for, as opposed to had
-    /// taken away. Not carried across launches: after a restart the cautious
-    /// reading is that the feature was lost rather than wanted, and giving
-    /// back only what was taken is the answer that assumes less.
-    private var requestedFeatures: Set<PermissionFeature> = []
-
-    init(pendingFeatures: Set<PermissionFeature> = []) {
-        self.pendingFeatures = pendingFeatures
-    }
-
-    mutating func request(_ feature: PermissionFeature) {
-        pendingFeatures.insert(feature)
-        requestedFeatures.insert(feature)
-    }
-
-    mutating func preserveIntent(for features: some Sequence<PermissionFeature>) {
-        pendingFeatures.formUnion(features)
-    }
-
-    @discardableResult
-    mutating func resolve(
-        in settings: SettingsStore,
-        snapshot: PermissionSnapshot
-    ) -> Set<PermissionFeature> {
-        let asked = pendingFeatures.intersection(requestedFeatures)
-        let taken = pendingFeatures.subtracting(requestedFeatures)
-        let enabled = PermissionFeatureGate.enableSatisfiedFeatures(
-            asked,
-            in: settings,
-            snapshot: snapshot
-        ).union(
-            PermissionFeatureGate.restoreSatisfiedFeatures(
-                taken,
-                in: settings,
-                snapshot: snapshot
-            )
-        )
-        pendingFeatures.subtract(enabled)
-        requestedFeatures.subtract(enabled)
-        return enabled
     }
 }

@@ -3,6 +3,26 @@ import XCTest
 @testable import OmniDockCore
 
 final class PreviewThumbnailViewTests: XCTestCase {
+    func testMetadataOnlyUpdateDiscardsPriorPreviewImage() {
+        let info = previewInfo()
+        let tile = PreviewThumbnailView(info: info, showsApplicationIdentity: true)
+        let image = NSImage(size: CGSize(width: 800, height: 500))
+        tile.update(image: image)
+        let imageViews = tile.subviews.compactMap { $0 as? NSImageView }
+        XCTAssertTrue(imageViews.contains { $0.image === image })
+
+        tile.update(info: PreviewWindowInfo(
+            id: info.id, windowID: info.windowID, processIdentifier: info.processIdentifier,
+            appName: info.appName, title: info.title, frame: info.frame, isMinimized: false,
+            placeholderText: AppStrings.text(.previewMetadataOnly)
+        ))
+
+        XCTAssertFalse(imageViews.contains { $0.image === image })
+        XCTAssertTrue(tile.subviews.compactMap { $0 as? NSTextField }.contains {
+            !$0.isHidden && $0.stringValue == AppStrings.text(.previewMetadataOnly)
+        })
+    }
+
     func testTileAcceptsFirstMouse() {
         let tile = PreviewThumbnailView(info: previewInfo())
 

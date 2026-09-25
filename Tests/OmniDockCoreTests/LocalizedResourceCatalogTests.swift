@@ -209,7 +209,7 @@ final class LocalizedResourceCatalogTests: XCTestCase {
             let infoPlistValues = LocalizedResourceCatalog.infoPlistValues(language: language)
             let disclosures = [
                 appValues[AppStringKey.onboardingScreenRecordingPurpose.rawValue, default: ""],
-                appValues[AppStringKey.previewNeedsScreenRecording.rawValue, default: ""],
+                appValues[AppStringKey.settingsPreviewMetadataOnly.rawValue, default: ""],
                 infoPlistValues["NSScreenCaptureUsageDescription", default: ""]
             ]
 

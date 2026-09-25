@@ -97,6 +97,9 @@ final class PreviewThumbnailView: NSView {
         if let image = info.staticPreviewImage {
             imageView.image = image
             updateContentAspectRatio(from: image)
+        } else if info.placeholderText != nil {
+            imageView.image = nil
+            contentAspectRatio = PreviewLayoutCalculator.contentAspectRatio(for: info.frame)
         } else if imageView.image == nil {
             contentAspectRatio = PreviewLayoutCalculator.contentAspectRatio(for: info.frame)
         }

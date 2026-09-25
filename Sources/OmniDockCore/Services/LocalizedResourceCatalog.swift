@@ -93,6 +93,9 @@ enum AppStringKey: String, CaseIterable {
     case settingsMinimizeDetail
     case settingsPermissionStatus
     case settingsPermissionGuide
+    case settingsFeaturePermissionUnavailable
+    case settingsPreviewMetadataOnly
+    case settingsGrantPermission
     case settingsLiveWindowCount
     case settingsPrivacyPolicy
     case settingsSupport
@@ -301,7 +304,7 @@ enum AppStringKey: String, CaseIterable {
     case pickerApplicationBadge
     case genericApplication
 
-    case previewNeedsScreenRecording
+    case previewMetadataOnly
     case previewNoWindows
     case previewCloseFailed
     case previewFocusFailed

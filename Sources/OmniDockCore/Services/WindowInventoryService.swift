@@ -850,6 +850,7 @@ final class WindowInventoryService {
     }
 
     func refreshAccessibilityTracking() {
+        cachedSnapshots.removeAll()
         accessibilityBackend.refreshAccessibilityState()
         state.processIdentifiers.forEach { processIdentifier in
             accessibilityBackend.track(processIdentifier: processIdentifier)

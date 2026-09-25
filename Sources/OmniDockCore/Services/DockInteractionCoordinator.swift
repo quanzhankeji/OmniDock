@@ -265,8 +265,9 @@ public final class DockInteractionCoordinator {
             self.activeSpaceObserver = nil
         }
         dockHoverSuppressedUntil = nil
-        resetPreviewContentState()
-        captureSessionRegistry.stopAll()
+        hoverTarget = nil
+        hoverBeganAt = nil
+        hidePreview(hidesSharedPanel: !isCommandTabPreviewActive && !isWindowCycleActive)
         previewService.clearAllCachedSnapshots()
         proxyTargetRouter.removeAll()
     }
@@ -333,7 +334,7 @@ public final class DockInteractionCoordinator {
 
     public func refreshPermissionsAndMonitors() {
         lastPermissionSnapshot = permissionService.snapshot()
-        hidePreview()
+        hidePreview(hidesSharedPanel: !isCommandTabPreviewActive && !isWindowCycleActive)
         hoverTarget = nil
         hoverBeganAt = nil
         shownTarget = nil
@@ -492,7 +493,10 @@ public final class DockInteractionCoordinator {
     }
 
     private func performDockClickToggle(target: DockAppTarget) {
-        guard DockTargetOwnershipPolicy.shouldHandle(
+        guard PermissionFeatureGate.availability(
+            for: .dockClick, settings: settings, snapshot: permissionService.snapshot()
+        ).canRun,
+        DockTargetOwnershipPolicy.shouldHandle(
             targetProcessIdentifier: target.processIdentifier
         ) else {
             return
@@ -529,6 +533,10 @@ public final class DockInteractionCoordinator {
         // fires 12.5 times per second and should not touch NSScreen.screens
         // or mouse location at all.
         guard settings.showDockPreviews else {
+            hidePreview()
+            return
+        }
+        guard PermissionFeatureGate.isSatisfied(for: .dockPreview, in: permissionService.snapshot()) else {
             hidePreview()
             return
         }
@@ -639,6 +647,12 @@ public final class DockInteractionCoordinator {
     }
 
     private func showPreview(for target: DockAppTarget) {
+        guard PermissionFeatureGate.availability(
+            for: .dockPreview, settings: settings, snapshot: permissionService.snapshot()
+        ).canRun else {
+            hidePreview()
+            return
+        }
         let summary = windowControlService.interactionSummary(for: target.processIdentifier)
         let isHidden = NSRunningApplication(processIdentifier: target.processIdentifier)?.isHidden ?? false
         if !isHidden, summary.normalWindowCount == 0 {
@@ -666,19 +680,8 @@ public final class DockInteractionCoordinator {
 
         prepareToShowPreview(for: target)
         let permission = permissionService.snapshot()
-        guard permission.screenRecording else {
-            captureSessionRegistry.stopAll()
-            resetPreviewContentState()
-            shownSnapshot = nil
-            previewPanelController.show(
-                target: target,
-                windows: [],
-                message: AppStrings.text(.previewNeedsScreenRecording)
-            )
-            return
-        }
 
-        if isHidden {
+        if isHidden, permission.screenRecording {
             let cachedWindows = previewService.cachedSnapshotWindows(for: target)
             guard !cachedWindows.isEmpty else {
                 hidePreview()
@@ -740,7 +743,7 @@ public final class DockInteractionCoordinator {
         }
     }
 
-    private func hidePreview() {
+    private func hidePreview(hidesSharedPanel: Bool = true) {
         previewRequestID += 1
         shownTarget = nil
         previewExitBeganAt = nil
@@ -750,7 +753,7 @@ public final class DockInteractionCoordinator {
         isPreviewValidationInFlight = false
         lastPreviewWindowValidationAt = nil
         captureSessionRegistry.stopAll()
-        previewPanelController.hide()
+        if hidesSharedPanel { previewPanelController.hide() }
     }
 
     private func endPreviewLifecycleForWindowFocus() {
@@ -782,7 +785,7 @@ public final class DockInteractionCoordinator {
         }
         self.lastPreviewWindowValidationAt = now
 
-        if runningApplication.isHidden {
+        if runningApplication.isHidden, permissionService.snapshot().screenRecording {
             captureSessionRegistry.stopAll()
             let cachedWindows = previewService.cachedSnapshotWindows(for: target)
             guard !cachedWindows.isEmpty else {
@@ -946,13 +949,18 @@ public final class DockInteractionCoordinator {
     }
 
     private func synchronizeContentReadiness(for snapshot: PreviewWindowSnapshot) {
+        let allowsMetadataOnly = !permissionService.snapshot().screenRecording
+        if allowsMetadataOnly {
+            latestPreviewImages.removeAll()
+        }
         var sources: [PreviewWindowIdentity: PreviewContentSource] = [:]
         for window in previewCandidateWindows(in: snapshot) {
             let identity = PreviewWindowIdentity(window)
             sources[identity] = PreviewContentSourcePolicy.source(
                 hasCachedImage: window.staticPreviewImage != nil,
                 isMinimized: window.isMinimized,
-                hasCaptureWindow: snapshot.captureWindows[identity] != nil
+                hasCaptureWindow: snapshot.captureWindows[identity] != nil,
+                allowsMetadataOnly: allowsMetadataOnly
             )
         }
 
@@ -1037,7 +1045,8 @@ public final class DockInteractionCoordinator {
         image: NSImage,
         generation: Int
     ) {
-        guard PreviewContentGenerationPolicy.accepts(
+        guard permissionService.snapshot().screenRecording,
+              PreviewContentGenerationPolicy.accepts(
             responseGeneration: generation,
             currentGeneration: previewContentGeneration,
             isIdentityTracked: contentReadiness.state(for: identity) != nil
@@ -1231,17 +1240,44 @@ public final class DockInteractionCoordinator {
 enum PreviewHoverRetentionPolicy {
     static let exitGraceDuration: TimeInterval = 0.22
 
-    static func interactionRegion(dockItemFrame: CGRect, panelFrame: CGRect) -> CGRect {
-        dockItemFrame
-            .union(panelFrame)
-            .insetBy(dx: -18, dy: -18)
-    }
-
     static func isPointInInteractionRegion(
         _ point: CGPoint,
         dockItemFrame: CGRect,
         panelFrame: CGRect
     ) -> Bool {
-        interactionRegion(dockItemFrame: dockItemFrame, panelFrame: panelFrame).contains(point)
+        let dock = dockItemFrame.insetBy(dx: -18, dy: -18)
+        let panel = panelFrame.insetBy(dx: -18, dy: -18)
+        if dock.contains(point) || panel.contains(point) {
+            return true
+        }
+        guard dock.union(panel).contains(point) else { return false }
+
+        // The convex outline retains every straight path between the icon and
+        // any card, without including the bounding rectangle's empty corners.
+        let corners: [CGPoint] = [dock, panel].flatMap { frame -> [CGPoint] in
+            [CGPoint(x: frame.minX, y: frame.minY), CGPoint(x: frame.maxX, y: frame.minY),
+             CGPoint(x: frame.maxX, y: frame.maxY), CGPoint(x: frame.minX, y: frame.maxY)]
+        }
+        let orderedCorners = corners.sorted { $0.x == $1.x ? $0.y < $1.y : $0.x < $1.x }
+        func halfOutline(_ points: [CGPoint]) -> [CGPoint] {
+            var result: [CGPoint] = []
+            for point in points {
+                while result.count >= 2 {
+                    let a = result[result.count - 2]
+                    let b = result[result.count - 1]
+                    let turn = (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x)
+                    if turn > 0 { break }
+                    result.removeLast()
+                }
+                result.append(point)
+            }
+            return result
+        }
+        let outline = Array(halfOutline(orderedCorners).dropLast())
+            + Array(halfOutline(Array(orderedCorners.reversed())).dropLast())
+        let corridor = CGMutablePath()
+        corridor.addLines(between: outline)
+        corridor.closeSubpath()
+        return corridor.contains(point)
     }
 }

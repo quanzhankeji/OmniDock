@@ -93,6 +93,10 @@ Grant only the permissions needed for the features you enable.
 | Screen Recording | Live and static window thumbnails |
 | Finder Extension and folder access | Finder commands and creating files in a folder you approve |
 
+Screen Recording is optional for navigation: with Accessibility granted, Dock and Command-Tab previews can show window titles and app icons without thumbnails. Option-Tab also requires Input Monitoring. Windows not exposed by the owning app's accessibility interface cannot appear in this mode.
+
+Missing permissions pause the affected functionality without changing your switches. Settings shows the missing permission and an authorization button; granting it resumes enabled features. A switch you turn off stays off.
+
 No account, analytics, or advertising SDKs. Settings and optional clipboard history stay on your Mac; preview images stay in memory. OmniDock contacts GitHub for update checks and downloads you approve, without uploading those contents.
 
 Clipboard history is off by default. Items explicitly marked by their source app as temporary, concealed, or automatically generated are skipped, but this won't catch every sensitive item. Read the [privacy policy](PRIVACY.md) for storage details and limits.

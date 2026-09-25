@@ -2,6 +2,27 @@ import XCTest
 @testable import OmniDockCore
 
 final class PreviewContentReadinessTests: XCTestCase {
+    func testMetadataOnlyModeIsImmediatelyDisplayableAndRejectsLateCaptureFrames() {
+        let window = identity(1)
+        var tracker = PreviewContentReadinessTracker()
+        tracker.synchronize(sources: [window: .capture], now: Date(), timeout: 1)
+        XCTAssertEqual(tracker.acceptFrame(for: window), .becameReady)
+
+        let source = PreviewContentSourcePolicy.source(
+            hasCachedImage: true, isMinimized: false, hasCaptureWindow: true, allowsMetadataOnly: true
+        )
+        XCTAssertEqual(source, .textOnly)
+        tracker.synchronize(sources: [window: source], now: Date(), timeout: 1)
+        XCTAssertEqual(tracker.displayableIdentities, [window])
+        XCTAssertTrue(tracker.captureEligibleIdentities.isEmpty)
+        XCTAssertFalse(tracker.hasWaitingContent)
+        XCTAssertEqual(tracker.acceptFrame(for: window), .rejected)
+
+        tracker.synchronize(sources: [window: .capture], now: Date(), timeout: 1)
+        XCTAssertTrue(tracker.hasWaitingContent)
+        XCTAssertEqual(tracker.acceptFrame(for: window), .becameReady)
+    }
+
     func testCaptureWaitsForFirstFrameBeforeBecomingDisplayable() {
         let window = identity(1)
         let now = Date(timeIntervalSince1970: 100)

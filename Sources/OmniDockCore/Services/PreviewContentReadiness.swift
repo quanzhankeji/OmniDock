@@ -11,8 +11,12 @@ enum PreviewContentSourcePolicy {
     static func source(
         hasCachedImage: Bool,
         isMinimized: Bool,
-        hasCaptureWindow: Bool
+        hasCaptureWindow: Bool,
+        allowsMetadataOnly: Bool = false
     ) -> PreviewContentSource {
+        if allowsMetadataOnly {
+            return .textOnly
+        }
         if hasCachedImage {
             return .cachedImage
         }

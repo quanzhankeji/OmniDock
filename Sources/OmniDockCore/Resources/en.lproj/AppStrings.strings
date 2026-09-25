@@ -92,6 +92,9 @@
 "settingsMinimizeDetail" = "Repeatedly clicking the frontmost app icon minimizes its windows; clicking again restores and raises them.";
 "settingsPermissionStatus" = "Permission Status";
 "settingsPermissionGuide" = "Open Permission Guide";
+"settingsFeaturePermissionUnavailable" = "Temporarily unavailable: %@ permission is missing. Your settings are preserved.";
+"settingsPreviewMetadataOnly" = "Window titles, app icons and switching are available. Screen Recording adds live images and one-time static snapshots.";
+"settingsGrantPermission" = "Grant Permission";
 "settingsLiveWindowCount" = "Live Windows";
 "settingsPrivacyPolicy" = "Privacy Policy";
 "settingsSupport" = "Support";
@@ -178,11 +181,11 @@
 "onboardingPrivacyNote" = "Everything stays on this Mac. OmniDock does not record keyboard input or upload screen content.";
 "onboardingAccessibilityPurpose" = "Identify Dock icons, then show, hide, and focus windows.";
 "onboardingInputMonitoringPurpose" = "Detect light clicks on Dock icons and Option-Tab only while the window switcher is open. OmniDock does not record or save typed text.";
-"onboardingScreenRecordingPurpose" = "Create Dock window thumbnails, including live images and one-time static snapshots, for local previews. If the list is empty, click + to add OmniDock.";
+"onboardingScreenRecordingPurpose" = "Optional: capture live images and one-time static snapshots for thumbnails. Window titles, app icons and switching work without it. If the list is empty, click + to add OmniDock.";
 "onboardingFinderExtensionPurpose" = "Add Copy Path, New File, and quick-open commands to Finder contextual menus.";
 "onboardingFolderAccessPurpose" = "Store access only to a folder you choose, so New File works without requesting Full Disk Access.";
 "onboardingStatusReady" = "Ready to use";
-"onboardingStatusNeedsPermissions" = "Complete the permissions below";
+"onboardingStatusNeedsPermissions" = "Enable permissions for the features you use";
 "onboardingStatusRefreshing" = "Refreshing app permissions...";
 "onboardingGoEnable" = "Enable";
 "onboardingEnabled" = "Enabled";
@@ -300,7 +303,7 @@
 "pickerApplicationBadge" = "App";
 "genericApplication" = "Application";
 
-"previewNeedsScreenRecording" = "Enable Screen Recording permission to show window thumbnails, including live images and one-time static snapshots";
+"previewMetadataOnly" = "Window thumbnail unavailable";
 "previewNoWindows" = "No windows to preview";
 "previewCloseFailed" = "Unable to close this window";
 "previewFocusFailed" = "Could not confirm this window is in front. Please try again.";

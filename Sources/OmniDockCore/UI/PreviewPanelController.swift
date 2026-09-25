@@ -154,6 +154,8 @@ public final class PreviewPanelController {
         OmniDockTheme.applyCurrentAppearance(to: panel)
         panel.setFrame(frame, display: true)
         rebuildContent(target: target, windows: visibleWindows, message: message)
+        panel.setFrame(panelFrame(target: target, windows: visibleWindows), display: true)
+        layoutScrollableContent()
         panel.orderFrontRegardless()
         notifyCommandTabButtonTargetsChanged()
     }
@@ -998,6 +1000,7 @@ public final class PreviewPanelController {
         let tile = PreviewThumbnailView(
             info: info,
             showsApplicationIdentity: currentTarget?.previewAnchorKind == .windowCycle
+                || (info.staticPreviewImage == nil && info.placeholderText != nil)
         )
         tile.translatesAutoresizingMaskIntoConstraints = false
         tile.onClick = { [weak self] info in

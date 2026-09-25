@@ -206,8 +206,12 @@ final class WindowCycleTests: XCTestCase {
         ))
         XCTAssertEqual(
             PermissionFeature.windowCycle.requiredPermissions,
-            [.accessibility, .screenRecording, .inputMonitoring]
+            [.accessibility, .inputMonitoring]
         )
+        XCTAssertTrue(WindowCycleRegistrationPolicy.shouldRegister(
+            isStarted: true, isEnabled: true, arePreviewsEnabled: true,
+            permissions: PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: true)
+        ))
     }
 
     func testDisablingSwitcherUnregistersAndLeavesNoActiveSessionOrMonitor() {
@@ -228,7 +232,7 @@ final class WindowCycleTests: XCTestCase {
         service.stop()
     }
 
-    func testRegistrationFailureRollsBackSwitchAndReportsWarning() throws {
+    func testRegistrationFailurePreservesSwitchAndReportsWarning() throws {
         let settings = configuredSettings()
         let registry = TestHotkeyRegistry(registerStatus: OSStatus(eventHotKeyExistsErr))
         let status = WindowCycleRegistrationStatusStore()
@@ -236,12 +240,63 @@ final class WindowCycleTests: XCTestCase {
 
         service.start()
 
-        XCTAssertFalse(settings.windowCycleEnabled)
+        XCTAssertTrue(settings.windowCycleEnabled)
         XCTAssertFalse(service.isHotkeyRegistered)
         XCTAssertFalse(service.isInputMonitoring)
         XCTAssertNotNil(status.warning)
         XCTAssertGreaterThanOrEqual(registry.unregisterCallCount, 1)
         service.stop()
+    }
+
+    func testPermissionNotificationsSuspendAndResumeRegistrationWithoutChangingPreference() {
+        let settings = configuredSettings()
+        let registry = TestHotkeyRegistry()
+        var permissions = PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: true)
+        let service = makeService(settings: settings, registry: registry, permissions: { permissions })
+        service.start()
+        XCTAssertTrue(service.isHotkeyRegistered)
+
+        permissions = PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: false)
+        NotificationCenter.default.post(name: PermissionService.changedNotification, object: nil)
+        XCTAssertFalse(service.isHotkeyRegistered)
+        XCTAssertFalse(service.isSessionActive)
+        XCTAssertFalse(service.isInputMonitoring)
+        XCTAssertTrue(settings.windowCycleEnabled)
+
+        permissions = PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: true)
+        NotificationCenter.default.post(name: PermissionService.changedNotification, object: nil)
+        XCTAssertTrue(service.isHotkeyRegistered)
+        XCTAssertTrue(settings.windowCycleEnabled)
+
+        permissions = PermissionSnapshot(accessibility: false, screenRecording: false, inputMonitoring: true)
+        NotificationCenter.default.post(name: PermissionService.changedNotification, object: nil)
+        settings.windowCycleEnabled = false
+        permissions = PermissionSnapshot(accessibility: true, screenRecording: true, inputMonitoring: true)
+        NotificationCenter.default.post(name: PermissionService.changedNotification, object: nil)
+        XCTAssertFalse(service.isHotkeyRegistered)
+        XCTAssertFalse(settings.windowCycleEnabled)
+        service.stop()
+    }
+
+    func testInactiveSwitcherPermissionRefreshDoesNotDismissAnotherPreview() {
+        let settings = configuredSettings()
+        settings.windowCycleEnabled = false
+        let panel = PreviewPanelController(
+            requestWindowFocus: { _, _, _, _ in }, requestWindowClose: { _, _, _, _ in }
+        )
+        let service = makeService(settings: settings, registry: TestHotkeyRegistry(), panel: panel)
+        service.start()
+        defer { service.stop(); panel.hide() }
+        let target = DockAppTarget(
+            processIdentifier: 101, bundleIdentifier: "com.example.App", localizedName: "Example",
+            dockElementTitle: "Example", hitPoint: .zero, previewAnchorKind: .commandTab
+        )
+        panel.show(target: target, windows: [window(id: 1, processIdentifier: 101)], message: nil)
+
+        NotificationCenter.default.post(name: PermissionService.changedNotification, object: nil)
+
+        XCTAssertEqual(panel.displayedWindowCount, 1)
+        XCTAssertTrue(panel.hasInstalledContentView)
     }
 
     func testPreviewTabAndAltTabSettingAreLocalized() {
@@ -282,7 +337,11 @@ final class WindowCycleTests: XCTestCase {
     private func makeService(
         settings: SettingsStore,
         registry: TestHotkeyRegistry,
-        status: WindowCycleRegistrationStatusStore? = nil
+        status: WindowCycleRegistrationStatusStore? = nil,
+        panel: PreviewPanelController? = nil,
+        permissions: @escaping () -> PermissionSnapshot = {
+            PermissionSnapshot(accessibility: true, screenRecording: true, inputMonitoring: true)
+        }
     ) -> WindowCycleService {
         let windowInventory = WindowInventoryService()
         let previewService = ScreenCapturePreviewService(windowInventory: windowInventory)
@@ -292,12 +351,10 @@ final class WindowCycleTests: XCTestCase {
             permissionService: PermissionService(),
             windowInventory: windowInventory,
             previewService: previewService,
-            previewPanelController: PreviewPanelController(windowControlService: windowControlService),
+            previewPanelController: panel ?? PreviewPanelController(windowControlService: windowControlService),
             registrationStatus: status ?? WindowCycleRegistrationStatusStore(),
             hotkeyRegistry: registry,
-            permissionSnapshotProvider: {
-                PermissionSnapshot(accessibility: true, screenRecording: true, inputMonitoring: true)
-            }
+            permissionSnapshotProvider: permissions
         )
     }
 

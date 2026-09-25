@@ -438,6 +438,7 @@ final class WindowCycleService {
 
     private let settings: SettingsStore
     private let permissionSnapshotProvider: () -> PermissionSnapshot
+    private var lastScreenRecordingPermission: Bool?
     private let windowInventory: WindowInventoryService
     private let previewService: ScreenCapturePreviewService
     private let previewPanelController: PreviewPanelController
@@ -520,7 +521,11 @@ final class WindowCycleService {
             name: SettingsStore.changedNotification,
             object: nil
         )
-        reconcileRegistration()
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(permissionsChanged),
+            name: PermissionService.changedNotification, object: nil
+        )
+        refreshRegistration()
     }
 
     func stop() {
@@ -539,6 +544,26 @@ final class WindowCycleService {
 
     func refreshRegistration() {
         reconcileRegistration()
+        let recording = permissionSnapshotProvider().screenRecording
+        defer { lastScreenRecordingPermission = recording }
+        guard recording != lastScreenRecordingPermission,
+              var session, let target = sessionTarget else { return }
+        sessionGeneration &+= 1
+        captureSessionRegistry.stopAll()
+        captureWindows.removeAll()
+        currentImages.removeAll()
+        capturedIdentities.removeAll()
+        unavailableStaticIdentities.removeAll()
+        for (index, window) in session.windows.enumerated() {
+            session.update(copy(window, image: nil), at: index)
+        }
+        self.session = session
+        updatePresentation(for: session)
+        requestStaticPreviews(for: session, target: target, generation: sessionGeneration)
+    }
+
+    @objc private func permissionsChanged() {
+        refreshRegistration()
     }
 
     var isHotkeyRegistered: Bool {
@@ -560,21 +585,26 @@ final class WindowCycleService {
         reconcileRegistration()
     }
 
-    private func reconcileRegistration() {
-        guard WindowCycleRegistrationPolicy.shouldRegister(
+    private var canRun: Bool {
+        WindowCycleRegistrationPolicy.shouldRegister(
             isStarted: isStarted,
             isEnabled: settings.windowCycleEnabled,
             arePreviewsEnabled: settings.showDockPreviews,
             permissions: permissionSnapshotProvider()
-        ) else {
+        )
+    }
+
+    private func reconcileRegistration() {
+        guard canRun else {
             endSession()
             hotkeyRegistry.unregister()
+            registrationStatus.setWarning(nil)
             return
         }
 
         if let status = hotkeyRegistry.register() {
             endSession()
-            settings.windowCycleEnabled = false
+            hotkeyRegistry.unregister()
             registrationStatus.setWarning(registrationMessage(for: status))
         } else {
             registrationStatus.setWarning(nil)
@@ -590,7 +620,7 @@ final class WindowCycleService {
     }
 
     private func handleHotkey(_ direction: WindowCycleDirection) {
-        guard hotkeyRegistry.isRegistered else {
+        guard canRun, hotkeyRegistry.isRegistered else {
             return
         }
         guard session != nil else {
@@ -620,7 +650,6 @@ final class WindowCycleService {
         }
 
         guard inputMonitor.start() else {
-            settings.windowCycleEnabled = false
             registrationStatus.setWarning(AppStrings.text(.settingsWindowCycleUnavailable))
             return
         }
@@ -637,6 +666,7 @@ final class WindowCycleService {
         with records: [WindowInventoryRecord],
         direction: WindowCycleDirection
     ) -> Bool {
+        guard canRun else { return false }
         let windows = records.map { $0.makePreviewWindowInfo() }
         let frontmostProcessIdentifier = NSWorkspace.shared.frontmostApplication?.processIdentifier
         let frontmostWindowIdentity = records.first(where: {
@@ -652,7 +682,6 @@ final class WindowCycleService {
             return false
         }
         guard inputMonitor.start() else {
-            settings.windowCycleEnabled = false
             registrationStatus.setWarning(AppStrings.text(.settingsWindowCycleUnavailable))
             return false
         }
@@ -803,6 +832,10 @@ final class WindowCycleService {
     }
 
     private func handleInput(_ event: WindowCycleInputMonitor.Event) {
+        guard canRun else {
+            endSession()
+            return
+        }
         switch event {
         case let .advance(direction):
             advanceSession(direction)
@@ -818,6 +851,7 @@ final class WindowCycleService {
         target: DockAppTarget,
         generation: UInt64
     ) {
+        guard canRun, permissionSnapshotProvider().screenRecording else { return }
         // A window needs a snapshot when nothing has been captured from it yet.
         // Holding a picture is not the same thing: the session starts with
         // cached stills so the cards are not blank, and treating those as
@@ -872,7 +906,8 @@ final class WindowCycleService {
         target: DockAppTarget,
         generation: UInt64
     ) {
-        guard generation == sessionGeneration,
+        guard canRun, permissionSnapshotProvider().screenRecording,
+              generation == sessionGeneration,
               session != nil,
               sessionTarget?.isSameDockTile(as: target) == true
         else {
@@ -891,7 +926,8 @@ final class WindowCycleService {
     }
 
     private func reconcileCaptureSessions(target: DockAppTarget, generation: UInt64) {
-        guard let session else {
+        guard canRun, permissionSnapshotProvider().screenRecording, let session else {
+            captureSessionRegistry.stopAll()
             return
         }
         // The queue order carries the selection and its neighbours first, so
@@ -968,7 +1004,8 @@ final class WindowCycleService {
         // The session is not stopped here. A still capture finishes on its own
         // and the registry clears it; stopping a live one would end it at its
         // first frame, which is the very thing this shows.
-        guard generation == sessionGeneration,
+        guard canRun, permissionSnapshotProvider().screenRecording,
+              generation == sessionGeneration,
               sessionTarget?.isSameDockTile(as: target) == true,
               var session,
               let index = session.windows.firstIndex(where: { PreviewWindowIdentity($0) == identity })
@@ -1059,8 +1096,8 @@ final class WindowCycleService {
         currentImages.removeAll()
         session = nil
         sessionTarget = nil
-        previewPanelController.hide()
         if wasActive {
+            previewPanelController.hide()
             onSessionActivityChanged(false)
             // Warmed once at registration, the inventory is as old as the last
             // launch by the time anyone reaches for the switcher, so it opens
@@ -1068,7 +1105,7 @@ final class WindowCycleService {
             // again now the panel is down and nothing is waiting on it.
             refreshInventoryForNextSession()
         }
-        guard let window else {
+        guard canRun, let window else {
             return
         }
         previewPanelController.focusWindowAfterPreviewDismissal(window, feedbackTarget: feedbackTarget)
@@ -1123,12 +1160,13 @@ final class WindowCycleService {
 
     private func decoratedWindow(from window: PreviewWindowInfo) -> PreviewWindowInfo {
         let identity = PreviewWindowIdentity(window)
+        let hasRecording = permissionSnapshotProvider().screenRecording
         return copy(
             window,
-            image: currentImages[identity] ?? window.staticPreviewImage,
+            image: hasRecording ? currentImages[identity] ?? window.staticPreviewImage : nil,
             placeholderText: window.isMinimized
                 ? AppStrings.text(.previewMinimizedClickRestore)
-                : AppStrings.text(.previewWindowContentUnavailable)
+                : AppStrings.text(hasRecording ? .previewWindowContentUnavailable : .previewMetadataOnly)
         )
     }
 

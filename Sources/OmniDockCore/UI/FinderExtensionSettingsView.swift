@@ -42,7 +42,7 @@ enum FinderExtensionSettingsSection: CaseIterable {
 
 @MainActor
 final class FinderExtensionSettingsView: NSView {
-    var onEnableRequest: ((NSSwitch) -> Bool)?
+    var onEnable: (() -> Void)?
     var onOpenExtensionManagement: (() -> Void)?
     var onAddQuickAction: (() -> Void)?
     var onRemoveQuickAction: ((UUID) -> Void)?
@@ -773,15 +773,8 @@ final class FinderExtensionSettingsView: NSView {
     }
 
     @objc private func toggleExtension(_ sender: NSSwitch) {
-        if sender.state == .on {
-            guard onEnableRequest?(sender) ?? false else {
-                sender.state = .off
-                return
-            }
-            settings.finderExtensionEnabled = true
-        } else {
-            settings.finderExtensionEnabled = false
-        }
+        settings.finderExtensionEnabled = sender.state == .on
+        if settings.finderExtensionEnabled { onEnable?() }
         reload()
     }
 

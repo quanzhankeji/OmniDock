@@ -2,10 +2,11 @@ import AppKit
 
 @MainActor
 final class WindowPlacementSettingsView: NSView {
-    var onEnableRequest: ((NSSwitch) -> Bool)?
+    var onEnable: (() -> Void)?
 
     private let settings: SettingsStore
     private let registrationStatus: WindowPlacementRegistrationStatusStore
+    private let permissionStatusView: NSView?
     private var selectedCommandID: UUID?
 
     private let masterSwitch = WindowPlacementFirstClickSwitch()
@@ -25,10 +26,12 @@ final class WindowPlacementSettingsView: NSView {
 
     init(
         settings: SettingsStore,
-        registrationStatus: WindowPlacementRegistrationStatusStore
+        registrationStatus: WindowPlacementRegistrationStatusStore,
+        permissionStatusView: NSView? = nil
     ) {
         self.settings = settings
         self.registrationStatus = registrationStatus
+        self.permissionStatusView = permissionStatusView
         super.init(frame: .zero)
         build()
         reload()
@@ -91,6 +94,7 @@ final class WindowPlacementSettingsView: NSView {
             detail: AppStrings.text(.windowPlacementEnableDetail),
             control: masterSwitch
         ))
+        if let permissionStatusView { root.addArrangedSubview(permissionStatusView) }
 
         greenButtonSwitch.target = self
         greenButtonSwitch.action = #selector(toggleGreenButton(_:))
@@ -439,11 +443,8 @@ final class WindowPlacementSettingsView: NSView {
     }
 
     @objc private func toggleMaster(_ sender: NSSwitch) {
-        if sender.state == .on, onEnableRequest?(sender) == false {
-            sender.state = .off
-            return
-        }
         settings.windowPlacementEnabled = sender.state == .on
+        if settings.windowPlacementEnabled { onEnable?() }
     }
 
     @objc private func toggleGreenButton(_ sender: NSSwitch) {
