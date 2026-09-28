@@ -170,6 +170,14 @@ final class PermissionFeatureGateTests: XCTestCase {
             lastRelaunchAttemptAt: nil,
             now: now
         ))
+        XCTAssertFalse(PermissionMonitorRecoveryPolicy.shouldRelaunch(
+            isDockClickEnabled: true,
+            snapshot: grantedSnapshot,
+            isMonitoringActive: false,
+            isMonitoringSuspended: true,
+            lastRelaunchAttemptAt: nil,
+            now: now
+        ))
     }
 
     func testPermissionMonitorRecoveryCooldownPreventsRelaunchLoop() {

@@ -37,6 +37,36 @@ Missing permissions do not turn off your feature switches. The affected settings
 
 Hidden Bar, ordinary clipboard-history search and copy, language selection, and appearance selection do not require additional privacy permissions.
 
+## Preview Window Status
+
+Dock, Command-Tab, and Option-Tab previews share the same status line. Minimized and app-hidden are separate states and can appear together, including when a recent thumbnail is available. Full screen is shown only when the owning application's Accessibility interface reports it; a maximized window is not assumed to be full screen.
+
+The display label uses the screen with the largest overlap with the latest known window frame. Equal overlaps, invalid frames, or windows outside the current screens show an unknown display. Cached frames and full-screen state may describe the last observation until the window inventory refreshes; the application-hidden state is refreshed when cached snapshots are read. A continuously open switcher can retain its last observed state until its next inventory refresh or reopening. Screen changes refresh display labels on an open panel, but this does not establish Space membership or add display/Space filtering.
+
+## Window Switcher Keyboard Controls
+
+Enable Alt-Tab Preview, then press Option-Tab and keep holding Option:
+
+| Key | Action |
+| --- | --- |
+| Tab / Shift-Tab | Cycle forward / backward, wrapping at the ends |
+| Arrow keys | Move between grid cells; stop at edges rather than wrapping |
+| Return or keypad Enter | Confirm the selected window and dismiss the switcher |
+| Escape | Cancel without activating the selection |
+| Release Option | Confirm the current selection |
+
+Up/down use the visible grid's column count. A short final row selects the nearest available cell, and the selected row scrolls into view. Command/Control combinations and ordinary text keys are not assigned switcher actions. There is no W/Q/M/H action-key mapping or title-search mode. Native Command-Tab and Dock keyboard behavior are unchanged.
+
+If macOS disables the switcher's input event tap, the current session cancels without focusing a window. Invoke Option-Tab again to start a new session. Queued input from an ended session is discarded.
+
+## Interrupted Previews
+
+During system sleep, display sleep, or switching away from the current user session, OmniDock cancels its active previews and pauses their input monitoring. Returning to the desktop enables new interactions according to the current settings and permissions; it does not restore an old selection or focus a previously selected window. Overlapping interruptions must all end before monitoring resumes. Feature switches are not changed, and intentional pauses do not trigger permission-recovery relaunches.
+
+Connecting or disconnecting a display, or changing its resolution or scaling, also closes active previews without confirming their selection. Hover a Dock icon or invoke the switcher again to read the current window list and screen bounds. Pending results and Dock clicks from before the change are discarded instead of using obsolete coordinates. Display changes do not override disabled features, missing permissions or an ongoing workspace suspension.
+
+Sleep and user-session handling use workspace notifications, not a universal lock-screen detector. Lock/unlock behavior and launching in an already inactive user session still require system-specific verification.
+
 ## Troubleshooting
 
 If Dock click toggling or previews stop working:

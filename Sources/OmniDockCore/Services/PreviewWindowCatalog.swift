@@ -12,7 +12,7 @@ enum PreviewWindowCatalog {
     ) -> [PreviewWindowInfo] {
         let collapsedAXWindows = collapseTabbedWindows(axWindows)
         let collapsedShareableWindows = collapseTabbedWindows(
-            shareableWindows,
+            shareableWindows.map { applyingAccessibilityState(to: $0, axWindows: axWindows) },
             prefersFrameIdentity: false
         )
 
@@ -26,6 +26,36 @@ enum PreviewWindowCatalog {
         }
 
         return stableDisplayOrder(collapsedShareableWindows + minimizedAXWindows)
+    }
+
+    static func applyingAccessibilityState(
+        to window: PreviewWindowInfo,
+        axWindows: [PreviewWindowInfo]
+    ) -> PreviewWindowInfo {
+        let sameProcess = axWindows.filter { $0.processIdentifier == window.processIdentifier }
+        let exactMatches = sameProcess.filter {
+            window.windowID != nil && $0.windowID == window.windowID
+        }
+        let matches: [PreviewWindowInfo]
+        if !exactMatches.isEmpty {
+            matches = exactMatches
+        } else {
+            matches = sameProcess.filter {
+                ($0.windowID == nil || window.windowID == nil)
+                    && !normalizedTitle(window.title).isEmpty
+                    && normalizedTitle($0.title) == normalizedTitle(window.title)
+                    && framesMatch($0.frame, window.frame)
+            }
+        }
+        guard matches.count == 1, let state = matches.first else { return window }
+        return PreviewWindowInfo(
+            id: window.id, windowID: window.windowID, processIdentifier: window.processIdentifier,
+            appName: window.appName, title: window.title, frame: window.frame,
+            isMinimized: window.isMinimized,
+            isApplicationHidden: state.isApplicationHidden ?? window.isApplicationHidden,
+            isFullScreen: state.isFullScreen,
+            staticPreviewImage: window.staticPreviewImage, placeholderText: window.placeholderText
+        )
     }
 
     static func collapseTabbedWindows(

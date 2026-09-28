@@ -1,7 +1,31 @@
+import AppKit
 import XCTest
 @testable import OmniDockCore
 
 final class WindowInventoryStateTests: XCTestCase {
+    func testWindowStateSurvivesCaptureMergeAndInventoryRoundTrip() throws {
+        let ax = PreviewWindowInfo(
+            id: "ax-10", windowID: 10, processIdentifier: 101, appName: "Editor",
+            title: "Document", frame: CGRect(x: 0, y: 0, width: 800, height: 600),
+            isMinimized: false, isApplicationHidden: true, isFullScreen: true
+        )
+        let surface = PreviewWindowInfo(
+            id: "sc-10", windowID: 10, processIdentifier: 101, appName: "Editor",
+            title: "Document", frame: ax.frame, isMinimized: false
+        )
+        for merged in [
+            PreviewWindowCatalog.mergeForDisplay(axWindows: [ax], shareableWindows: [surface]),
+            WindowInventorySwitcherSnapshotPolicy.merge(accessibilityWindows: [ax], windowServerWindows: [surface])
+        ] {
+            let info = try XCTUnwrap(merged.first)
+            XCTAssertEqual(info.isApplicationHidden, true)
+            XCTAssertEqual(info.isFullScreen, true)
+            let restored = WindowInventoryRecord(info, displayOrder: 0).makePreviewWindowInfo()
+            XCTAssertEqual(restored.isApplicationHidden, true)
+            XCTAssertEqual(restored.isFullScreen, true)
+        }
+    }
+
     func testSwitcherSnapshotRequiresAccessibilitySupportForWindowServerSurfaces() {
         let windowServerWindow = record(windowID: 10, title: "Residual Surface").makePreviewWindowInfo()
 
@@ -125,6 +149,20 @@ final class WindowInventoryStateTests: XCTestCase {
         XCTAssertEqual(state.allRecordsByMostRecentFocus().count, 2)
     }
 
+    func testDisplayChangePreservesFocusOrderWhenFreshGeometryArrives() {
+        var state = WindowInventoryState()
+        let first = record(windowID: 10)
+        let second = record(windowID: 20)
+        _ = state.apply(.seed(processIdentifier: 101, revision: 1, records: [first, second]))
+        _ = state.apply(.windowFocused(second.identity))
+
+        XCTAssertTrue(state.apply(.displayConfigurationChanged))
+        XCTAssertTrue(state.isStale(processIdentifier: 101))
+        _ = state.apply(.seed(processIdentifier: 101, revision: 2, records: [first, second]))
+        XCTAssertFalse(state.isStale(processIdentifier: 101))
+        XCTAssertEqual(state.allRecordsByMostRecentFocus().map(\.identity), [second.identity, first.identity])
+    }
+
     func testOnlyMetadataEventsAreDebounced() {
         XCTAssertEqual(WindowInventoryEventCoalescingPolicy.delay(for: .moved), 0.1)
         XCTAssertEqual(WindowInventoryEventCoalescingPolicy.delay(for: .resized), 0.1)
@@ -174,6 +212,91 @@ final class WindowInventoryStateTests: XCTestCase {
 
 @MainActor
 final class WindowInventoryServiceTests: XCTestCase {
+    func testDisplayObserverDoesNotDuplicateOrOutliveInventoryService() {
+        let applicationCenter = NotificationCenter()
+        let service = WindowInventoryService(applicationNotificationCenter: applicationCenter)
+        let target = target()
+        let snapshot = PreviewWindowSnapshot(windows: [window(title: "Document")], captureWindows: [:])
+        var invalidations = 0
+        service.start()
+        service.start()
+        service.observeChanges { event in
+            if case .displayConfigurationChanged = event { invalidations += 1 }
+        }
+        service.seed(snapshot, for: target)
+        applicationCenter.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        XCTAssertEqual(invalidations, 1)
+        service.stop()
+        service.seed(snapshot, for: target)
+        applicationCenter.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        XCTAssertNotNil(service.previewSnapshot(for: target))
+        service.start()
+        defer { service.stop() }
+        applicationCenter.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        XCTAssertNil(service.previewSnapshot(for: target))
+    }
+
+    func testDisplayChangeInvalidatesSnapshotsAndRejectsEarlierRequests() {
+        let applicationCenter = NotificationCenter()
+        let service = WindowInventoryService(applicationNotificationCenter: applicationCenter)
+        service.start()
+        defer { service.stop() }
+        let target = target()
+        let unseenTarget = DockAppTarget(processIdentifier: 202, bundleIdentifier: nil, localizedName: "Other",
+                                        dockElementTitle: "Other", hitPoint: .zero)
+        let snapshot = PreviewWindowSnapshot(windows: [window(title: "Old frame")], captureWindows: [:])
+        service.seed(snapshot, for: target)
+        let earlierRevision = service.beginSnapshotRequest(for: target)
+        let unseenRevision = service.beginSnapshotRequest(for: unseenTarget)
+        XCTAssertNotNil(service.previewSnapshot(for: target))
+
+        applicationCenter.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+
+        XCTAssertNil(service.previewSnapshot(for: target))
+        XCTAssertTrue(service.allWindows().isEmpty)
+        service.seed(snapshot, for: target, requestRevision: earlierRevision)
+        service.seed(PreviewWindowSnapshot(windows: [], captureWindows: [:]),
+                     for: unseenTarget, requestRevision: unseenRevision)
+        XCTAssertNil(service.previewSnapshot(for: target))
+        XCTAssertNil(service.previewSnapshot(for: unseenTarget))
+        XCTAssertTrue(service.allWindows().isEmpty)
+
+        service.seed(PreviewWindowSnapshot(windows: [window(title: "Fresh frame")], captureWindows: [:]), for: target)
+        XCTAssertEqual(service.allWindows().map(\.title), ["Fresh frame"])
+    }
+
+    func testApplicationVisibilityNotificationsInvalidateWindowMetadata() async {
+        let application = NSRunningApplication.current
+        let target = DockAppTarget(
+            processIdentifier: application.processIdentifier, bundleIdentifier: "com.example.Editor",
+            localizedName: "Editor", dockElementTitle: "Editor", hitPoint: .zero
+        )
+        for notification in [NSWorkspace.didHideApplicationNotification, NSWorkspace.didUnhideApplicationNotification] {
+            let service = WindowInventoryService()
+            service.start()
+            defer { service.stop() }
+            service.seed(PreviewWindowSnapshot(windows: [PreviewWindowInfo(
+                id: "document", windowID: 10, processIdentifier: target.processIdentifier,
+                appName: "Editor", title: "Document", frame: CGRect(x: 0, y: 0, width: 800, height: 600),
+                isMinimized: false
+            )], captureWindows: [:]), for: target)
+            let invalidated = expectation(description: "Visibility invalidates metadata")
+            service.observeChanges { event in
+                if case let .processInvalidated(pid, reason) = event,
+                   pid == target.processIdentifier, reason == .visibilityChanged {
+                    invalidated.fulfill()
+                }
+            }
+
+            NSWorkspace.shared.notificationCenter.post(
+                name: notification, object: nil, userInfo: [NSWorkspace.applicationUserInfoKey: application]
+            )
+            await fulfillment(of: [invalidated], timeout: 1)
+            XCTAssertNil(service.previewSnapshot(for: target))
+            XCTAssertTrue(service.windows(for: target.processIdentifier).isEmpty)
+        }
+    }
+
     func testOlderSnapshotCompletionCannotReplaceNewerRequest() {
         let service = WindowInventoryService()
         let target = target()

@@ -146,10 +146,12 @@ enum PermissionMonitorRecoveryPolicy {
         isDockClickEnabled: Bool,
         snapshot: PermissionSnapshot,
         isMonitoringActive: Bool,
+        isMonitoringSuspended: Bool = false,
         lastRelaunchAttemptAt: Date?,
         now: Date
     ) -> Bool {
         guard isDockClickEnabled,
+              !isMonitoringSuspended,
               PermissionFeatureGate.isSatisfied(for: .dockClick, in: snapshot),
               !isMonitoringActive
         else {

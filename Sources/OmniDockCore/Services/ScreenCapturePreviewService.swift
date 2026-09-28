@@ -25,6 +25,7 @@ public final class ScreenCapturePreviewService {
     private let ciContext = CIContext()
     private let windowInventory: WindowInventoryService?
     private let hasScreenRecordingPermission: () -> Bool
+    private let applicationHiddenState: (pid_t) -> Bool?
     private let accessibilityWindows: (DockAppTarget) -> [PreviewWindowInfo]
     private let shareableContentLoader: ShareableContentLoader
     private let snapshotCache = PreviewSnapshotCache()
@@ -44,6 +45,7 @@ public final class ScreenCapturePreviewService {
     init(
         windowInventory: WindowInventoryService?,
         hasScreenRecordingPermission: @escaping () -> Bool = { CGPreflightScreenCaptureAccess() },
+        applicationHiddenState: @escaping (pid_t) -> Bool? = { NSRunningApplication(processIdentifier: $0)?.isHidden },
         accessibilityWindows: @escaping (DockAppTarget) -> [PreviewWindowInfo] = {
             AccessibilityPreviewWindowReader.windows(for: $0.processIdentifier, appName: $0.localizedName)
         },
@@ -53,6 +55,7 @@ public final class ScreenCapturePreviewService {
     ) {
         self.windowInventory = windowInventory
         self.hasScreenRecordingPermission = hasScreenRecordingPermission
+        self.applicationHiddenState = applicationHiddenState
         self.accessibilityWindows = accessibilityWindows
         self.shareableContentLoader = shareableContentLoader
     }
@@ -62,7 +65,18 @@ public final class ScreenCapturePreviewService {
     }
 
     func cachedSnapshotWindows(for processIdentifier: pid_t) -> [PreviewWindowInfo] {
-        hasScreenRecordingPermission() ? snapshotCache.windows(for: processIdentifier) : []
+        guard hasScreenRecordingPermission() else { return [] }
+        let windows = snapshotCache.windows(for: processIdentifier)
+        let isHidden = applicationHiddenState(processIdentifier)
+        return windows.map { window in
+            guard window.isApplicationHidden != isHidden else { return window }
+            return PreviewWindowInfo(
+                id: window.id, windowID: window.windowID, processIdentifier: window.processIdentifier,
+                appName: window.appName, title: window.title, frame: window.frame,
+                isMinimized: window.isMinimized, isApplicationHidden: isHidden, isFullScreen: window.isFullScreen,
+                staticPreviewImage: window.staticPreviewImage, placeholderText: window.placeholderText
+            )
+        }
     }
 
     func storeCachedSnapshotWindows(
@@ -101,11 +115,15 @@ public final class ScreenCapturePreviewService {
     func clearAllCachedSnapshots() {
         dispatchPrecondition(condition: .onQueue(.main))
         shareableContentGeneration &+= 1
+        let cancelledCompletions = pendingShareableContentCompletions
+        pendingShareableContentCompletions.removeAll()
+        isLoadingShareableContent = false
         snapshotCache.clearAll()
         cachedShareableContent = nil
         snapshotCleanupWorkItem?.cancel()
         snapshotCleanupWorkItem = nil
         snapshotRequests.clearAll()
+        cancelledCompletions.forEach { $0(nil, nil) }
     }
 
     func captureSnapshotsBeforeHide(
@@ -236,6 +254,7 @@ public final class ScreenCapturePreviewService {
         let inventoryRequestRevision = MainActor.assumeIsolated {
             windowInventory?.beginSnapshotRequest(for: target)
         }
+        let loadGeneration = shareableContentGeneration
 
         shareableContent { [weak self] content, error in
             guard let self else {
@@ -244,6 +263,10 @@ public final class ScreenCapturePreviewService {
             guard self.hasScreenRecordingPermission() else {
                 self.clearAllCachedSnapshots()
                 completion(self.metadataSnapshot(for: target))
+                return
+            }
+            guard loadGeneration == self.shareableContentGeneration else {
+                completion(PreviewWindowSnapshot(windows: [], captureWindows: [:]))
                 return
             }
 
@@ -278,6 +301,7 @@ public final class ScreenCapturePreviewService {
             }
 
             var availableCaptureWindows: [PreviewWindowIdentity: SCWindow] = [:]
+            let isApplicationHidden = self.applicationHiddenState(target.processIdentifier)
             let captureCandidates = content.windows.compactMap { window -> PreviewCaptureWindowCandidate? in
                 guard window.owningApplication?.processID == target.processIdentifier else {
                     return nil
@@ -289,7 +313,8 @@ public final class ScreenCapturePreviewService {
                     appName: target.localizedName,
                     title: window.title ?? target.localizedName,
                     frame: window.frame,
-                    isMinimized: false
+                    isMinimized: false,
+                    isApplicationHidden: isApplicationHidden
                 )
                 guard WindowFiltering.hasNormalWindowGeometry(
                     layer: window.windowLayer,
@@ -353,12 +378,11 @@ public final class ScreenCapturePreviewService {
         let generation = shareableContentGeneration
         shareableContentLoader { [weak self] content, error in
             DispatchQueue.main.async {
-                guard let self else {
+                guard let self, generation == self.shareableContentGeneration else {
                     return
                 }
                 self.isLoadingShareableContent = false
-                let content = generation == self.shareableContentGeneration && self.hasScreenRecordingPermission()
-                    ? content : nil
+                let content = self.hasScreenRecordingPermission() ? content : nil
                 if let content, self.hasScreenRecordingPermission() {
                     self.cachedShareableContent = CachedShareableContent(
                         content: content,
@@ -555,6 +579,8 @@ public final class ScreenCapturePreviewService {
             title: info.title,
             frame: info.frame,
             isMinimized: info.isMinimized,
+            isApplicationHidden: info.isApplicationHidden,
+            isFullScreen: info.isFullScreen,
             staticPreviewImage: staticPreviewImage,
             placeholderText: placeholderText
         )

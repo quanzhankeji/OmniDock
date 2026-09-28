@@ -4,6 +4,30 @@ import XCTest
 
 @MainActor
 final class PreviewPanelControllerTests: XCTestCase {
+    func testWindowCycleSelectionScrollsToTheLastRowAndBack() throws {
+        let priorWindows = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, _, _ in }, requestWindowClose: { _, _, _, _ in }
+        )
+        defer { controller.hide() }
+        let windows = (1...70).map { previewInfo(windowID: CGWindowID($0)) }
+        controller.show(target: windowCycleTarget(), windows: windows, message: nil)
+        let panel = try XCTUnwrap(NSApp.windows.first { !priorWindows.contains(ObjectIdentifier($0)) })
+        let scroll = try XCTUnwrap(panel.contentView?.subviews.compactMap { $0 as? NSScrollView }.first)
+        let document = try XCTUnwrap(scroll.documentView)
+        let grid = try XCTUnwrap(document.subviews.compactMap { $0 as? NSGridView }.first)
+        XCTAssertEqual(controller.windowCycleColumnCount, grid.numberOfColumns)
+        panel.contentView?.layoutSubtreeIfNeeded()
+
+        for index in [windows.count - 1, 0] {
+            controller.setSelectedWindow(windows[index])
+            let tile = try XCTUnwrap(grid.cell(atColumnIndex: index % grid.numberOfColumns,
+                                               rowIndex: index / grid.numberOfColumns).contentView)
+            let frame = tile.convert(tile.bounds, to: document)
+            XCTAssertTrue(scroll.contentView.bounds.insetBy(dx: -1, dy: -1).contains(frame))
+        }
+    }
+
     func testMetadataOnlyPanelFitsApplicationIdentityOnFirstPresentationAndReuse() throws {
         let info = previewInfo()
         let metadata = PreviewWindowInfo(
@@ -17,13 +41,15 @@ final class PreviewPanelControllerTests: XCTestCase {
         defer { controller.hide() }
         for target in [dockTarget(), commandTabTarget(), windowCycleTarget()] {
             controller.show(target: target, windows: [metadata], message: nil)
-            XCTAssertEqual(try XCTUnwrap(controller.frame).height, 174 + PreviewLayoutCalculator.margin * 2, accuracy: 1)
+            XCTAssertEqual(try XCTUnwrap(controller.frame).height,
+                           174 + PreviewThumbnailView.statusRowHeight + PreviewLayoutCalculator.margin * 2, accuracy: 1)
             controller.hide()
         }
 
         controller.show(target: dockTarget(), windows: [metadata], message: nil)
         controller.show(target: dockTarget(), windows: [info], message: nil)
-        XCTAssertEqual(try XCTUnwrap(controller.frame).height, 150 + PreviewLayoutCalculator.margin * 2)
+        XCTAssertEqual(try XCTUnwrap(controller.frame).height,
+                       150 + PreviewThumbnailView.statusRowHeight + PreviewLayoutCalculator.margin * 2)
     }
 
     func testIndependentSwitcherGridKeepsItsCardsForMetadataOnlyUpdates() {

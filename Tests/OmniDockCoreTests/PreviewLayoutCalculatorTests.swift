@@ -2,6 +2,33 @@ import XCTest
 @testable import OmniDockCore
 
 final class PreviewLayoutCalculatorTests: XCTestCase {
+    func testReopenedPanelsFitChangedScreenBoundsWithStaleAnchors() {
+        let screens = [
+            CGRect(x: 0, y: 0, width: 1024, height: 640),
+            CGRect(x: -1280, y: -900, width: 1280, height: 900),
+            CGRect(x: 0, y: 1080, width: 900, height: 1440)
+        ]
+        let oldAnchor = CGPoint(x: 3300, y: 1500)
+        let sizes = Array(repeating: PreviewLayoutCalculator.tileSize, count: 30)
+        for screen in screens {
+            var panels = [PreviewLayoutCalculator.centeredPanelFrame(
+                gridMetrics: PreviewLayoutCalculator.windowCycleGridMetrics(tileSizes: sizes, screenFrame: screen),
+                screenFrame: screen
+            )]
+            for orientation in [DockOrientation.bottom, .left, .right] {
+                panels.append(PreviewLayoutCalculator.panelFrame(
+                    tileSizes: sizes, anchor: oldAnchor, screenFrame: screen, orientation: orientation
+                ))
+            }
+            for frame in panels {
+                XCTAssertGreaterThanOrEqual(frame.minX, screen.minX)
+                XCTAssertGreaterThanOrEqual(frame.minY, screen.minY)
+                XCTAssertLessThanOrEqual(frame.maxX, screen.maxX)
+                XCTAssertLessThanOrEqual(frame.maxY, screen.maxY)
+            }
+        }
+    }
+
     func testPanelFrameStaysWithinScreen() {
         let screen = CGRect(x: 0, y: 0, width: 1000, height: 700)
         let frame = PreviewLayoutCalculator.panelFrame(

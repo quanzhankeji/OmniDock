@@ -71,6 +71,10 @@ https://github.com/user-attachments/assets/7f29d5c2-4206-4151-9332-691f6e9a89df
 - **Click again to hide the app:** click a running app's Dock icon to bring it forward, then click again to hide it. Hiding removes the whole app from view; it is different from minimizing one window to the Dock. Optional minimize/restore mode acts on the app's controllable normal windows.
 - **Switch between windows:** use `Option-Tab` for individual windows, or add window previews to the native `Command-Tab` app switcher.
 
+In the Option-Tab switcher, keep holding Option and use the arrow keys to navigate the grid. Return or releasing Option confirms the selection; Escape cancels. Tab and Shift-Tab still cycle forward and backward. Native Command-Tab keyboard behavior is unchanged.
+
+Preview cards keep minimized, app-hidden, and reported full-screen states visible alongside thumbnails. The display label uses the latest window position; uncertain display ownership is shown as unknown. Space membership and display/Space filtering are not available.
+
 Choose English or Simplified Chinese, light or dark appearance, or follow your system settings. Launch at login is available on macOS 13 and later.
 
 Some windows can't be captured or resized. Hidden or minimized windows may show recent static images or a text-only state. Finder Sync commands may be unavailable in File Provider-managed cloud folders. See [Support](SUPPORT.md) for setup and limits.

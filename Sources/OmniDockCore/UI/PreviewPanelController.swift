@@ -67,6 +67,8 @@ public final class PreviewPanelController {
     private var targetGeneration: UInt64 = 0
     private var focusRequestGeneration: UInt64 = 0
     private var themeObserver: NSObjectProtocol?
+    private var screenObserver: NSObjectProtocol?
+    private var previewDisplays: [PreviewDisplay] = []
 
     private var presentationHandlers: [PreviewAnchorKind: PresentationHandler] = [:]
 
@@ -119,12 +121,22 @@ public final class PreviewPanelController {
                 self?.refreshTheme()
             }
         }
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, self.panel?.isVisible == true else { return }
+                self.previewDisplays = PreviewWindowStatus.currentDisplays()
+                self.thumbnailViewsByIdentity.values.forEach { $0.updateDisplays(self.previewDisplays) }
+            }
+        }
     }
 
     deinit {
         if let themeObserver {
             NotificationCenter.default.removeObserver(themeObserver)
         }
+        if let screenObserver { NotificationCenter.default.removeObserver(screenObserver) }
     }
 
     func setPresentationHandler(
@@ -141,6 +153,7 @@ public final class PreviewPanelController {
     }
 
     public func show(target: DockAppTarget, windows: [PreviewWindowInfo], message: String?) {
+        previewDisplays = PreviewWindowStatus.currentDisplays()
         if currentTarget?.isSameDockTile(as: target) != true {
             targetGeneration &+= 1
         }
@@ -649,6 +662,10 @@ public final class PreviewPanelController {
         currentWindows.count
     }
 
+    var windowCycleColumnCount: Int {
+        gridView?.numberOfColumns ?? 1
+    }
+
     var displayedMessage: String? {
         guard messageField?.isHidden != true else {
             return nil
@@ -1000,7 +1017,8 @@ public final class PreviewPanelController {
         let tile = PreviewThumbnailView(
             info: info,
             showsApplicationIdentity: currentTarget?.previewAnchorKind == .windowCycle
-                || (info.staticPreviewImage == nil && info.placeholderText != nil)
+                || (info.staticPreviewImage == nil && info.placeholderText != nil),
+            displays: previewDisplays
         )
         tile.translatesAutoresizingMaskIntoConstraints = false
         tile.onClick = { [weak self] info in

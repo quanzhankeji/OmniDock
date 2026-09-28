@@ -97,6 +97,25 @@ struct WindowCycleSession {
         }
     }
 
+    mutating func move(_ direction: WindowCycleNavigation, columnCount: Int) {
+        guard windows.indices.contains(selectedIndex) else { return }
+        let columns = min(windows.count, max(1, columnCount))
+        let row = selectedIndex / columns
+        let column = selectedIndex % columns
+        switch direction {
+        case .left:
+            if column > 0 { selectedIndex -= 1 }
+        case .right:
+            if column < columns - 1, selectedIndex + 1 < windows.count { selectedIndex += 1 }
+        case .up:
+            if row > 0 { selectedIndex -= columns }
+        case .down:
+            if (row + 1) * columns < windows.count {
+                selectedIndex = min(selectedIndex + columns, windows.count - 1)
+            }
+        }
+    }
+
     mutating func update(_ window: PreviewWindowInfo, at index: Int) {
         guard windows.indices.contains(index) else {
             return
@@ -331,17 +350,12 @@ private let optionTabActivationEventHandler: EventHandlerUPP = { _, event, userD
     )
 }
 
-private final class WindowCycleInputMonitor {
-    enum Event {
-        case advance(WindowCycleDirection)
-        case confirm
-        case cancel
-    }
-
-    var onEvent: ((Event) -> Void)?
+private final class WindowCycleInputMonitor: WindowCycleInputMonitoring {
+    var onEvent: ((WindowCycleInputAction) -> Void)?
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
+    private var inputState = WindowCycleInputState()
 
     var isMonitoring: Bool {
         eventTap != nil
@@ -366,12 +380,14 @@ private final class WindowCycleInputMonitor {
 
         self.eventTap = eventTap
         self.runLoopSource = runLoopSource
+        inputState.begin()
         CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
         CGEvent.tapEnable(tap: eventTap, enable: true)
         return true
     }
 
     func stop() {
+        inputState.end()
         guard let eventTap else {
             return
         }
@@ -385,40 +401,18 @@ private final class WindowCycleInputMonitor {
     }
 
     fileprivate func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
-        switch type {
-        case .tapDisabledByTimeout, .tapDisabledByUserInput:
-            if let eventTap {
-                CGEvent.tapEnable(tap: eventTap, enable: true)
-            }
-            return Unmanaged.passUnretained(event)
-        case .flagsChanged:
-            if !event.flags.contains(.maskAlternate) {
-                DispatchQueue.main.async { [weak self] in
-                    self?.onEvent?(.confirm)
-                }
-            }
-            return Unmanaged.passUnretained(event)
-        case .keyDown:
-            let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-            if keyCode == Int64(kVK_Escape) {
-                DispatchQueue.main.async { [weak self] in
-                    self?.onEvent?(.cancel)
-                }
-                return nil
-            }
-            if keyCode == Int64(kVK_Tab), event.flags.contains(.maskAlternate) {
-                let direction: WindowCycleDirection = event.flags.contains(.maskShift)
-                    ? .backward
-                    : .forward
-                DispatchQueue.main.async { [weak self] in
-                    self?.onEvent?(.advance(direction))
-                }
-                return nil
-            }
-            return Unmanaged.passUnretained(event)
-        default:
+        guard let action = inputState.action(
+            type: type, keyCode: event.getIntegerValueField(.keyboardEventKeycode), flags: event.flags
+        ) else {
             return Unmanaged.passUnretained(event)
         }
+        let generation = inputState.generation
+        DispatchQueue.main.async { [weak self] in
+            // A queued key must not act on a later switcher session.
+            guard let self, self.inputState.accepts(generation: generation) else { return }
+            self.onEvent?(action)
+        }
+        return type == .keyDown ? nil : Unmanaged.passUnretained(event)
     }
 }
 
@@ -445,7 +439,16 @@ final class WindowCycleService {
     private let registrationStatus: WindowCycleRegistrationStatusStore
     private let hotkeyRegistry: WindowCycleHotkeyRegistering
     private let onSessionActivityChanged: (Bool) -> Void
-    private let inputMonitor = WindowCycleInputMonitor()
+    private let inputMonitor: WindowCycleInputMonitoring
+    private let workspaceNotificationCenter: NotificationCenter
+    private let applicationNotificationCenter: NotificationCenter
+    private lazy var workspaceMonitor = PreviewWorkspaceMonitor(
+        notificationCenter: workspaceNotificationCenter,
+        applicationNotificationCenter: applicationNotificationCenter,
+        onDisplayConfigurationChanged: { [weak self] in self?.displayConfigurationChanged() }
+    ) { [weak self] suspended in
+        self?.workspaceSuspensionChanged(suspended)
+    }
 
     private var session: WindowCycleSession?
     private var sessionTarget: DockAppTarget?
@@ -476,6 +479,9 @@ final class WindowCycleService {
         previewPanelController: PreviewPanelController,
         registrationStatus: WindowCycleRegistrationStatusStore,
         hotkeyRegistry: WindowCycleHotkeyRegistering? = nil,
+        inputMonitor: WindowCycleInputMonitoring? = nil,
+        workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
+        applicationNotificationCenter: NotificationCenter = .default,
         permissionSnapshotProvider: (() -> PermissionSnapshot)? = nil,
         onSessionActivityChanged: @escaping (Bool) -> Void = { _ in }
     ) {
@@ -488,12 +494,15 @@ final class WindowCycleService {
         self.previewPanelController = previewPanelController
         self.registrationStatus = registrationStatus
         self.hotkeyRegistry = hotkeyRegistry ?? OptionTabActivationRegistry()
+        self.inputMonitor = inputMonitor ?? WindowCycleInputMonitor()
+        self.workspaceNotificationCenter = workspaceNotificationCenter
+        self.applicationNotificationCenter = applicationNotificationCenter
         self.onSessionActivityChanged = onSessionActivityChanged
 
         self.hotkeyRegistry.onTrigger = { [weak self] direction in
             self?.handleHotkey(direction)
         }
-        inputMonitor.onEvent = { [weak self] event in
+        self.inputMonitor.onEvent = { [weak self] event in
             self?.handleInput(event)
         }
         previewPanelController.setPresentationHandler(
@@ -515,6 +524,7 @@ final class WindowCycleService {
             return
         }
         isStarted = true
+        workspaceMonitor.start()
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(settingsChanged),
@@ -533,6 +543,7 @@ final class WindowCycleService {
             return
         }
         isStarted = false
+        workspaceMonitor.stop()
         NotificationCenter.default.removeObserver(self)
         inventoryPrewarmWorkItem?.cancel()
         inventoryPrewarmWorkItem = nil
@@ -586,12 +597,30 @@ final class WindowCycleService {
     }
 
     private var canRun: Bool {
-        WindowCycleRegistrationPolicy.shouldRegister(
+        !workspaceMonitor.isSuspended && WindowCycleRegistrationPolicy.shouldRegister(
             isStarted: isStarted,
             isEnabled: settings.windowCycleEnabled,
             arePreviewsEnabled: settings.showDockPreviews,
             permissions: permissionSnapshotProvider()
         )
+    }
+
+    private func workspaceSuspensionChanged(_ suspended: Bool) {
+        if suspended {
+            previewPanelController.cancelPendingWindowFocus()
+            inventoryPrewarmWorkItem?.cancel()
+            inventoryPrewarmWorkItem = nil
+            hasPrewarmedInventory = false
+        }
+        refreshRegistration()
+    }
+
+    private func displayConfigurationChanged() {
+        previewPanelController.cancelPendingWindowFocus()
+        endSession()
+        inventoryPrewarmWorkItem?.cancel()
+        inventoryPrewarmWorkItem = nil
+        hasPrewarmedInventory = false
     }
 
     private func reconcileRegistration() {
@@ -707,7 +736,7 @@ final class WindowCycleService {
     }
 
     private func scheduleInventoryPrewarmIfNeeded() {
-        guard !hasPrewarmedInventory else {
+        guard canRun, !hasPrewarmedInventory else {
             return
         }
         hasPrewarmedInventory = true
@@ -717,7 +746,7 @@ final class WindowCycleService {
                 return
             }
             self.inventoryPrewarmWorkItem = nil
-            guard self.isStarted, self.hotkeyRegistry.isRegistered else {
+            guard self.canRun, self.hotkeyRegistry.isRegistered else {
                 self.hasPrewarmedInventory = false
                 return
             }
@@ -831,7 +860,17 @@ final class WindowCycleService {
         requestStaticPreviews(for: session, target: target, generation: sessionGeneration)
     }
 
-    private func handleInput(_ event: WindowCycleInputMonitor.Event) {
+    private func moveSession(_ direction: WindowCycleNavigation) {
+        guard var session, let target = sessionTarget else { return }
+        let previousIndex = session.selectedIndex
+        session.move(direction, columnCount: previewPanelController.windowCycleColumnCount)
+        guard session.selectedIndex != previousIndex else { return }
+        self.session = session
+        previewPanelController.setSelectedWindow(session.selectedWindow)
+        requestStaticPreviews(for: session, target: target, generation: sessionGeneration)
+    }
+
+    private func handleInput(_ event: WindowCycleInputAction) {
         guard canRun else {
             endSession()
             return
@@ -839,6 +878,8 @@ final class WindowCycleService {
         switch event {
         case let .advance(direction):
             advanceSession(direction)
+        case let .move(direction):
+            moveSession(direction)
         case .confirm:
             endSession(focusing: session?.selectedWindow)
         case .cancel:
@@ -1132,7 +1173,7 @@ final class WindowCycleService {
             removeWindow(identity)
         case let .processLaunched(processIdentifier), let .processTerminated(processIdentifier):
             removeApplication(processIdentifier)
-        case .seed, .processInvalidated, .processActivated, .windowFocused, .activeSpaceChanged:
+        case .seed, .processInvalidated, .processActivated, .windowFocused, .activeSpaceChanged, .displayConfigurationChanged:
             break
         }
     }
@@ -1213,6 +1254,8 @@ final class WindowCycleService {
             title: window.title,
             frame: window.frame,
             isMinimized: window.isMinimized,
+            isApplicationHidden: window.isApplicationHidden,
+            isFullScreen: window.isFullScreen,
             staticPreviewImage: image,
             placeholderText: placeholderText
         )

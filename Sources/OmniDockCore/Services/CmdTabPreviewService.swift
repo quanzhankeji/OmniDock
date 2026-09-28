@@ -449,6 +449,8 @@ final class CmdTabPreviewService {
             title: window.title,
             frame: window.frame,
             isMinimized: window.isMinimized,
+            isApplicationHidden: window.isApplicationHidden,
+            isFullScreen: window.isFullScreen,
             staticPreviewImage: image,
             placeholderText: placeholderText
         )

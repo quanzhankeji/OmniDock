@@ -4,6 +4,55 @@ import XCTest
 
 @MainActor
 final class DockPreviewLifecycleTests: XCTestCase {
+    func testDisplayChangeClosesDockPreviewAndCancelsPendingFocus() {
+        let applicationCenter = NotificationCenter()
+        var cancellations = 0
+        let panel = PreviewPanelController(
+            requestWindowFocus: { _, _, _, _ in XCTFail("Display changes must not focus a window") },
+            requestWindowClose: { _, _, _, _ in },
+            cancelWindowFocus: { cancellations += 1 }
+        )
+        let coordinator = makeCoordinator(panel: panel, applicationNotificationCenter: applicationCenter)
+        coordinator.start()
+        defer { coordinator.stop(); panel.hide() }
+        showPreview(panel: panel, kind: .dock)
+        let previousCancellations = cancellations
+
+        applicationCenter.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+
+        XCTAssertNil(panel.frame)
+        XCTAssertFalse(panel.hasInstalledContentView)
+        XCTAssertGreaterThan(cancellations, previousCancellations)
+        XCTAssertFalse(coordinator.isDockClickMonitoringActive)
+        XCTAssertFalse(coordinator.isDockClickMonitoringSuspended)
+    }
+
+    func testScreenSleepClosesDockPreviewAndWakeDoesNotRestoreIt() {
+        let center = NotificationCenter()
+        let panel = PreviewPanelController(
+            requestWindowFocus: { _, _, _, _ in XCTFail("Suspension must not focus a window") },
+            requestWindowClose: { _, _, _, _ in }
+        )
+        let coordinator = makeCoordinator(panel: panel, workspaceNotificationCenter: center)
+        coordinator.start()
+        defer { coordinator.stop(); panel.hide() }
+        showPreview(panel: panel, kind: .dock)
+        XCTAssertNotNil(panel.frame)
+
+        center.post(name: NSWorkspace.screensDidSleepNotification, object: nil)
+
+        XCTAssertNil(panel.frame)
+        XCTAssertFalse(panel.hasInstalledContentView)
+        XCTAssertFalse(coordinator.isDockClickMonitoringActive)
+        XCTAssertTrue(coordinator.isDockClickMonitoringSuspended)
+        coordinator.refreshForSettingsChange()
+        coordinator.refreshPermissionsAndMonitors()
+        center.post(name: NSWorkspace.screensDidWakeNotification, object: nil)
+        XCTAssertFalse(coordinator.isDockClickMonitoringSuspended)
+        XCTAssertNil(panel.frame)
+        XCTAssertFalse(panel.hasInstalledContentView)
+    }
+
     func testStoppingDockServiceClosesItsPanelAndReleasesContent() {
         let panel = PreviewPanelController(
             requestWindowFocus: { _, _, _, _ in }, requestWindowClose: { _, _, _, _ in }
@@ -56,18 +105,27 @@ final class DockPreviewLifecycleTests: XCTestCase {
         )
     }
 
-    private func makeCoordinator(panel: PreviewPanelController) -> DockInteractionCoordinator {
+    private func makeCoordinator(
+        panel: PreviewPanelController,
+        workspaceNotificationCenter: NotificationCenter = NotificationCenter(),
+        applicationNotificationCenter: NotificationCenter = NotificationCenter()
+    ) -> DockInteractionCoordinator {
         let name = "DockPreviewLifecycleTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         addTeardownBlock { defaults.removePersistentDomain(forName: name) }
         let permissionService = PermissionService()
+        let settings = SettingsStore(defaults: defaults)
+        settings.toggleAppVisibilityOnDockClick = false
+        settings.showDockPreviews = false
         return DockInteractionCoordinator(
-            settings: SettingsStore(defaults: defaults),
+            settings: settings,
             permissionService: permissionService,
             dockHitTester: DockHitTester(permissionService: permissionService),
             windowControlService: WindowControlService(),
             previewService: ScreenCapturePreviewService(),
-            previewPanelController: panel
+            previewPanelController: panel,
+            workspaceNotificationCenter: workspaceNotificationCenter,
+            applicationNotificationCenter: applicationNotificationCenter
         )
     }
 }

@@ -1,7 +1,73 @@
+import AppKit
 import XCTest
 @testable import OmniDockCore
 
 final class CmdTabPreviewTests: XCTestCase {
+    @MainActor
+    func testDisplayChangeEndsCommandTabWithoutRestoringTheOldSelection() throws {
+        let applicationCenter = NotificationCenter()
+        let provider = TestWorkspaceSwitcherProvider()
+        let observer = CmdTabPreviewObserver(
+            isFeatureEnabled: { true }, processSwitcher: provider,
+            workspaceNotificationCenter: NotificationCenter(), applicationNotificationCenter: applicationCenter
+        )
+        var ended = 0
+        observer.onInteractionEnded = { ended += 1 }
+        let event = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+            windowNumber: 0, context: nil, characters: "\t", charactersIgnoringModifiers: "\t",
+            isARepeat: false, keyCode: 48
+        ))
+        observer.start()
+        defer { observer.stop() }
+        observer.handle(event)
+        XCTAssertTrue(provider.isObserving)
+
+        applicationCenter.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+
+        XCTAssertEqual(ended, 1)
+        XCTAssertFalse(provider.isObserving)
+        provider.onSelectionChanged?()
+        XCTAssertEqual(ended, 1)
+        observer.handle(event)
+        XCTAssertTrue(provider.isObserving)
+    }
+
+    @MainActor
+    func testWorkspaceSuspensionEndsCommandTabAndRequiresNewInputAfterResume() throws {
+        let center = NotificationCenter()
+        let provider = TestWorkspaceSwitcherProvider()
+        let observer = CmdTabPreviewObserver(
+            isFeatureEnabled: { true }, processSwitcher: provider, workspaceNotificationCenter: center
+        )
+        var started = 0
+        var ended = 0
+        observer.onInteractionBegan = { started += 1 }
+        observer.onInteractionEnded = { ended += 1 }
+        let event = try XCTUnwrap(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+            windowNumber: 0, context: nil, characters: "\t", charactersIgnoringModifiers: "\t",
+            isARepeat: false, keyCode: 48
+        ))
+        observer.start()
+        defer { observer.stop() }
+        observer.handle(event)
+        XCTAssertEqual(started, 1)
+        XCTAssertTrue(provider.isObserving)
+
+        center.post(name: NSWorkspace.sessionDidResignActiveNotification, object: nil)
+
+        XCTAssertEqual(ended, 1)
+        XCTAssertFalse(provider.isObserving)
+        observer.handle(event)
+        XCTAssertEqual(started, 1)
+        center.post(name: NSWorkspace.sessionDidBecomeActiveNotification, object: nil)
+        XCTAssertEqual(started, 1)
+        observer.handle(event)
+        XCTAssertEqual(started, 2)
+        XCTAssertTrue(provider.isObserving)
+    }
+
     func testApplicationResolutionPrefersBundleIdentifier() {
         let first = candidate(pid: 101, bundleIdentifier: "com.example.first", name: "Shared Name")
         let second = candidate(pid: 202, bundleIdentifier: "com.example.second", name: "Shared Name")
@@ -174,4 +240,14 @@ final class CmdTabPreviewTests: XCTestCase {
             targetIdentifier: "command-tab:101"
         )
     }
+}
+
+@MainActor
+private final class TestWorkspaceSwitcherProvider: CmdTabProcessSwitcherProviding {
+    var onSelectionChanged: (() -> Void)?
+    var onDestroyed: (() -> Void)?
+    private(set) var isObserving = false
+    func beginObserving() -> Bool { isObserving = true; return true }
+    func currentSelection() -> CmdTabSwitcherSelection? { nil }
+    func stopObserving() { isObserving = false }
 }

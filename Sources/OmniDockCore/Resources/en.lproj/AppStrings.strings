@@ -309,6 +309,11 @@
 "previewFocusFailed" = "Could not confirm this window is in front. Please try again.";
 "previewHiddenNoStatic" = "Hidden\nNo static preview";
 "previewMinimizedClickRestore" = "Minimized\nClick to restore";
+"previewStateMinimized" = "Minimized";
+"previewStateHidden" = "App hidden";
+"previewStateFullScreen" = "Full screen";
+"previewDisplay" = "Display: %@";
+"previewDisplayUnknown" = "Display unknown";
 "previewCloseWindow" = "Close window";
 "previewQuitApplication" = "Quit application";
 "previewQuitFailed" = "Unable to quit this application";

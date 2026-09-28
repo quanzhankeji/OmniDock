@@ -5,6 +5,75 @@ import XCTest
 
 @MainActor
 final class ScreenCapturePermissionTests: XCTestCase {
+    func testClearingGeometryAllowsFreshQueryAndRejectsTheOldReply() async {
+        var replies: [(SCShareableContent?, Error?) -> Void] = []
+        let service = ScreenCapturePreviewService(
+            windowInventory: nil, hasScreenRecordingPermission: { true }, accessibilityWindows: { _ in [] },
+            shareableContentLoader: { replies.append($0) }
+        )
+        var cancelledCount = 0
+        var freshCount = 0
+        let freshReply = expectation(description: "Fresh display query completes")
+        service.loadWindows(for: target) { _ in cancelledCount += 1 }
+        XCTAssertEqual(replies.count, 1)
+
+        service.clearAllCachedSnapshots()
+        XCTAssertEqual(cancelledCount, 1)
+        service.loadWindows(for: target) { _ in freshCount += 1; freshReply.fulfill() }
+        XCTAssertEqual(replies.count, 2)
+        guard replies.count == 2 else { return }
+
+        replies[0](nil, NSError(domain: "OldDisplayQuery", code: 1))
+        let oldReplyDrained = expectation(description: "Old display reply drained")
+        DispatchQueue.main.async { oldReplyDrained.fulfill() }
+        await fulfillment(of: [oldReplyDrained], timeout: 1)
+        XCTAssertEqual(cancelledCount, 1)
+        XCTAssertEqual(freshCount, 0)
+
+        replies[1](nil, nil)
+        await fulfillment(of: [freshReply], timeout: 1)
+        XCTAssertEqual(cancelledCount, 1)
+        XCTAssertEqual(freshCount, 1)
+    }
+
+    func testMetadataOnlyNavigationKeepsHiddenAndFullScreenState() throws {
+        let info = PreviewWindowInfo(id: "document", windowID: 7, processIdentifier: 42, appName: "Editor",
+                                     title: "Document", frame: CGRect(x: 0, y: 0, width: 800, height: 600),
+                                     isMinimized: false, isApplicationHidden: true, isFullScreen: true)
+        let service = ScreenCapturePreviewService(
+            windowInventory: nil, hasScreenRecordingPermission: { false }, accessibilityWindows: { _ in [info] },
+            shareableContentLoader: { _ in XCTFail("Metadata navigation must not request capture") }
+        )
+        var result: PreviewWindowSnapshot?
+        service.loadWindows(for: target) { result = $0 }
+        let window = try XCTUnwrap(result?.windows.first)
+        XCTAssertEqual(window.isApplicationHidden, true)
+        XCTAssertEqual(window.isFullScreen, true)
+        XCTAssertNil(window.staticPreviewImage)
+    }
+
+    func testCachedSnapshotsRefreshApplicationVisibilityWithoutLosingWindowState() throws {
+        var isHidden: Bool? = true
+        let service = ScreenCapturePreviewService(
+            windowInventory: nil, hasScreenRecordingPermission: { true }, applicationHiddenState: { _ in isHidden }
+        )
+        let info = PreviewWindowInfo(
+            id: "cached", windowID: 7, processIdentifier: 42,
+            appName: "Editor", title: "Document", frame: CGRect(x: 0, y: 0, width: 800, height: 600),
+            isMinimized: true, isApplicationHidden: false, isFullScreen: true,
+            staticPreviewImage: NSImage(size: NSSize(width: 30, height: 30))
+        )
+        service.storeCachedSnapshotWindows([info], for: 42)
+        for state: Bool? in [true, false, nil] {
+            isHidden = state
+            let refreshed = try XCTUnwrap(service.cachedSnapshotWindows(for: 42).first)
+            XCTAssertEqual(refreshed.isApplicationHidden, state)
+            XCTAssertTrue(refreshed.isMinimized)
+            XCTAssertEqual(refreshed.isFullScreen, true)
+            XCTAssertTrue(refreshed.staticPreviewImage === info.staticPreviewImage)
+        }
+    }
+
     func testMissingPermissionUsesMetadataWithoutCallingScreenCaptureKitOrReusingImages() throws {
         let inventory = WindowInventoryService()
         let info = window(image: NSImage(size: NSSize(width: 30, height: 30)))

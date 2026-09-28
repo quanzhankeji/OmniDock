@@ -4,6 +4,297 @@ import XCTest
 
 @MainActor
 final class WindowCycleTests: XCTestCase {
+    func testDisplayChangeCancelsSelectionWithoutUnregisteringOrFocusing() {
+        let applicationCenter = NotificationCenter()
+        let settings = configuredSettings()
+        let registry = TestHotkeyRegistry()
+        let monitor = TestWindowCycleInputMonitor()
+        let inventory = WindowInventoryService()
+        let panel = PreviewPanelController(
+            requestWindowFocus: { _, _, _, _ in XCTFail("Display changes must not confirm a selection") },
+            requestWindowClose: { _, _, _, _ in }
+        )
+        let service = makeService(
+            settings: settings, registry: registry, panel: panel, inventory: inventory,
+            inputMonitor: monitor, applicationNotificationCenter: applicationCenter,
+            permissions: { PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: true) }
+        )
+        service.start()
+        defer { service.stop(); panel.hide() }
+        seedKeyboardWindows(in: inventory)
+        registry.onTrigger?(.forward)
+        XCTAssertTrue(service.isSessionActive)
+
+        applicationCenter.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+
+        XCTAssertFalse(service.isSessionActive)
+        XCTAssertFalse(service.isInputMonitoring)
+        XCTAssertNil(panel.frame)
+        XCTAssertTrue(service.isHotkeyRegistered)
+        XCTAssertTrue(settings.windowCycleEnabled)
+        monitor.onEvent?(.confirm)
+        seedKeyboardWindows(in: inventory)
+        registry.onTrigger?(.forward)
+        XCTAssertTrue(service.isSessionActive)
+    }
+
+    func testDisplayChangeWhileAwaitingInventoryRejectsDelayedPresentation() async {
+        let applicationCenter = NotificationCenter()
+        let registry = TestHotkeyRegistry()
+        let monitor = TestWindowCycleInputMonitor()
+        let inventory = WindowInventoryService()
+        let panel = PreviewPanelController(
+            requestWindowFocus: { _, _, _, _ in XCTFail("Stale inventory must not focus a window") },
+            requestWindowClose: { _, _, _, _ in }
+        )
+        let service = makeService(
+            settings: configuredSettings(), registry: registry, panel: panel, inventory: inventory,
+            inputMonitor: monitor, applicationNotificationCenter: applicationCenter,
+            permissions: { PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: true) }
+        )
+        service.start()
+        defer { service.stop(); panel.hide() }
+        registry.onTrigger?(.forward)
+        XCTAssertTrue(service.isInputMonitoring)
+        applicationCenter.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        seedKeyboardWindows(in: inventory)
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertFalse(service.isInputMonitoring)
+        XCTAssertFalse(service.isSessionActive)
+        XCTAssertNil(panel.frame)
+    }
+
+    func testWorkspaceResumeRespectsDisabledSettingsAndRevokedPermissions() {
+        for disableSetting in [true, false] {
+            let settings = configuredSettings()
+            let registry = TestHotkeyRegistry()
+            let center = NotificationCenter()
+            let applicationCenter = NotificationCenter()
+            var permissions = PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: true)
+            let service = makeService(settings: settings, registry: registry,
+                                      workspaceNotificationCenter: center, applicationNotificationCenter: applicationCenter,
+                                      permissions: { permissions })
+            service.start()
+            defer { service.stop() }
+            center.post(name: NSWorkspace.willSleepNotification, object: nil)
+            center.post(name: NSWorkspace.sessionDidResignActiveNotification, object: nil)
+            if disableSetting {
+                settings.windowCycleEnabled = false
+            } else {
+                permissions = PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: false)
+                NotificationCenter.default.post(name: PermissionService.changedNotification, object: nil)
+            }
+            center.post(name: NSWorkspace.didWakeNotification, object: nil)
+            applicationCenter.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+            XCTAssertFalse(service.isHotkeyRegistered)
+            center.post(name: NSWorkspace.sessionDidBecomeActiveNotification, object: nil)
+            applicationCenter.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+            XCTAssertFalse(service.isHotkeyRegistered)
+            XCTAssertEqual(settings.windowCycleEnabled, !disableSetting)
+            registry.onTrigger?(.forward)
+            XCTAssertFalse(service.isSessionActive)
+            XCTAssertFalse(service.isInputMonitoring)
+            service.stop()
+            let registrations = registry.registerCallCount
+            center.post(name: NSWorkspace.willSleepNotification, object: nil)
+            center.post(name: NSWorkspace.didWakeNotification, object: nil)
+            XCTAssertEqual(registry.registerCallCount, registrations)
+        }
+    }
+
+    func testSleepWhileAwaitingInventoryPreventsDelayedPresentation() async {
+        let settings = configuredSettings()
+        let registry = TestHotkeyRegistry()
+        let monitor = TestWindowCycleInputMonitor()
+        let center = NotificationCenter()
+        let inventory = WindowInventoryService()
+        let panel = PreviewPanelController(
+            requestWindowFocus: { _, _, _, _ in XCTFail("Cancelled inventory must not focus a window") },
+            requestWindowClose: { _, _, _, _ in }
+        )
+        let service = makeService(
+            settings: settings, registry: registry, panel: panel, inventory: inventory,
+            inputMonitor: monitor, workspaceNotificationCenter: center,
+            permissions: { PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: true) }
+        )
+        service.start()
+        defer { service.stop(); panel.hide() }
+        registry.onTrigger?(.forward)
+        XCTAssertTrue(service.isInputMonitoring)
+        XCTAssertFalse(service.isSessionActive)
+        center.post(name: NSWorkspace.willSleepNotification, object: nil)
+        seedKeyboardWindows(in: inventory)
+        for _ in 0..<10 { await Task.yield() }
+        XCTAssertFalse(service.isInputMonitoring)
+        XCTAssertFalse(service.isSessionActive)
+        XCTAssertEqual(panel.displayedWindowCount, 0)
+    }
+
+    func testWorkspaceSleepCancelsAndWakeDoesNotRestoreSelection() {
+        let settings = configuredSettings()
+        let registry = TestHotkeyRegistry()
+        let monitor = TestWindowCycleInputMonitor()
+        let center = NotificationCenter()
+        let inventory = WindowInventoryService()
+        let panel = PreviewPanelController(
+            requestWindowFocus: { _, _, _, _ in XCTFail("Sleep must cancel, not confirm the selection") },
+            requestWindowClose: { _, _, _, _ in }
+        )
+        let service = makeService(
+            settings: settings, registry: registry, panel: panel, inventory: inventory,
+            inputMonitor: monitor, workspaceNotificationCenter: center,
+            permissions: { PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: true) }
+        )
+        defer { service.stop(); panel.hide() }
+        service.start()
+        seedKeyboardWindows(in: inventory)
+        registry.onTrigger?(.forward)
+        XCTAssertTrue(service.isSessionActive)
+
+        center.post(name: NSWorkspace.willSleepNotification, object: nil)
+
+        XCTAssertFalse(service.isSessionActive)
+        XCTAssertFalse(service.isInputMonitoring)
+        XCTAssertFalse(service.isHotkeyRegistered)
+        XCTAssertEqual(panel.displayedWindowCount, 0)
+        XCTAssertTrue(settings.windowCycleEnabled)
+        service.refreshRegistration()
+        registry.onTrigger?(.forward)
+        monitor.onEvent?(.confirm)
+        XCTAssertFalse(service.isHotkeyRegistered)
+        XCTAssertFalse(service.isSessionActive)
+
+        center.post(name: NSWorkspace.didWakeNotification, object: nil)
+
+        XCTAssertTrue(service.isHotkeyRegistered)
+        XCTAssertFalse(service.isSessionActive)
+        XCTAssertFalse(service.isInputMonitoring)
+        XCTAssertEqual(panel.displayedWindowCount, 0)
+        seedKeyboardWindows(in: inventory)
+        registry.onTrigger?(.forward)
+        XCTAssertTrue(service.isSessionActive)
+    }
+
+    func testCancellationDisablingAndPermissionLossNeverFocusAWindow() {
+        for exit in 0..<3 {
+            let settings = configuredSettings()
+            let registry = TestHotkeyRegistry()
+            let monitor = TestWindowCycleInputMonitor()
+            let inventory = WindowInventoryService()
+            var permissions = PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: true)
+            let panel = PreviewPanelController(
+                requestWindowFocus: { _, _, _, _ in XCTFail("Cancelling must not focus a window") },
+                requestWindowClose: { _, _, _, _ in }
+            )
+            let service = makeService(
+                settings: settings, registry: registry, panel: panel, inventory: inventory, inputMonitor: monitor,
+                permissions: { permissions }
+            )
+            defer { service.stop(); panel.hide() }
+            service.start()
+            seedKeyboardWindows(in: inventory)
+            registry.onTrigger?(.forward)
+            XCTAssertTrue(service.isSessionActive)
+            monitor.onEvent?(.move(.down))
+            switch exit {
+            case 0: monitor.onEvent?(.cancel)
+            case 1: settings.windowCycleEnabled = false
+            default:
+                permissions = PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: false)
+                NotificationCenter.default.post(name: PermissionService.changedNotification, object: nil)
+            }
+            XCTAssertFalse(service.isSessionActive)
+            XCTAssertFalse(service.isInputMonitoring)
+            XCTAssertEqual(panel.displayedWindowCount, 0)
+            monitor.onEvent?(.confirm)
+        }
+    }
+
+    func testArrowNavigationStaysValidForEmptyShortAndSingleColumnGrids() {
+        for count in 0...20 {
+            let windows = (0..<count).map { window(id: CGWindowID($0 + 1), processIdentifier: 101) }
+            for columns in 1...7 {
+                var session = WindowCycleSession(windows: windows, frontmostProcessIdentifier: nil, initialDirection: .forward)
+                for direction in [WindowCycleNavigation.down, .right, .up, .left] {
+                    for _ in 0...count {
+                        session.move(direction, columnCount: columns)
+                        if windows.isEmpty {
+                            XCTAssertNil(session.selectedWindow)
+                        } else {
+                            XCTAssertTrue(windows.indices.contains(session.selectedIndex))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func testKeyboardNavigationConfirmsTheSelectedWindowAndTearsDownTheSession() {
+        let settings = configuredSettings()
+        let registry = TestHotkeyRegistry()
+        let monitor = TestWindowCycleInputMonitor()
+        let inventory = WindowInventoryService()
+        var focusedIDs: [CGWindowID] = []
+        let panel = PreviewPanelController(
+            requestWindowFocus: { _, _, windowID, completion in
+                if let windowID { focusedIDs.append(windowID) }
+                completion(.focused)
+            }, requestWindowClose: { _, _, _, _ in }
+        )
+        let service = makeService(
+            settings: settings, registry: registry, panel: panel, inventory: inventory, inputMonitor: monitor,
+            permissions: { PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: true) }
+        )
+        defer { service.stop(); panel.hide() }
+        service.start()
+        seedKeyboardWindows(in: inventory)
+        registry.onTrigger?(.forward)
+        XCTAssertTrue(service.isSessionActive)
+        XCTAssertTrue(service.isInputMonitoring)
+        let columns = panel.windowCycleColumnCount
+        XCTAssertGreaterThan(columns, 1)
+
+        monitor.onEvent?(.move(.down))
+        monitor.onEvent?(.move(.right))
+        monitor.onEvent?(.confirm)
+
+        XCTAssertEqual(focusedIDs, [CGWindowID(columns + 2)])
+        XCTAssertFalse(service.isSessionActive)
+        XCTAssertFalse(service.isInputMonitoring)
+        XCTAssertEqual(panel.displayedWindowCount, 0)
+        monitor.onEvent?(.confirm)
+        XCTAssertEqual(focusedIDs.count, 1)
+    }
+
+    func testArrowNavigationUsesGridRowsAndStopsAtEdges() {
+        var session = WindowCycleSession(
+            windows: (1...8).map { window(id: CGWindowID($0), processIdentifier: 101) },
+            frontmostProcessIdentifier: nil, initialDirection: .forward
+        )
+        session.move(.right, columnCount: 3)
+        XCTAssertEqual(session.selectedIndex, 1)
+        session.move(.down, columnCount: 3)
+        XCTAssertEqual(session.selectedIndex, 4)
+        session.move(.right, columnCount: 3)
+        XCTAssertEqual(session.selectedIndex, 5)
+        session.move(.right, columnCount: 3)
+        XCTAssertEqual(session.selectedIndex, 5)
+        session.move(.down, columnCount: 3)
+        XCTAssertEqual(session.selectedIndex, 7)
+        session.move(.down, columnCount: 3)
+        XCTAssertEqual(session.selectedIndex, 7)
+        session.move(.up, columnCount: 3)
+        XCTAssertEqual(session.selectedIndex, 4)
+        session.move(.left, columnCount: 3)
+        session.move(.left, columnCount: 3)
+        XCTAssertEqual(session.selectedIndex, 3)
+        session.move(.up, columnCount: 3)
+        session.move(.up, columnCount: 3)
+        XCTAssertEqual(session.selectedIndex, 0)
+        session.advance(.backward)
+        XCTAssertEqual(session.selectedIndex, 7, "Tab continues to wrap even though arrows stop at edges")
+    }
+
     func testSettingsDefaultAndPersistenceKeepWindowCycleDisabled() {
         let defaults = isolatedDefaults()
         let store = SettingsStore(defaults: defaults, livePreviewLimitProvider: { 8 })
@@ -339,11 +630,15 @@ final class WindowCycleTests: XCTestCase {
         registry: TestHotkeyRegistry,
         status: WindowCycleRegistrationStatusStore? = nil,
         panel: PreviewPanelController? = nil,
+        inventory: WindowInventoryService? = nil,
+        inputMonitor: WindowCycleInputMonitoring? = nil,
+        workspaceNotificationCenter: NotificationCenter = NotificationCenter(),
+        applicationNotificationCenter: NotificationCenter = NotificationCenter(),
         permissions: @escaping () -> PermissionSnapshot = {
             PermissionSnapshot(accessibility: true, screenRecording: true, inputMonitoring: true)
         }
     ) -> WindowCycleService {
-        let windowInventory = WindowInventoryService()
+        let windowInventory = inventory ?? WindowInventoryService()
         let previewService = ScreenCapturePreviewService(windowInventory: windowInventory)
         let windowControlService = WindowControlService()
         return WindowCycleService(
@@ -354,8 +649,19 @@ final class WindowCycleTests: XCTestCase {
             previewPanelController: panel ?? PreviewPanelController(windowControlService: windowControlService),
             registrationStatus: status ?? WindowCycleRegistrationStatusStore(),
             hotkeyRegistry: registry,
+            inputMonitor: inputMonitor,
+            workspaceNotificationCenter: workspaceNotificationCenter,
+            applicationNotificationCenter: applicationNotificationCenter,
             permissionSnapshotProvider: permissions
         )
+    }
+
+    private func seedKeyboardWindows(in inventory: WindowInventoryService) {
+        let processIdentifier = pid_t.max
+        let target = DockAppTarget(processIdentifier: processIdentifier, bundleIdentifier: "com.example.Editor",
+                                   localizedName: "Editor", dockElementTitle: "Editor", hitPoint: .zero)
+        let windows = (1...30).map { window(id: CGWindowID($0), processIdentifier: processIdentifier) }
+        inventory.seed(PreviewWindowSnapshot(windows: windows, captureWindows: [:]), for: target)
     }
 
     private func window(id: CGWindowID, processIdentifier: pid_t) -> PreviewWindowInfo {
@@ -376,6 +682,16 @@ final class WindowCycleTests: XCTestCase {
         defaults.removePersistentDomain(forName: name)
         return defaults
     }
+}
+
+private final class TestWindowCycleInputMonitor: WindowCycleInputMonitoring {
+    var onEvent: ((WindowCycleInputAction) -> Void)?
+    private(set) var isMonitoring = false
+    func start() -> Bool {
+        isMonitoring = true
+        return true
+    }
+    func stop() { isMonitoring = false }
 }
 
 @MainActor

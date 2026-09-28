@@ -9,6 +9,8 @@ public final class PreviewWindowInfo: Identifiable {
     public let title: String
     public let frame: CGRect
     public let isMinimized: Bool
+    public let isApplicationHidden: Bool?
+    public let isFullScreen: Bool?
     public let staticPreviewImage: NSImage?
     public let placeholderText: String?
 
@@ -20,6 +22,8 @@ public final class PreviewWindowInfo: Identifiable {
         title: String,
         frame: CGRect,
         isMinimized: Bool,
+        isApplicationHidden: Bool? = nil,
+        isFullScreen: Bool? = nil,
         staticPreviewImage: NSImage? = nil,
         placeholderText: String? = nil
     ) {
@@ -30,6 +34,8 @@ public final class PreviewWindowInfo: Identifiable {
         self.title = title
         self.frame = frame
         self.isMinimized = isMinimized
+        self.isApplicationHidden = isApplicationHidden
+        self.isFullScreen = isFullScreen
         self.staticPreviewImage = staticPreviewImage
         self.placeholderText = placeholderText
     }

@@ -3,6 +3,72 @@ import XCTest
 @testable import OmniDockCore
 
 final class PreviewThumbnailViewTests: XCTestCase {
+    func testStatusRowFitsNarrowCardsAndUpdatesWhenADisplayDisappears() throws {
+        let name = String(repeating: "External Display ", count: 5)
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            for showsIdentity in [false, true] {
+                let info = previewInfo()
+                let tile = PreviewThumbnailView(info: info, showsApplicationIdentity: showsIdentity,
+                                                displays: [PreviewDisplay(name: name, frame: info.frame)])
+                tile.appearance = NSAppearance(named: appearance)
+                tile.frame = CGRect(x: 0, y: 0, width: PreviewLayoutCalculator.minTileWidth,
+                                    height: tile.preferredTileSize.height)
+                tile.layoutSubtreeIfNeeded()
+                let labels = tile.subviews.compactMap { $0 as? NSTextField }
+                let status = try XCTUnwrap(labels.first { $0.stringValue == AppStrings.format(.previewDisplay, name) })
+                let title = try XCTUnwrap(labels.first { $0.stringValue == info.title })
+                XCTAssertTrue(tile.bounds.contains(status.frame))
+                XCTAssertLessThanOrEqual(status.frame.maxY, title.frame.minY)
+                XCTAssertEqual(status.lineBreakMode, .byTruncatingTail)
+                XCTAssertEqual(status.toolTip, AppStrings.format(.previewDisplay, name))
+
+                tile.updateDisplays([])
+                XCTAssertEqual(status.stringValue, AppStrings.text(.previewDisplayUnknown))
+            }
+        }
+    }
+
+    func testHiddenAndMinimizedStateAreIndependentAndRefreshOnReuse() {
+        let base = previewInfo()
+        let tile = PreviewThumbnailView(info: PreviewWindowInfo(
+            id: base.id, windowID: base.windowID, processIdentifier: base.processIdentifier,
+            appName: base.appName, title: base.title, frame: base.frame,
+            isMinimized: true, isApplicationHidden: true, isFullScreen: false
+        ))
+        let originalSize = tile.preferredTileSize
+        func visibleText() -> String {
+            tile.subviews.compactMap { $0 as? NSTextField }.filter { !$0.isHidden }
+                .map(\.stringValue).joined(separator: "\n")
+        }
+        XCTAssertTrue(visibleText().contains(AppStrings.text(.previewStateHidden)))
+        XCTAssertTrue(visibleText().contains(AppStrings.text(.previewStateMinimized)))
+        XCTAssertFalse(visibleText().contains(AppStrings.text(.previewStateFullScreen)))
+
+        tile.update(info: PreviewWindowInfo(
+            id: base.id, windowID: base.windowID, processIdentifier: base.processIdentifier,
+            appName: base.appName, title: base.title, frame: base.frame,
+            isMinimized: false, isApplicationHidden: false, isFullScreen: true
+        ))
+        XCTAssertFalse(visibleText().contains(AppStrings.text(.previewStateHidden)))
+        XCTAssertFalse(visibleText().contains(AppStrings.text(.previewStateMinimized)))
+        XCTAssertTrue(visibleText().contains(AppStrings.text(.previewStateFullScreen)))
+        XCTAssertEqual(tile.preferredTileSize, originalSize)
+    }
+
+    func testMinimizedStatusRemainsVisibleWithACachedThumbnail() {
+        let base = previewInfo()
+        let tile = PreviewThumbnailView(info: PreviewWindowInfo(
+            id: base.id, windowID: base.windowID, processIdentifier: base.processIdentifier,
+            appName: base.appName, title: base.title, frame: base.frame, isMinimized: true,
+            staticPreviewImage: NSImage(size: CGSize(width: 800, height: 500))
+        ))
+        let minimized = AppStrings.text(.previewMinimizedClickRestore).components(separatedBy: "\n")[0]
+
+        XCTAssertTrue(tile.subviews.compactMap { $0 as? NSTextField }.contains {
+            !$0.isHidden && $0.stringValue.contains(minimized)
+        })
+    }
+
     func testMetadataOnlyUpdateDiscardsPriorPreviewImage() {
         let info = previewInfo()
         let tile = PreviewThumbnailView(info: info, showsApplicationIdentity: true)

@@ -239,6 +239,21 @@ final class DockClickGesturePolicyTests: XCTestCase {
         XCTAssertFalse(stateMachine.hasPendingGesture)
     }
 
+    func testDisplayChangeDiscardsPendingClickWithoutReplayingOldCoordinates() throws {
+        var stateMachine = DockClickGestureStateMachine()
+        let target = gestureTarget(processIdentifier: 101, tile: "primary")
+        let down = stateMachine.mouseDown(target: target, point: CGPoint(x: 20, y: 20), timestamp: 1)
+        let sequence = try XCTUnwrap(down.scheduleLongPressSequence)
+
+        let cancellation = stateMachine.cancelPendingGesture(replayMouseDown: false)
+
+        XCTAssertNil(cancellation.replayMouseDownSequence)
+        XCTAssertEqual(cancellation.discardMouseDownSequence, sequence)
+        XCTAssertFalse(stateMachine.hasPendingGesture)
+        XCTAssertNil(stateMachine.longPressElapsed(sequence: sequence).replayMouseDownSequence)
+        XCTAssertNil(stateMachine.mouseUp(target: target, timestamp: 1.1).actionTarget)
+    }
+
     func testCancellationAfterLongPressDoesNotReplayMouseDownTwice() throws {
         var stateMachine = DockClickGestureStateMachine()
         let down = stateMachine.mouseDown(

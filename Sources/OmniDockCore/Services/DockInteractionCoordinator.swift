@@ -147,8 +147,19 @@ public final class DockInteractionCoordinator {
     private let windowControlService: WindowControlService
     private let previewService: ScreenCapturePreviewService
     private let previewPanelController: PreviewPanelController
+    private let workspaceNotificationCenter: NotificationCenter
+    private let applicationNotificationCenter: NotificationCenter
+    private lazy var workspaceMonitor = PreviewWorkspaceMonitor(
+        notificationCenter: workspaceNotificationCenter,
+        applicationNotificationCenter: applicationNotificationCenter,
+        onDisplayConfigurationChanged: { [weak self] in self?.displayConfigurationChanged() }
+    ) { [weak self] suspended in
+        self?.workspaceSuspensionChanged(suspended)
+    }
+    private var isStarted = false
 
     private var clickEventTap: DockClickEventTap?
+    private var clickMonitorGeneration: UInt64 = 0
     private var hoverTimer: Timer?
     private var hoverTimerInterval: TimeInterval?
     private var permissionTimer: Timer?
@@ -182,13 +193,19 @@ public final class DockInteractionCoordinator {
         clickEventTap != nil
     }
 
+    public var isDockClickMonitoringSuspended: Bool {
+        !isStarted || workspaceMonitor.isSuspended || isClickMonitoringSuspended
+    }
+
     public init(
         settings: SettingsStore,
         permissionService: PermissionService,
         dockHitTester: DockHitTester,
         windowControlService: WindowControlService,
         previewService: ScreenCapturePreviewService,
-        previewPanelController: PreviewPanelController
+        previewPanelController: PreviewPanelController,
+        workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
+        applicationNotificationCenter: NotificationCenter = .default
     ) {
         self.settings = settings
         self.permissionService = permissionService
@@ -196,6 +213,8 @@ public final class DockInteractionCoordinator {
         self.windowControlService = windowControlService
         self.previewService = previewService
         self.previewPanelController = previewPanelController
+        self.workspaceNotificationCenter = workspaceNotificationCenter
+        self.applicationNotificationCenter = applicationNotificationCenter
         let proxyOwnerStore = DockProxyOwnerStore()
         self.proxyOwnerStore = proxyOwnerStore
         self.proxyTargetRouter = DockProxyTargetRouter(ownerStore: proxyOwnerStore)
@@ -240,6 +259,8 @@ public final class DockInteractionCoordinator {
 
     public func start() {
         stop()
+        isStarted = true
+        workspaceMonitor.start()
         lastPermissionSnapshot = permissionService.snapshot()
         synchronizeClickEventTap()
         synchronizeHoverTimer()
@@ -249,8 +270,9 @@ public final class DockInteractionCoordinator {
     }
 
     public func stop() {
-        clickEventTap?.stop()
-        clickEventTap = nil
+        isStarted = false
+        workspaceMonitor.stop()
+        stopClickEventTap()
         hoverTimer?.invalidate()
         hoverTimer = nil
         hoverTimerInterval = nil
@@ -341,8 +363,7 @@ public final class DockInteractionCoordinator {
         previewService.clearAllCachedSnapshots()
         proxyTargetRouter.removeAll()
 
-        clickEventTap?.stop()
-        clickEventTap = nil
+        stopClickEventTap()
         synchronizeClickEventTap()
         NotificationCenter.default.post(name: PermissionService.changedNotification, object: nil)
     }
@@ -355,12 +376,11 @@ public final class DockInteractionCoordinator {
                 for: .dockClick,
                 in: permissionSnapshot
             ),
-            isSuspended: isClickMonitoringSuspended
+            isSuspended: isDockClickMonitoringSuspended
         )
 
         guard shouldInstall else {
-            clickEventTap?.stop()
-            clickEventTap = nil
+            stopClickEventTap()
             return
         }
         guard clickEventTap == nil else {
@@ -377,7 +397,7 @@ public final class DockInteractionCoordinator {
                 for: .dockClick,
                 in: permissionSnapshot
             ),
-            isSuspended: isClickMonitoringSuspended
+            isSuspended: isDockClickMonitoringSuspended
         ) else {
             return
         }
@@ -387,11 +407,13 @@ public final class DockInteractionCoordinator {
             windowControlService: windowControlService,
             proxyOwnerStore: proxyOwnerStore
         )
+        let generation = clickMonitorGeneration
         let tap = DockClickEventTap(
             settings: settings,
             snapshotService: snapshotService,
             actionHandler: { [weak self] target in
-                self?.performDockClickToggle(target: target)
+                guard let self, self.clickMonitorGeneration == generation else { return }
+                self.performDockClickToggle(target: target)
             }
         )
         guard tap.start() else {
@@ -404,9 +426,46 @@ public final class DockInteractionCoordinator {
         clickEventTap = tap
     }
 
+    private func stopClickEventTap(replayPendingMouseDown: Bool = true) {
+        clickMonitorGeneration &+= 1
+        clickEventTap?.stop(replayPendingMouseDown: replayPendingMouseDown)
+        clickEventTap = nil
+    }
+
+    private func workspaceSuspensionChanged(_ suspended: Bool) {
+        guard isStarted else { return }
+        if suspended {
+            previewPanelController.cancelPendingWindowFocus()
+            hidePreview(hidesSharedPanel: !isCommandTabPreviewActive && !isWindowCycleActive)
+            hoverTarget = nil
+            hoverBeganAt = nil
+            previewService.clearAllCachedSnapshots()
+            proxyTargetRouter.removeAll()
+        } else {
+            dockHoverSuppressedUntil = Date().addingTimeInterval(0.5)
+        }
+        synchronizeClickEventTap()
+        synchronizeHoverTimer(isInteracting: false)
+    }
+
+    private func displayConfigurationChanged() {
+        guard isStarted else { return }
+        previewPanelController.cancelPendingWindowFocus()
+        // Recreating the tap also discards its cached hit targets and screen transforms.
+        stopClickEventTap(replayPendingMouseDown: false)
+        hidePreview(hidesSharedPanel: !isCommandTabPreviewActive && !isWindowCycleActive)
+        hoverTarget = nil
+        hoverBeganAt = nil
+        dockHoverSuppressedUntil = Date().addingTimeInterval(0.5)
+        previewService.clearAllCachedSnapshots()
+        proxyTargetRouter.removeAll()
+        synchronizeClickEventTap()
+        synchronizeHoverTimer(isInteracting: false)
+    }
+
     private func synchronizeHoverTimer(isInteracting: Bool? = nil) {
         let desiredInterval = DockHoverTimerPolicy.interval(
-            previewsEnabled: settings.showDockPreviews,
+            previewsEnabled: isStarted && !workspaceMonitor.isSuspended && settings.showDockPreviews,
             isInteracting: isInteracting ?? (hoverTarget != nil || shownTarget != nil),
             isLowPowerModeEnabled: ProcessInfo.processInfo.isLowPowerModeEnabled
         )
@@ -493,7 +552,7 @@ public final class DockInteractionCoordinator {
     }
 
     private func performDockClickToggle(target: DockAppTarget) {
-        guard PermissionFeatureGate.availability(
+        guard !isDockClickMonitoringSuspended, PermissionFeatureGate.availability(
             for: .dockClick, settings: settings, snapshot: permissionService.snapshot()
         ).canRun,
         DockTargetOwnershipPolicy.shouldHandle(
@@ -516,6 +575,7 @@ public final class DockInteractionCoordinator {
     }
 
     private func handleHoverTick() {
+        guard isStarted, !workspaceMonitor.isSuspended else { return }
         if let dockHoverSuppressedUntil {
             guard Date() >= dockHoverSuppressedUntil else {
                 hidePreview()
@@ -989,6 +1049,8 @@ public final class DockInteractionCoordinator {
                     title: window.title,
                     frame: window.frame,
                     isMinimized: window.isMinimized,
+                    isApplicationHidden: window.isApplicationHidden,
+                    isFullScreen: window.isFullScreen,
                     staticPreviewImage: image
                 )
             case .textOnly:
@@ -1000,6 +1062,8 @@ public final class DockInteractionCoordinator {
                     title: window.title,
                     frame: window.frame,
                     isMinimized: window.isMinimized,
+                    isApplicationHidden: window.isApplicationHidden,
+                    isFullScreen: window.isFullScreen,
                     placeholderText: window.placeholderText
                 )
             case .waiting, .unavailable, nil:

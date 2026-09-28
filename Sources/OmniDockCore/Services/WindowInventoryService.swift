@@ -11,6 +11,7 @@ enum WindowInventoryInvalidation: Hashable {
     case moved
     case resized
     case titleChanged
+    case visibilityChanged
     case activeSpaceChanged
 }
 
@@ -23,6 +24,7 @@ enum WindowInventoryEvent {
     case windowRemoved(PreviewWindowIdentity)
     case processTerminated(processIdentifier: pid_t)
     case activeSpaceChanged
+    case displayConfigurationChanged
 }
 
 struct WindowInventoryRecord: Hashable {
@@ -33,6 +35,8 @@ struct WindowInventoryRecord: Hashable {
     let title: String
     let frame: CGRect
     let isMinimized: Bool
+    let isApplicationHidden: Bool?
+    let isFullScreen: Bool?
     let displayOrder: Int
 
     init(_ window: PreviewWindowInfo, displayOrder: Int) {
@@ -43,6 +47,8 @@ struct WindowInventoryRecord: Hashable {
         title = window.title
         frame = window.frame
         isMinimized = window.isMinimized
+        isApplicationHidden = window.isApplicationHidden
+        isFullScreen = window.isFullScreen
         self.displayOrder = displayOrder
     }
 
@@ -54,6 +60,8 @@ struct WindowInventoryRecord: Hashable {
         title: String,
         frame: CGRect,
         isMinimized: Bool,
+        isApplicationHidden: Bool? = nil,
+        isFullScreen: Bool? = nil,
         displayOrder: Int = 0
     ) {
         self.identity = identity
@@ -63,6 +71,8 @@ struct WindowInventoryRecord: Hashable {
         self.title = title
         self.frame = frame
         self.isMinimized = isMinimized
+        self.isApplicationHidden = isApplicationHidden
+        self.isFullScreen = isFullScreen
         self.displayOrder = displayOrder
     }
 
@@ -74,7 +84,9 @@ struct WindowInventoryRecord: Hashable {
             appName: appName,
             title: title,
             frame: frame,
-            isMinimized: isMinimized
+            isMinimized: isMinimized,
+            isApplicationHidden: isApplicationHidden,
+            isFullScreen: isFullScreen
         )
     }
 }
@@ -190,7 +202,7 @@ struct WindowInventoryState {
             staleProcessIdentifiers.remove(processIdentifier)
             return hadRecords
 
-        case .activeSpaceChanged:
+        case .activeSpaceChanged, .displayConfigurationChanged:
             let trackedProcessIdentifiers = self.processIdentifiers
             let previousCount = staleProcessIdentifiers.count
             staleProcessIdentifiers.formUnion(trackedProcessIdentifiers)
@@ -240,7 +252,7 @@ enum WindowInventoryEventCoalescingPolicy {
         switch reason {
         case .moved, .resized, .titleChanged:
             return 0.1
-        case .created, .destroyed, .minimized, .restored, .focused, .activeSpaceChanged:
+        case .created, .destroyed, .minimized, .restored, .focused, .visibilityChanged, .activeSpaceChanged:
             return 0
         }
     }
@@ -311,6 +323,14 @@ private final class WorkspaceWindowInventoryEventBackend: WindowInventoryEventBa
                 }
             }
         ]
+        for name in [NSWorkspace.didHideApplicationNotification, NSWorkspace.didUnhideApplicationNotification] {
+            observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                guard let processIdentifier = Self.processIdentifier(from: notification) else { return }
+                Task { @MainActor [weak self] in
+                    self?.onEvent?(.processInvalidated(processIdentifier: processIdentifier, reason: .visibilityChanged))
+                }
+            })
+        }
     }
 
     func stop() {
@@ -692,6 +712,7 @@ enum AccessibilityPreviewWindowReader {
             return []
         }
 
+        let isApplicationHidden = NSRunningApplication(processIdentifier: processIdentifier)?.isHidden
         return windows.enumerated().compactMap { index, window in
             let role = stringAttribute(kAXRoleAttribute, from: window)
             let subrole = stringAttribute(kAXSubroleAttribute, from: window)
@@ -713,7 +734,9 @@ enum AccessibilityPreviewWindowReader {
                 appName: appName,
                 title: title ?? appName,
                 frame: frame(from: window),
-                isMinimized: boolAttribute(kAXMinimizedAttribute, from: window) ?? false
+                isMinimized: boolAttribute(kAXMinimizedAttribute, from: window) ?? false,
+                isApplicationHidden: isApplicationHidden,
+                isFullScreen: boolAttribute("AXFullScreen", from: window)
             )
         }
     }
@@ -775,7 +798,7 @@ enum WindowInventorySwitcherSnapshotPolicy {
             candidates: windowServerWindows.map {
                 PreviewCaptureWindowCandidate(info: $0, isOnScreen: false)
             }
-        ).map(\.info)
+        ).map { PreviewWindowCatalog.applyingAccessibilityState(to: $0.info, axWindows: accessibilityWindows) }
         guard !verifiedWindowServerWindows.isEmpty else {
             return PreviewWindowCatalog.stableDisplayOrder(
                 PreviewWindowCatalog.collapseTabbedWindows(accessibilityWindows)
@@ -809,15 +832,33 @@ final class WindowInventoryService {
     private var state = WindowInventoryState()
     private var cachedSnapshots: [pid_t: CachedSnapshot] = [:]
     private var nextRevision: UInt64 = 0
+    private var minimumSnapshotRevision: UInt64 = 0
     private var pendingInvalidations: [pid_t: DispatchWorkItem] = [:]
     private var snapshotCleanupWorkItem: DispatchWorkItem?
     private var changeObservers: [UUID: (WindowInventoryEvent) -> Void] = [:]
+    private let applicationNotificationCenter: NotificationCenter
+    private var displayObserver: NSObjectProtocol?
     private lazy var workspaceBackend = WorkspaceWindowInventoryEventBackend()
     private lazy var accessibilityBackend = AccessibilityWindowInventoryEventBackend(
         isAccessibilityTrusted: { AXIsProcessTrusted() }
     )
 
+    init(applicationNotificationCenter: NotificationCenter = .default) {
+        self.applicationNotificationCenter = applicationNotificationCenter
+    }
+
+    deinit {
+        if let displayObserver { applicationNotificationCenter.removeObserver(displayObserver) }
+    }
+
     func start() {
+        if displayObserver == nil {
+            displayObserver = applicationNotificationCenter.addObserver(
+                forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.receive(.displayConfigurationChanged) }
+            }
+        }
         configureBackends()
         workspaceBackend.start()
         accessibilityBackend.start()
@@ -827,6 +868,8 @@ final class WindowInventoryService {
     }
 
     func stop() {
+        if let displayObserver { applicationNotificationCenter.removeObserver(displayObserver) }
+        displayObserver = nil
         pendingInvalidations.values.forEach { $0.cancel() }
         pendingInvalidations.removeAll()
         snapshotCleanupWorkItem?.cancel()
@@ -883,6 +926,7 @@ final class WindowInventoryService {
         now: Date = Date()
     ) {
         let revision = requestRevision ?? beginSnapshotRequest(for: target)
+        guard revision >= minimumSnapshotRevision else { return }
         let records = snapshot.windows.enumerated().map { index, window in
             WindowInventoryRecord(window, displayOrder: index)
         }
@@ -1026,7 +1070,8 @@ final class WindowInventoryService {
                 appName: appName,
                 title: resolvedTitle,
                 frame: frame,
-                isMinimized: false
+                isMinimized: false,
+                isApplicationHidden: application.isHidden
             ))
         }
         return windowsByProcess
@@ -1043,6 +1088,16 @@ final class WindowInventoryService {
 
     private func receive(_ event: WindowInventoryEvent) {
         switch event {
+        case .displayConfigurationChanged:
+            // Requests for even previously unseen processes must not restore old geometry.
+            nextRevision &+= 1
+            minimumSnapshotRevision = nextRevision
+            pendingInvalidations.values.forEach { $0.cancel() }
+            pendingInvalidations.removeAll()
+            cachedSnapshots.removeAll()
+            snapshotCleanupWorkItem?.cancel()
+            snapshotCleanupWorkItem = nil
+            _ = apply(event)
         case let .processLaunched(processIdentifier):
             cachedSnapshots[processIdentifier] = nil
             pendingInvalidations.removeValue(forKey: processIdentifier)?.cancel()

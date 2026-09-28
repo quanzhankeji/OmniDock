@@ -39,12 +39,16 @@ struct PreviewWindowPresentation: Hashable {
     let title: String
     let frame: WindowFrameKey
     let isMinimized: Bool
+    let isApplicationHidden: Bool?
+    let isFullScreen: Bool?
 
     init(_ window: PreviewWindowInfo) {
         identity = PreviewWindowIdentity(window)
         title = window.title
         frame = WindowFrameKey(window.frame)
         isMinimized = window.isMinimized
+        isApplicationHidden = window.isApplicationHidden
+        isFullScreen = window.isFullScreen
     }
 }
 

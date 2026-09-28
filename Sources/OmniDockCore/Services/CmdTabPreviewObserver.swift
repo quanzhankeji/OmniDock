@@ -284,8 +284,19 @@ final class CmdTabPreviewObserver {
 
     private let isFeatureEnabled: () -> Bool
     private let processSwitcher: any CmdTabProcessSwitcherProviding
+    private let workspaceNotificationCenter: NotificationCenter
+    private let applicationNotificationCenter: NotificationCenter
+    private lazy var workspaceMonitor = PreviewWorkspaceMonitor(
+        notificationCenter: workspaceNotificationCenter,
+        applicationNotificationCenter: applicationNotificationCenter,
+        onDisplayConfigurationChanged: { [weak self] in self?.displayConfigurationChanged() }
+    ) { [weak self] suspended in
+        if suspended { self?.pointerEventTap.stop() }
+        self?.synchronizeEventMonitoring()
+    }
     private let pointerEventTap = CmdTabPreviewPointerEventTap()
     private var lifecycle = CmdTabPreviewLifecycleState()
+    private var monitoringGeneration: UInt64 = 0
     private var globalEventMonitor: Any?
     private var localEventMonitor: Any?
     private var discoveryTimer: Timer?
@@ -298,10 +309,14 @@ final class CmdTabPreviewObserver {
 
     init(
         isFeatureEnabled: @escaping () -> Bool,
-        processSwitcher: (any CmdTabProcessSwitcherProviding)? = nil
+        processSwitcher: (any CmdTabProcessSwitcherProviding)? = nil,
+        workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
+        applicationNotificationCenter: NotificationCenter = .default
     ) {
         self.isFeatureEnabled = isFeatureEnabled
         self.processSwitcher = processSwitcher ?? SystemCmdTabProcessSwitcherProvider()
+        self.workspaceNotificationCenter = workspaceNotificationCenter
+        self.applicationNotificationCenter = applicationNotificationCenter
         self.processSwitcher.onSelectionChanged = { [weak self] in
             self?.processSwitcherSelectionChanged()
         }
@@ -322,6 +337,7 @@ final class CmdTabPreviewObserver {
     func start() {
         stop()
         lifecycle.start()
+        workspaceMonitor.start()
         settingsObserver = NotificationCenter.default.addObserver(
             forName: SettingsStore.changedNotification,
             object: nil,
@@ -347,6 +363,7 @@ final class CmdTabPreviewObserver {
     }
 
     func stop() {
+        workspaceMonitor.stop()
         let wasActive = lifecycle.stop()
         removeEventMonitors()
         pointerEventTap.stop()
@@ -370,13 +387,20 @@ final class CmdTabPreviewObserver {
         endInteraction()
     }
 
+    private func displayConfigurationChanged() {
+        removeEventMonitors()
+        pointerEventTap.stop()
+        endInteraction()
+        synchronizeEventMonitoring()
+    }
+
     func updatePreviewButtonTargets(
         _ buttonTargets: [PreviewThumbnailActionHitTarget],
         panelFrame: CGRect?,
         requestGeneration: UInt64,
         targetIdentifier: String
     ) {
-        guard isFeatureEnabled(),
+        guard canMonitor,
               let panelFrame,
               let eventTapPanelFrame = eventTapFrame(fromAppKitFrame: panelFrame)
         else {
@@ -407,7 +431,7 @@ final class CmdTabPreviewObserver {
     }
 
     private func synchronizeEventMonitoring() {
-        guard isFeatureEnabled() else {
+        guard canMonitor else {
             removeEventMonitors()
             pointerEventTap.update(snapshot: nil)
             endInteraction()
@@ -419,20 +443,24 @@ final class CmdTabPreviewObserver {
 
         let keyboardMask: NSEvent.EventTypeMask = [.keyDown, .flagsChanged]
         let globalMask: NSEvent.EventTypeMask = keyboardMask.union([.rightMouseDown, .otherMouseDown])
+        let generation = monitoringGeneration
         globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: globalMask) { [weak self] event in
             Task { @MainActor [weak self] in
-                self?.handle(event)
+                guard let self, self.monitoringGeneration == generation else { return }
+                self.handle(event)
             }
         }
         localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: keyboardMask) { [weak self] event in
             Task { @MainActor [weak self] in
-                self?.handle(event)
+                guard let self, self.monitoringGeneration == generation else { return }
+                self.handle(event)
             }
             return event
         }
     }
 
     private func removeEventMonitors() {
+        monitoringGeneration &+= 1
         if let globalEventMonitor {
             NSEvent.removeMonitor(globalEventMonitor)
             self.globalEventMonitor = nil
@@ -443,8 +471,8 @@ final class CmdTabPreviewObserver {
         }
     }
 
-    private func handle(_ event: NSEvent) {
-        guard isFeatureEnabled() else {
+    func handle(_ event: NSEvent) {
+        guard canMonitor else {
             synchronizeEventMonitoring()
             return
         }
@@ -461,6 +489,10 @@ final class CmdTabPreviewObserver {
         default:
             break
         }
+    }
+
+    private var canMonitor: Bool {
+        lifecycle.phase != .stopped && !workspaceMonitor.isSuspended && isFeatureEnabled()
     }
 
     private func beginDiscoveryIfNeeded() {

@@ -252,6 +252,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             isDockClickEnabled: settings.toggleAppVisibilityOnDockClick,
             snapshot: snapshot,
             isMonitoringActive: coordinator.isDockClickMonitoringActive,
+            isMonitoringSuspended: coordinator.isDockClickMonitoringSuspended,
             lastRelaunchAttemptAt: settings.lastPermissionRefreshRelaunchAttemptAt,
             now: now
         ) else {
@@ -259,9 +260,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         settings.lastPermissionRefreshRelaunchAttemptAt = now
-        permissionOnboardingController.showRefreshingBeforeRelaunch()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-            _ = self?.permissionService.relaunchApp()
+            guard let self, !self.coordinator.isDockClickMonitoringSuspended else { return }
+            self.permissionOnboardingController.showRefreshingBeforeRelaunch()
+            _ = self.permissionService.relaunchApp()
         }
     }
 }

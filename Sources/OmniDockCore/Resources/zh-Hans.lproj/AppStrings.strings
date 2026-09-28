@@ -309,6 +309,11 @@
 "previewFocusFailed" = "未能确认目标窗口已切到前台，请重试。";
 "previewHiddenNoStatic" = "已隐藏\n无静态预览";
 "previewMinimizedClickRestore" = "已最小化\n点击恢复";
+"previewStateMinimized" = "已最小化";
+"previewStateHidden" = "应用已隐藏";
+"previewStateFullScreen" = "全屏";
+"previewDisplay" = "显示器：%@";
+"previewDisplayUnknown" = "显示器未知";
 "previewCloseWindow" = "关闭窗口";
 "previewQuitApplication" = "退出应用";
 "previewQuitFailed" = "无法退出这个应用";

@@ -34,10 +34,12 @@ final class PreviewThumbnailView: NSView {
 
     private static let dragThreshold: CGFloat = 5
     private static let applicationIconSize: CGFloat = 16
+    static let statusRowHeight: CGFloat = 18
     private let imageView = NSImageView()
     private let applicationIconView = NSImageView()
     private let applicationField = NSTextField(labelWithString: "")
     private let titleField = NSTextField(labelWithString: "")
+    private let statusField = NSTextField(labelWithString: "")
     private let placeholderField = NSTextField(labelWithString: "")
     private let closeButton = PreviewCloseButtonView(frame: .zero)
     private let quitButton = PreviewQuitButtonView(frame: .zero)
@@ -49,13 +51,12 @@ final class PreviewThumbnailView: NSView {
     private var isSelected = false
     private let showsApplicationIdentity: Bool
     private var identityProcessIdentifier: pid_t?
+    private var displays: [PreviewDisplay]
 
     var preferredTileSize: CGSize {
         let baseSize = PreviewLayoutCalculator.tileSize(forContentAspectRatio: contentAspectRatio)
-        guard showsApplicationIdentity else {
-            return baseSize
-        }
-        return CGSize(width: baseSize.width, height: baseSize.height + 24)
+        return CGSize(width: baseSize.width,
+                      height: baseSize.height + Self.statusRowHeight + (showsApplicationIdentity ? 24 : 0))
     }
 
     var displaysApplicationIdentity: Bool {
@@ -65,9 +66,11 @@ final class PreviewThumbnailView: NSView {
             && !applicationField.stringValue.isEmpty
     }
 
-    init(info: PreviewWindowInfo, showsApplicationIdentity: Bool = false) {
+    init(info: PreviewWindowInfo, showsApplicationIdentity: Bool = false,
+         displays: [PreviewDisplay] = PreviewWindowStatus.currentDisplays()) {
         self.info = info
         self.showsApplicationIdentity = showsApplicationIdentity
+        self.displays = displays
         self.contentAspectRatio = PreviewLayoutCalculator.contentAspectRatio(for: info.frame)
         super.init(frame: CGRect(origin: .zero, size: PreviewLayoutCalculator.tileSize(for: info.frame)))
         setup()
@@ -92,6 +95,7 @@ final class PreviewThumbnailView: NSView {
         let previousSize = preferredTileSize
         self.info = info
         titleField.stringValue = info.title
+        refreshStatus()
         refreshApplicationIdentity()
 
         if let image = info.staticPreviewImage {
@@ -204,10 +208,11 @@ final class PreviewThumbnailView: NSView {
                 width: bounds.width - 60 - iconSize - (iconSize > 0 ? 5 : 0),
                 height: 18
             )
-            titleField.frame = CGRect(x: 8, y: 7, width: bounds.width - 16, height: 18)
+            titleField.frame = CGRect(x: 8, y: 7 + Self.statusRowHeight, width: bounds.width - 16, height: 18)
         } else {
-            titleField.frame = CGRect(x: 8, y: 8, width: bounds.width - 16, height: 18)
+            titleField.frame = CGRect(x: 8, y: 8 + Self.statusRowHeight, width: bounds.width - 16, height: 18)
         }
+        statusField.frame = CGRect(x: 8, y: 7, width: max(0, bounds.width - 16), height: 14)
         imageView.frame = imageFrame(in: bounds)
         placeholderField.frame = imageView.frame.insetBy(dx: 10, dy: 10)
         quitButton.frame = CGRect(x: 12, y: bounds.height - 24, width: 13, height: 13)
@@ -278,6 +283,9 @@ final class PreviewThumbnailView: NSView {
         titleField.stringValue = info.title
         titleField.lineBreakMode = .byTruncatingTail
         titleField.font = .systemFont(ofSize: 12, weight: .medium)
+        statusField.font = .systemFont(ofSize: 10)
+        statusField.lineBreakMode = .byTruncatingTail
+        refreshStatus()
 
         applicationIconView.imageScaling = .scaleProportionallyUpOrDown
         applicationIconView.imageAlignment = .alignCenter
@@ -304,6 +312,7 @@ final class PreviewThumbnailView: NSView {
         addSubview(applicationIconView)
         addSubview(applicationField)
         addSubview(titleField)
+        addSubview(statusField)
         addSubview(closeButton)
         addSubview(quitButton)
         applyTheme()
@@ -323,6 +332,7 @@ final class PreviewThumbnailView: NSView {
         let palette = OmniDockTheme.palette(for: effectiveAppearance)
         placeholderField.textColor = palette.secondaryText
         titleField.textColor = palette.primaryText
+        statusField.textColor = palette.secondaryText
         applicationField.textColor = palette.secondaryText
         updateTileAppearance()
     }
@@ -332,6 +342,17 @@ final class PreviewThumbnailView: NSView {
             return
         }
         contentAspectRatio = image.size.width / image.size.height
+    }
+
+    private func refreshStatus() {
+        statusField.stringValue = PreviewWindowStatus.text(for: info, displays: displays)
+        statusField.toolTip = statusField.stringValue
+        toolTip = [info.appName, info.title, statusField.stringValue].joined(separator: "\n")
+    }
+
+    func updateDisplays(_ displays: [PreviewDisplay]) {
+        self.displays = displays
+        refreshStatus()
     }
 
     private func refreshApplicationIdentity() {
@@ -365,7 +386,7 @@ final class PreviewThumbnailView: NSView {
     }
 
     private func imageFrame(in bounds: CGRect) -> CGRect {
-        let footerHeight: CGFloat = showsApplicationIdentity ? 28 : 40
+        let footerHeight: CGFloat = (showsApplicationIdentity ? 28 : 40) + Self.statusRowHeight
         let headerHeight: CGFloat = showsApplicationIdentity ? 28 : 0
         let maxFrame = CGRect(
             x: 8,

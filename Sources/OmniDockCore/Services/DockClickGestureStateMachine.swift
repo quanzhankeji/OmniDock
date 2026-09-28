@@ -176,14 +176,14 @@ struct DockClickGestureStateMachine {
         )
     }
 
-    mutating func cancelPendingGesture() -> DockClickGestureDecision {
+    mutating func cancelPendingGesture(replayMouseDown: Bool = true) -> DockClickGestureDecision {
         guard let pendingGesture else {
             return .passThrough
         }
         self.pendingGesture = nil
         return DockClickGestureDecision(
             disposition: .passThrough,
-            replayMouseDownSequence: pendingGesture.hasReplayedMouseDown ? nil : pendingGesture.sequence,
+            replayMouseDownSequence: replayMouseDown && !pendingGesture.hasReplayedMouseDown ? pendingGesture.sequence : nil,
             discardMouseDownSequence: pendingGesture.sequence,
             actionTarget: nil,
             scheduleLongPressSequence: nil

@@ -68,6 +68,7 @@ public final class DockClickEventTap {
     private var eventThread: Thread?
     private var eventThreadStopped: DispatchSemaphore?
     private var isStopRequested = false
+    private var replayPendingMouseDownOnStop = true
     private var runState = DockEventTapRunState()
 
     // These values are confined to the event-tap thread.
@@ -169,20 +170,21 @@ public final class DockClickEventTap {
         return didStart
     }
 
-    public func stop() {
+    public func stop(replayPendingMouseDown: Bool = true) {
         controlLock.lock()
-        _ = stopEventTapAndWait()
+        _ = stopEventTapAndWait(replayPendingMouseDown: replayPendingMouseDown)
         activityLease.end()
         controlLock.unlock()
     }
 
-    private func stopEventTapAndWait() -> Bool {
+    private func stopEventTapAndWait(replayPendingMouseDown: Bool = true) -> Bool {
         let runLoop: CFRunLoop?
         let thread: Thread?
         let stopped: DispatchSemaphore?
         let runIdentifier: UInt64?
         lifecycleLock.lock()
         isStopRequested = true
+        replayPendingMouseDownOnStop = replayPendingMouseDown
         runLoop = eventRunLoop
         thread = eventThread
         stopped = eventThreadStopped
@@ -198,7 +200,7 @@ public final class DockClickEventTap {
                 else {
                     return
                 }
-                self.apply(self.gestureStateMachine.cancelPendingGesture())
+                self.apply(self.gestureStateMachine.cancelPendingGesture(replayMouseDown: replayPendingMouseDown))
                 if let eventTap = self.eventTap {
                     CGEvent.tapEnable(tap: eventTap, enable: false)
                 }
@@ -301,7 +303,10 @@ public final class DockClickEventTap {
             CFRunLoopRun()
         }
 
-        apply(gestureStateMachine.cancelPendingGesture())
+        lifecycleLock.lock()
+        let replayOnStop = replayPendingMouseDownOnStop
+        lifecycleLock.unlock()
+        apply(gestureStateMachine.cancelPendingGesture(replayMouseDown: replayOnStop))
         CFRunLoopRemoveSource(runLoop, source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: false)
         CFMachPortInvalidate(tap)
