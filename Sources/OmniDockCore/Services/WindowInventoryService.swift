@@ -13,6 +13,19 @@ enum WindowInventoryInvalidation: Hashable {
     case titleChanged
     case visibilityChanged
     case activeSpaceChanged
+
+    init?(accessibilityNotification: String) {
+        switch accessibilityNotification {
+        case kAXWindowCreatedNotification, kAXCreatedNotification: self = .created
+        case kAXUIElementDestroyedNotification: self = .destroyed
+        case kAXWindowMiniaturizedNotification: self = .minimized
+        case kAXWindowDeminiaturizedNotification: self = .restored
+        case kAXMovedNotification: self = .moved
+        case kAXResizedNotification: self = .resized
+        case kAXTitleChangedNotification: self = .titleChanged
+        default: return nil
+        }
+    }
 }
 
 enum WindowInventoryEvent {
@@ -101,7 +114,7 @@ struct WindowInventoryState {
     private var revisionByProcessID: [pid_t: UInt64] = [:]
 
     var processIdentifiers: Set<pid_t> {
-        Set(recordsByIdentity.values.map(\.processIdentifier))
+        Set(revisionByProcessID.keys)
     }
 
     func records(for processIdentifier: pid_t) -> [WindowInventoryRecord] {
@@ -270,12 +283,17 @@ private final class WorkspaceWindowInventoryEventBackend: WindowInventoryEventBa
     var onEvent: ((WindowInventoryEvent) -> Void)?
 
     private var observers: [NSObjectProtocol] = []
+    private let notificationCenter: NotificationCenter
+
+    init(notificationCenter: NotificationCenter) {
+        self.notificationCenter = notificationCenter
+    }
 
     func start() {
         guard observers.isEmpty else {
             return
         }
-        let center = NSWorkspace.shared.notificationCenter
+        let center = notificationCenter
         observers = [
             center.addObserver(
                 forName: NSWorkspace.didLaunchApplicationNotification,
@@ -334,7 +352,7 @@ private final class WorkspaceWindowInventoryEventBackend: WindowInventoryEventBa
     }
 
     func stop() {
-        let center = NSWorkspace.shared.notificationCenter
+        let center = notificationCenter
         observers.forEach(center.removeObserver)
         observers.removeAll()
     }
@@ -440,6 +458,7 @@ private final class AccessibilityWindowInventoryEventBackend: WindowInventoryEve
         guard let observedApplication = observedApplications.removeValue(forKey: processIdentifier) else {
             return
         }
+        observedApplication.context.backend = nil
         removeNotifications(from: observedApplication)
         CFRunLoopRemoveSource(
             CFRunLoopGetMain(),
@@ -482,7 +501,10 @@ private final class AccessibilityWindowInventoryEventBackend: WindowInventoryEve
             return
         }
 
-        if notification == kAXCreatedNotification {
+        guard let reason = WindowInventoryInvalidation(accessibilityNotification: notification) else {
+            return
+        }
+        if reason == .created {
             observeWindow(element, in: observedApplication)
             refreshWindowObservers(for: observedApplication)
         } else if notification == kAXUIElementDestroyedNotification {
@@ -494,23 +516,6 @@ private final class AccessibilityWindowInventoryEventBackend: WindowInventoryEve
             }
         }
 
-        let reason: WindowInventoryInvalidation
-        switch notification {
-        case kAXCreatedNotification:
-            reason = .created
-        case kAXUIElementDestroyedNotification:
-            reason = .destroyed
-        case kAXWindowMiniaturizedNotification:
-            reason = .minimized
-        case kAXWindowDeminiaturizedNotification:
-            reason = .restored
-        case kAXMovedNotification:
-            reason = .moved
-        case kAXResizedNotification:
-            reason = .resized
-        default:
-            reason = .titleChanged
-        }
         onEvent?(.processInvalidated(processIdentifier: processIdentifier, reason: reason))
     }
 
@@ -518,6 +523,7 @@ private final class AccessibilityWindowInventoryEventBackend: WindowInventoryEve
         for observedApplication: AccessibilityWindowInventoryObservedApplication
     ) {
         [
+            kAXWindowCreatedNotification,
             kAXCreatedNotification,
             kAXUIElementDestroyedNotification,
             kAXFocusedWindowChangedNotification,
@@ -538,7 +544,7 @@ private final class AccessibilityWindowInventoryEventBackend: WindowInventoryEve
     private func refreshWindowObservers(
         for observedApplication: AccessibilityWindowInventoryObservedApplication
     ) {
-        let windows = axWindows(for: observedApplication.applicationElement)
+        guard let windows = axWindows(for: observedApplication.applicationElement) else { return }
         let currentHashes = Set(windows.map { window in
             CFHash(window)
         })
@@ -626,16 +632,16 @@ private final class AccessibilityWindowInventoryEventBackend: WindowInventoryEve
         }
     }
 
-    private func axWindows(for applicationElement: AXUIElement) -> [AXUIElement] {
+    private func axWindows(for applicationElement: AXUIElement) -> [AXUIElement]? {
         var rawValue: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
             applicationElement,
             kAXWindowsAttribute as CFString,
             &rawValue
         ) == .success else {
-            return []
+            return nil
         }
-        return rawValue as? [AXUIElement] ?? []
+        return rawValue as? [AXUIElement]
     }
 
     private func focusedWindowIdentity(
@@ -698,6 +704,10 @@ private let windowInventoryAXObserverCallback: AXObserverCallback = { _, element
 
 enum AccessibilityPreviewWindowReader {
     static func windows(for processIdentifier: pid_t, appName: String) -> [PreviewWindowInfo] {
+        readWindows(for: processIdentifier, appName: appName) ?? []
+    }
+
+    static func readWindows(for processIdentifier: pid_t, appName: String) -> [PreviewWindowInfo]? {
         let applicationElement = AccessibilityElementFactory.application(
             processIdentifier: processIdentifier
         )
@@ -709,7 +719,7 @@ enum AccessibilityPreviewWindowReader {
         ) == .success,
         let windows = rawValue as? [AXUIElement]
         else {
-            return []
+            return nil
         }
 
         let isApplicationHidden = NSRunningApplication(processIdentifier: processIdentifier)?.isHidden
@@ -717,10 +727,12 @@ enum AccessibilityPreviewWindowReader {
             let role = stringAttribute(kAXRoleAttribute, from: window)
             let subrole = stringAttribute(kAXSubroleAttribute, from: window)
             let title = stringAttribute(kAXTitleAttribute, from: window)
+            let windowFrame = frame(from: window)
             guard WindowFiltering.shouldIncludeAXPreviewWindow(
                 role: role,
                 subrole: subrole,
-                title: title
+                title: title,
+                frame: windowFrame
             ) else {
                 return nil
             }
@@ -733,7 +745,7 @@ enum AccessibilityPreviewWindowReader {
                 processIdentifier: processIdentifier,
                 appName: appName,
                 title: title ?? appName,
-                frame: frame(from: window),
+                frame: windowFrame ?? .zero,
                 isMinimized: boolAttribute(kAXMinimizedAttribute, from: window) ?? false,
                 isApplicationHidden: isApplicationHidden,
                 isFullScreen: boolAttribute("AXFullScreen", from: window)
@@ -768,9 +780,9 @@ enum AccessibilityPreviewWindowReader {
         return rawValue as? Bool
     }
 
-    private static func frame(from element: AXUIElement) -> CGRect {
+    private static func frame(from element: AXUIElement) -> CGRect? {
+        guard let size = sizeAttribute(kAXSizeAttribute, from: element) else { return nil }
         let origin = pointAttribute(kAXPositionAttribute, from: element) ?? .zero
-        let size = sizeAttribute(kAXSizeAttribute, from: element) ?? .zero
         return CGRect(origin: origin, size: size)
     }
 
@@ -786,12 +798,29 @@ enum AccessibilityPreviewWindowReader {
 enum WindowInventorySwitcherSnapshotPolicy {
     static func merge(
         accessibilityWindows: [PreviewWindowInfo],
-        windowServerWindows: [PreviewWindowInfo]
+        windowServerWindows: [PreviewWindowInfo],
+        previousWindows: [PreviewWindowInfo] = []
     ) -> [PreviewWindowInfo] {
         // A WindowServer surface alone can outlive its AX window. Require a live AX
         // record before accepting it into the user-facing switcher.
         guard !accessibilityWindows.isEmpty else {
             return []
+        }
+        // Minimized AX windows can temporarily lose their number while their
+        // WindowServer surface is absent. Preserve only a unique existing match.
+        let accessibilityWindows = accessibilityWindows.map { window in
+            guard window.isMinimized, window.windowID == nil,
+                  let previous = PreviewWindowCatalog.matchingAccessibilityWindow(for: window, in: previousWindows),
+                  let windowID = previous.windowID,
+                  PreviewWindowCatalog.matchingAccessibilityWindow(for: previous, in: accessibilityWindows)
+                    .map(PreviewWindowIdentity.init) == PreviewWindowIdentity(window)
+            else { return window }
+            return PreviewWindowInfo(
+                id: previous.id, windowID: windowID, processIdentifier: window.processIdentifier,
+                appName: window.appName, title: window.title, frame: window.frame,
+                isMinimized: true, isApplicationHidden: window.isApplicationHidden,
+                isFullScreen: window.isFullScreen
+            )
         }
         let verifiedWindowServerWindows = PreviewWindowCatalog.reconcileCaptureCandidates(
             axWindows: accessibilityWindows,
@@ -809,8 +838,14 @@ enum WindowInventorySwitcherSnapshotPolicy {
         let minimizedAccessibilityWindows = accessibilityWindows.filter { window in
             window.isMinimized && !verifiedIdentities.contains(PreviewWindowIdentity(window))
         }
+        let verifiedFrames = Set(verifiedWindowServerWindows.map { WindowFrameKey($0.frame) })
+        let pendingSurfaceWindows = PreviewWindowCatalog.collapseTabbedWindows(accessibilityWindows.filter { window in
+            !window.isMinimized
+                && !verifiedIdentities.contains(PreviewWindowIdentity(window))
+                && !verifiedFrames.contains(WindowFrameKey(window.frame))
+        })
         return PreviewWindowCatalog.stableDisplayOrder(
-            distinctByStableIdentity(verifiedWindowServerWindows + minimizedAccessibilityWindows)
+            distinctByStableIdentity(verifiedWindowServerWindows + minimizedAccessibilityWindows + pendingSurfaceWindows)
         )
     }
 
@@ -837,14 +872,26 @@ final class WindowInventoryService {
     private var snapshotCleanupWorkItem: DispatchWorkItem?
     private var changeObservers: [UUID: (WindowInventoryEvent) -> Void] = [:]
     private let applicationNotificationCenter: NotificationCenter
+    private let accessibilityWindowsProvider: (pid_t, String) -> [PreviewWindowInfo]?
+    private let windowServerWindowsProvider: (() -> [pid_t: [PreviewWindowInfo]])?
     private var displayObserver: NSObjectProtocol?
-    private lazy var workspaceBackend = WorkspaceWindowInventoryEventBackend()
+    private let workspaceBackend: WorkspaceWindowInventoryEventBackend
     private lazy var accessibilityBackend = AccessibilityWindowInventoryEventBackend(
         isAccessibilityTrusted: { AXIsProcessTrusted() }
     )
 
-    init(applicationNotificationCenter: NotificationCenter = .default) {
+    init(
+        applicationNotificationCenter: NotificationCenter = .default,
+        workspaceNotificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
+        accessibilityWindowsProvider: @escaping (pid_t, String) -> [PreviewWindowInfo]? = {
+            AccessibilityPreviewWindowReader.readWindows(for: $0, appName: $1)
+        },
+        windowServerWindowsProvider: (() -> [pid_t: [PreviewWindowInfo]])? = nil
+    ) {
         self.applicationNotificationCenter = applicationNotificationCenter
+        self.accessibilityWindowsProvider = accessibilityWindowsProvider
+        self.windowServerWindowsProvider = windowServerWindowsProvider
+        workspaceBackend = WorkspaceWindowInventoryEventBackend(notificationCenter: workspaceNotificationCenter)
     }
 
     deinit {
@@ -991,36 +1038,50 @@ final class WindowInventoryService {
             .union(state.processIdentifiers)
 
         for processIdentifier in processIdentifiers {
-            let application = NSRunningApplication(processIdentifier: processIdentifier)
-            let appName = application?.localizedName ?? AppStrings.text(.genericApplication)
-            let accessibilityWindows = AccessibilityPreviewWindowReader.windows(
+            _ = reconcileWindows(
                 for: processIdentifier,
-                appName: appName
-            )
-            let mergedWindows = WindowInventorySwitcherSnapshotPolicy.merge(
-                accessibilityWindows: accessibilityWindows,
                 windowServerWindows: windowServerWindows[processIdentifier, default: []]
             )
-            let records = mergedWindows.enumerated().map { index, window in
-                WindowInventoryRecord(window, displayOrder: index)
-            }
-
-            nextRevision &+= 1
-            guard apply(.seed(
-                processIdentifier: processIdentifier,
-                revision: nextRevision,
-                records: records
-            )) else {
-                continue
-            }
-            if !records.isEmpty {
-                accessibilityBackend.track(processIdentifier: processIdentifier)
-            }
         }
         return allWindows()
     }
 
-    private func windowServerWindowsByProcess() -> [pid_t: [PreviewWindowInfo]] {
+    // nil is a failed AX read; an empty array is a confirmed empty window list.
+    func reconcileWindows(for processIdentifier: pid_t) -> [WindowInventoryRecord]? {
+        reconcileWindows(
+            for: processIdentifier,
+            windowServerWindows: windowServerWindowsByProcess(only: processIdentifier)[processIdentifier, default: []]
+        )
+    }
+
+    private func reconcileWindows(
+        for processIdentifier: pid_t,
+        windowServerWindows: [PreviewWindowInfo]
+    ) -> [WindowInventoryRecord]? {
+        // Keep observing applications with no windows so their next window can appear.
+        accessibilityBackend.track(processIdentifier: processIdentifier)
+        let appName = NSRunningApplication(processIdentifier: processIdentifier)?.localizedName
+            ?? AppStrings.text(.genericApplication)
+        guard let accessibilityWindows = accessibilityWindowsProvider(processIdentifier, appName) else {
+            return nil
+        }
+        let mergedWindows = WindowInventorySwitcherSnapshotPolicy.merge(
+            accessibilityWindows: accessibilityWindows,
+            windowServerWindows: windowServerWindows,
+            previousWindows: state.records(for: processIdentifier).map { $0.makePreviewWindowInfo() }
+        )
+        let records = mergedWindows.enumerated().map { index, window in
+            WindowInventoryRecord(window, displayOrder: index)
+        }
+        pendingInvalidations.removeValue(forKey: processIdentifier)?.cancel()
+        cachedSnapshots[processIdentifier] = nil
+        nextRevision &+= 1
+        _ = apply(.seed(processIdentifier: processIdentifier, revision: nextRevision, records: records))
+        return records
+    }
+
+    private func windowServerWindowsByProcess(only requestedProcessIdentifier: pid_t? = nil) -> [pid_t: [PreviewWindowInfo]] {
+        if let windowServerWindowsProvider { return windowServerWindowsProvider() }
         guard let rawWindows = CGWindowListCopyWindowInfo(
             [.optionAll, .excludeDesktopElements],
             kCGNullWindowID
@@ -1039,6 +1100,7 @@ final class WindowInventoryService {
             }
 
             let processIdentifier = pid_t(rawProcessIdentifier)
+            if let requestedProcessIdentifier, processIdentifier != requestedProcessIdentifier { continue }
 
             // This app's own windows are listed like anyone else's. Whether to
             // act on a Dock icon is a different question from whether a window
@@ -1101,8 +1163,9 @@ final class WindowInventoryService {
         case let .processLaunched(processIdentifier):
             cachedSnapshots[processIdentifier] = nil
             pendingInvalidations.removeValue(forKey: processIdentifier)?.cancel()
-            _ = apply(.processLaunched(processIdentifier: processIdentifier))
             accessibilityBackend.untrack(processIdentifier: processIdentifier)
+            accessibilityBackend.track(processIdentifier: processIdentifier)
+            _ = apply(.processLaunched(processIdentifier: processIdentifier))
         case let .processInvalidated(processIdentifier, reason):
             enqueueInvalidation(processIdentifier: processIdentifier, reason: reason)
         case let .processActivated(processIdentifier):
@@ -1131,10 +1194,10 @@ final class WindowInventoryService {
                 return
             }
             self.pendingInvalidations[processIdentifier] = nil
+            self.cachedSnapshots[processIdentifier] = nil
             _ = self.apply(
                 .processInvalidated(processIdentifier: processIdentifier, reason: reason)
             )
-            self.cachedSnapshots[processIdentifier] = nil
         }
         let delay = WindowInventoryEventCoalescingPolicy.delay(for: reason)
         guard delay > 0 else {
@@ -1146,20 +1209,28 @@ final class WindowInventoryService {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
 
-    private func invalidate(processIdentifier: pid_t, reason: WindowInventoryInvalidation) {
+    func invalidate(processIdentifier: pid_t, reason: WindowInventoryInvalidation) {
         enqueueInvalidation(processIdentifier: processIdentifier, reason: reason)
     }
 
     @discardableResult
     private func apply(_ event: WindowInventoryEvent) -> Bool {
-        guard state.apply(event) else {
-            return false
+        let changed = state.apply(event)
+        if !changed {
+            // A stale inventory still receives meaningful minimize/restore or
+            // hide/unhide transitions before a new capture snapshot is seeded.
+            switch event {
+            case .processLaunched, .processTerminated, .processInvalidated, .activeSpaceChanged, .displayConfigurationChanged:
+                break
+            default:
+                return false
+            }
         }
         let observers = Array(changeObservers.values)
         observers.forEach { observer in
             observer(event)
         }
-        return true
+        return changed
     }
 
     private func scheduleSnapshotCleanup() {

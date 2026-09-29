@@ -4,6 +4,183 @@ import XCTest
 
 @MainActor
 final class WindowCycleTests: XCTestCase {
+    func testNewlyLaunchedApplicationJoinsAnOpenSwitcher() async {
+        _ = NSApplication.shared
+        let application = NSRunningApplication.current
+        let center = NotificationCenter()
+        let original = window(id: 1, processIdentifier: pid_t.max)
+        let launchedWindow = window(id: 2, processIdentifier: application.processIdentifier)
+        var launchedWindows: [PreviewWindowInfo] = []
+        let inventory = WindowInventoryService(
+            workspaceNotificationCenter: center,
+            accessibilityWindowsProvider: { pid, _ in
+                pid == application.processIdentifier ? launchedWindows : nil
+            }, windowServerWindowsProvider: { [:] }
+        )
+        inventory.start()
+        let registry = TestHotkeyRegistry()
+        let monitor = TestWindowCycleInputMonitor()
+        let panel = PreviewPanelController(requestWindowFocus: { _, _, _, _ in }, requestWindowClose: { _, _, _, _ in })
+        let service = makeService(
+            settings: configuredSettings(), registry: registry, panel: panel, inventory: inventory,
+            inputMonitor: monitor,
+            permissions: { PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: true) }
+        )
+        service.start()
+        defer { service.stop(); inventory.stop(); panel.hide() }
+        await drainMainQueue()
+        seedWindows([original], in: inventory)
+        registry.onTrigger?(.forward)
+        XCTAssertEqual(panel.displayedWindowCount, 1)
+        launchedWindows = [launchedWindow]
+        center.post(name: NSWorkspace.didLaunchApplicationNotification, object: nil,
+                    userInfo: [NSWorkspace.applicationUserInfoKey: application])
+        await drainMainQueue()
+        await drainMainQueue()
+        XCTAssertTrue(service.isSessionActive)
+        XCTAssertEqual(panel.displayedWindowCount, 2)
+
+        launchedWindows = []
+        center.post(name: NSWorkspace.didTerminateApplicationNotification, object: nil,
+                    userInfo: [NSWorkspace.applicationUserInfoKey: application])
+        await drainMainQueue()
+        XCTAssertTrue(service.isSessionActive)
+        XCTAssertEqual(panel.displayedWindowCount, 1)
+    }
+
+    func testCreatedAndDestroyedWindowsRefreshOnlyTheirApplicationAndPreserveSelection() async {
+        _ = NSApplication.shared
+        let processIdentifier = pid_t.max
+        let first = window(id: 1, processIdentifier: processIdentifier)
+        let selected = window(id: 2, processIdentifier: processIdentifier)
+        let newWindow = window(id: 3, processIdentifier: processIdentifier, originX: 40)
+        let other = window(id: 4, processIdentifier: processIdentifier - 1)
+        var currentWindows = [first, selected]
+        var reads: [pid_t] = []
+        let inventory = WindowInventoryService(
+            accessibilityWindowsProvider: { pid, _ in
+                reads.append(pid)
+                return pid == processIdentifier ? currentWindows : nil
+            }, windowServerWindowsProvider: { [:] }
+        )
+        let registry = TestHotkeyRegistry()
+        let monitor = TestWindowCycleInputMonitor()
+        var focusedIDs: [CGWindowID] = []
+        let panel = PreviewPanelController(
+            requestWindowFocus: { _, _, windowID, completion in
+                if let windowID { focusedIDs.append(windowID) }
+                completion(.focused)
+            }, requestWindowClose: { _, _, _, _ in }
+        )
+        let service = makeService(
+            settings: configuredSettings(), registry: registry, panel: panel, inventory: inventory,
+            inputMonitor: monitor,
+            permissions: { PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: true) }
+        )
+        service.start()
+        defer { service.stop(); inventory.stop(); panel.hide() }
+        await drainMainQueue()
+        seedWindows([first, selected, other], in: inventory)
+        registry.onTrigger?(.backward)
+        XCTAssertEqual(panel.displayedWindowCount, 3)
+        reads.removeAll()
+        currentWindows = [selected, newWindow]
+        inventory.invalidate(processIdentifier: processIdentifier, reason: .created)
+        inventory.invalidate(processIdentifier: processIdentifier, reason: .destroyed)
+        await drainMainQueue()
+
+        XCTAssertEqual(reads, [processIdentifier], "A notification burst should read only one application's AX windows")
+        XCTAssertEqual(panel.displayedWindowCount, 3)
+        XCTAssertEqual(inventory.windows(for: processIdentifier).compactMap(\.identity.windowID), [2, 3])
+        monitor.onEvent?(.confirm)
+        XCTAssertEqual(focusedIDs, [2], "An unaffected selected window must remain selected")
+    }
+
+    func testConfirmedLastWindowCloseEndsSwitcherButFailedReadKeepsItOpen() async {
+        _ = NSApplication.shared
+        let processIdentifier = pid_t.max
+        let original = window(id: 1, processIdentifier: processIdentifier)
+        var currentWindows: [PreviewWindowInfo]? = [original]
+        var reads = 0
+        let inventory = WindowInventoryService(
+            accessibilityWindowsProvider: { pid, _ in
+                guard pid == processIdentifier else { return nil }
+                reads += 1
+                return currentWindows
+            }, windowServerWindowsProvider: { [:] }
+        )
+        let registry = TestHotkeyRegistry()
+        let monitor = TestWindowCycleInputMonitor()
+        let panel = PreviewPanelController(
+            requestWindowFocus: { _, _, _, _ in XCTFail("Window removal must not confirm a selection") },
+            requestWindowClose: { _, _, _, _ in }
+        )
+        let service = makeService(
+            settings: configuredSettings(), registry: registry, panel: panel, inventory: inventory,
+            inputMonitor: monitor,
+            permissions: { PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: true) }
+        )
+        service.start()
+        defer { service.stop(); inventory.stop(); panel.hide() }
+        await drainMainQueue()
+        seedWindows([original], in: inventory)
+        registry.onTrigger?(.forward)
+        reads = 0
+        currentWindows = nil
+        inventory.invalidate(processIdentifier: processIdentifier, reason: .destroyed)
+        await drainMainQueue()
+        XCTAssertEqual(reads, 1)
+        XCTAssertTrue(service.isSessionActive)
+        XCTAssertEqual(panel.displayedWindowCount, 1)
+
+        currentWindows = []
+        inventory.invalidate(processIdentifier: processIdentifier, reason: .destroyed)
+        await drainMainQueue()
+        XCTAssertFalse(service.isSessionActive)
+        XCTAssertFalse(service.isInputMonitoring)
+        XCTAssertNil(panel.frame)
+        XCTAssertTrue(service.isHotkeyRegistered)
+    }
+
+    func testCancelledSessionDoesNotProcessQueuedWindowCreation() async {
+        _ = NSApplication.shared
+        let processIdentifier = pid_t.max
+        var currentWindows = [window(id: 1, processIdentifier: processIdentifier)]
+        var reads = 0
+        let inventory = WindowInventoryService(
+            accessibilityWindowsProvider: { pid, _ in
+                guard pid == processIdentifier else { return nil }
+                reads += 1
+                return currentWindows
+            }, windowServerWindowsProvider: { [:] }
+        )
+        let settings = configuredSettings()
+        let registry = TestHotkeyRegistry()
+        let monitor = TestWindowCycleInputMonitor()
+        let panel = PreviewPanelController(
+            requestWindowFocus: { _, _, _, _ in XCTFail("Cancelled refresh must not focus a window") },
+            requestWindowClose: { _, _, _, _ in }
+        )
+        let service = makeService(
+            settings: settings, registry: registry, panel: panel, inventory: inventory, inputMonitor: monitor,
+            permissions: { PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: true) }
+        )
+        service.start()
+        defer { service.stop(); inventory.stop(); panel.hide() }
+        await drainMainQueue()
+        seedWindows(currentWindows, in: inventory)
+        registry.onTrigger?(.forward)
+        reads = 0
+        currentWindows.append(window(id: 2, processIdentifier: processIdentifier))
+        inventory.invalidate(processIdentifier: processIdentifier, reason: .created)
+        settings.windowCycleEnabled = false
+        await drainMainQueue()
+        XCTAssertEqual(reads, 0)
+        XCTAssertFalse(service.isSessionActive)
+        XCTAssertFalse(service.isInputMonitoring)
+        XCTAssertNil(panel.frame)
+    }
+
     func testDisplayChangeCancelsSelectionWithoutUnregisteringOrFocusing() {
         let applicationCenter = NotificationCenter()
         let settings = configuredSettings()
@@ -625,6 +802,20 @@ final class WindowCycleTests: XCTestCase {
         return store
     }
 
+    private func drainMainQueue() async {
+        let drained = expectation(description: "Queued window lifecycle updates delivered")
+        DispatchQueue.main.async { drained.fulfill() }
+        await fulfillment(of: [drained], timeout: 1)
+    }
+
+    private func seedWindows(_ windows: [PreviewWindowInfo], in inventory: WindowInventoryService) {
+        for (processIdentifier, windows) in Dictionary(grouping: windows, by: \.processIdentifier) {
+            let target = DockAppTarget(processIdentifier: processIdentifier, bundleIdentifier: nil,
+                                       localizedName: "Example", dockElementTitle: "Example", hitPoint: .zero)
+            inventory.seed(PreviewWindowSnapshot(windows: windows, captureWindows: [:]), for: target)
+        }
+    }
+
     private func makeService(
         settings: SettingsStore,
         registry: TestHotkeyRegistry,
@@ -664,14 +855,14 @@ final class WindowCycleTests: XCTestCase {
         inventory.seed(PreviewWindowSnapshot(windows: windows, captureWindows: [:]), for: target)
     }
 
-    private func window(id: CGWindowID, processIdentifier: pid_t) -> PreviewWindowInfo {
+    private func window(id: CGWindowID, processIdentifier: pid_t, originX: CGFloat = 0) -> PreviewWindowInfo {
         PreviewWindowInfo(
             id: "window-\(id)",
             windowID: id,
             processIdentifier: processIdentifier,
             appName: "Example",
             title: "Window \(id)",
-            frame: CGRect(x: 0, y: 0, width: 800, height: 500),
+            frame: CGRect(x: originX, y: 0, width: 800, height: 500),
             isMinimized: false
         )
     }

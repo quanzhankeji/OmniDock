@@ -4,6 +4,62 @@ import XCTest
 
 @MainActor
 final class PreviewPanelControllerTests: XCTestCase {
+    func testAllPreviewEntriesRefreshStatusInPlaceWithoutReplacingLiveFrames() async throws {
+        _ = NSApplication.shared
+        let center = NotificationCenter()
+        let inventory = WindowInventoryService(applicationNotificationCenter: center)
+        inventory.start()
+        defer { inventory.stop() }
+        let original = previewInfo()
+        let updated = PreviewWindowInfo(
+            id: original.id, windowID: original.windowID, processIdentifier: original.processIdentifier,
+            appName: original.appName, title: original.title, frame: original.frame,
+            isMinimized: true, isApplicationHidden: true, isFullScreen: true
+        )
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, _, _ in }, requestWindowClose: { _, _, _, _ in }
+        )
+        controller.observeWindowStatus(using: PreviewWindowStatusMonitor(inventory: inventory) { _, _ in [updated] })
+        defer { controller.hide() }
+        for target in [dockTarget(), commandTabTarget(), windowCycleTarget()] {
+            let priorWindows = Set(NSApp.windows.map(ObjectIdentifier.init))
+            controller.show(target: target, windows: [original], message: nil)
+            let panel = try XCTUnwrap(NSApp.windows.first {
+                !priorWindows.contains(ObjectIdentifier($0)) || ($0.isVisible && $0.frame == controller.frame)
+            })
+            let tile = try XCTUnwrap(allSubviews(of: try XCTUnwrap(panel.contentView)).compactMap { $0 as? PreviewThumbnailView }.first)
+            controller.setSelectedWindow(original)
+            let selectedBorder = tile.layer?.borderWidth
+            let liveImage = NSImage(size: original.frame.size)
+            controller.updatePreview(windowID: try XCTUnwrap(original.windowID), image: liveImage)
+            panel.contentView?.layoutSubtreeIfNeeded()
+            let panelFrame = controller.frame
+            let tileFrame = tile.frame
+            center.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+            for _ in 0..<3 { await settleMainActor() }
+
+            XCTAssertTrue(tile.info.isMinimized)
+            XCTAssertEqual(tile.info.isApplicationHidden, true)
+            XCTAssertEqual(tile.info.isFullScreen, true)
+            XCTAssertTrue(tile.subviews.compactMap { $0 as? NSImageView }.contains { $0.image === liveImage })
+            XCTAssertEqual(tile.frame, tileFrame)
+            XCTAssertEqual(controller.frame, panelFrame)
+            XCTAssertEqual(tile.layer?.borderWidth, selectedBorder)
+            XCTAssertTrue(allSubviews(of: try XCTUnwrap(panel.contentView)).contains { $0 === tile })
+
+            controller.update(target: target, windows: [original], message: nil)
+            XCTAssertTrue(tile.info.isMinimized, "An older inventory result must not revert observed state")
+            controller.hide()
+            center.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
+            for _ in 0..<3 { await settleMainActor() }
+            XCTAssertNil(controller.frame)
+        }
+    }
+
+    private func allSubviews(of view: NSView) -> [NSView] {
+        view.subviews.flatMap { [$0] + allSubviews(of: $0) }
+    }
+
     func testWindowCycleSelectionScrollsToTheLastRowAndBack() throws {
         let priorWindows = Set(NSApp.windows.map(ObjectIdentifier.init))
         let controller = PreviewPanelController(

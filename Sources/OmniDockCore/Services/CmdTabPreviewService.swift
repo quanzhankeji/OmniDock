@@ -23,7 +23,8 @@ struct CmdTabPreviewRequestState: Equatable {
 @MainActor
 final class CmdTabPreviewService {
     private let settings: SettingsStore
-    private let permissionService: PermissionService
+    private let permissionSnapshotProvider: () -> PermissionSnapshot
+    private let windowInventory: WindowInventoryService
     private let previewService: ScreenCapturePreviewService
     private let previewPanelController: PreviewPanelController
     private let onActivityChanged: (Bool) -> Void
@@ -32,8 +33,12 @@ final class CmdTabPreviewService {
     private var currentWindows: [PreviewWindowInfo] = []
     private var currentImages: [PreviewWindowIdentity: NSImage] = [:]
     private var captureRetryCounts: [PreviewWindowIdentity: Int] = [:]
+    private var captureSnapshot: PreviewWindowSnapshot?
     private var currentTarget: DockAppTarget?
     private var isInteractionActive = false
+    private var inventoryObserverIdentifier: UUID?
+    private var inventoryRefreshWorkItem: DispatchWorkItem?
+    private var windowLoadGeneration: UInt64 = 0
     private var permissionObserver: NSObjectProtocol?
     private var lastPermissionSnapshot: PermissionSnapshot?
 
@@ -46,7 +51,7 @@ final class CmdTabPreviewService {
                 && self.settings.showCommandTabPreviews
                 && PermissionFeatureGate.isSatisfied(
                     for: .dockPreview,
-                    in: self.permissionService.snapshot()
+                    in: self.permissionSnapshotProvider()
                 )
         }
     )
@@ -54,12 +59,15 @@ final class CmdTabPreviewService {
     init(
         settings: SettingsStore,
         permissionService: PermissionService,
+        windowInventory: WindowInventoryService,
         previewService: ScreenCapturePreviewService,
         previewPanelController: PreviewPanelController,
+        permissionSnapshotProvider: (() -> PermissionSnapshot)? = nil,
         onActivityChanged: @escaping (Bool) -> Void
     ) {
         self.settings = settings
-        self.permissionService = permissionService
+        self.permissionSnapshotProvider = permissionSnapshotProvider ?? { permissionService.snapshot() }
+        self.windowInventory = windowInventory
         self.previewService = previewService
         self.previewPanelController = previewPanelController
         self.onActivityChanged = onActivityChanged
@@ -100,14 +108,14 @@ final class CmdTabPreviewService {
     }
 
     func start() {
-        lastPermissionSnapshot = permissionService.snapshot()
+        lastPermissionSnapshot = permissionSnapshotProvider()
         if let permissionObserver { NotificationCenter.default.removeObserver(permissionObserver) }
         permissionObserver = NotificationCenter.default.addObserver(
             forName: PermissionService.changedNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                let snapshot = self.permissionService.snapshot()
+                let snapshot = self.permissionSnapshotProvider()
                 let changed = self.lastPermissionSnapshot?.accessibility != snapshot.accessibility
                     || self.lastPermissionSnapshot?.screenRecording != snapshot.screenRecording
                 self.lastPermissionSnapshot = snapshot
@@ -125,7 +133,7 @@ final class CmdTabPreviewService {
         endInteraction()
     }
 
-    private func beginInteraction() {
+    func beginInteraction() {
         guard !isInteractionActive else {
             return
         }
@@ -133,26 +141,33 @@ final class CmdTabPreviewService {
         isInteractionActive = true
         onActivityChanged(true)
         resetPresentation()
+        inventoryObserverIdentifier = windowInventory.observeChanges { [weak self] event in
+            self?.handleInventoryChange(event)
+        }
     }
 
-    private func endInteraction() {
+    func endInteraction() {
         guard isInteractionActive else {
             return
         }
         resetPresentation()
+        if let inventoryObserverIdentifier {
+            windowInventory.removeChangeObserver(inventoryObserverIdentifier)
+        }
+        inventoryObserverIdentifier = nil
         isInteractionActive = false
         onActivityChanged(false)
     }
 
-    private func showPreview(for target: DockAppTarget) {
-        guard isInteractionActive,
-              settings.showDockPreviews,
-              settings.showCommandTabPreviews,
-              PermissionFeatureGate.isSatisfied(
-                for: .dockPreview,
-                in: permissionService.snapshot()
-              )
-        else {
+    private var canPresent: Bool {
+        isInteractionActive && settings.showCommandTabPreviews
+            && PermissionFeatureGate.availability(
+                for: .dockPreview, settings: settings, snapshot: permissionSnapshotProvider()
+            ).canRun
+    }
+
+    func showPreview(for target: DockAppTarget) {
+        guard canPresent else {
             endInteraction()
             return
         }
@@ -160,10 +175,9 @@ final class CmdTabPreviewService {
         resetPresentation()
         currentTarget = target
 
-        let targetIdentifier = target.dockTileIdentifier
-        let generation = requestState.begin(targetIdentifier: targetIdentifier)
+        _ = requestState.begin(targetIdentifier: target.dockTileIdentifier)
         let cachedWindows = previewService.cachedSnapshotWindows(for: target.processIdentifier)
-        let cachedImages = Dictionary(
+        currentImages = Dictionary(
             cachedWindows.compactMap { window -> (PreviewWindowIdentity, NSImage)? in
                 guard let image = window.staticPreviewImage else {
                     return nil
@@ -172,38 +186,41 @@ final class CmdTabPreviewService {
             },
             uniquingKeysWith: { first, _ in first }
         )
+        loadPreview(for: target, refreshingInventory: false)
+    }
 
-        previewService.loadWindows(for: target) { [weak self] snapshot in
+    private func loadPreview(for target: DockAppTarget, refreshingInventory: Bool) {
+        windowLoadGeneration &+= 1
+        publishButtonTargets()
+        let loadGeneration = windowLoadGeneration
+        let generation = requestState.generation
+        let targetIdentifier = target.dockTileIdentifier
+        previewService.loadWindows(for: target, requiresFreshContent: refreshingInventory) { [weak self] snapshot in
             guard let self,
+                  self.windowLoadGeneration == loadGeneration,
                   self.requestState.accepts(
                     generation: generation,
                     targetIdentifier: targetIdentifier
                   ),
-                  self.isInteractionActive,
-                  self.settings.showCommandTabPreviews,
-                  PermissionFeatureGate.availability(
-                    for: .dockPreview, settings: self.settings, snapshot: self.permissionService.snapshot()
-                  ).canRun
+                  self.canPresent
             else {
                 return
             }
 
-            // Same switch the Dock previews follow, so the two do not disagree
-            // about whether a preview moves.
-            let policy = PreviewCapturePolicy.adaptive(
-                livePreviewsEnabled: self.settings.liveDockPreviewsEnabled,
-                windowCount: snapshot.windows.count,
-                powerState: .current,
-                requestedLiveStreamCount: self.settings.livePreviewWindowLimit
+            if !refreshingInventory {
+                self.replaceWindows(snapshot.windows, preservingOrder: false)
+            }
+            // The refreshed AX list is authoritative. A late capture surface must not
+            // restore a closed card or replace an unaffected card's running stream.
+            let identities = Set(self.currentWindows.map(PreviewWindowIdentity.init))
+            var captureWindows = self.captureSnapshot?.captureWindows ?? [:]
+            captureWindows.merge(snapshot.captureWindows) { _, new in new }
+            self.captureSnapshot = PreviewWindowSnapshot(
+                windows: self.currentWindows,
+                captureWindows: captureWindows.filter { identities.contains($0.key) }
             )
-            self.currentWindows = Array(snapshot.windows.prefix(policy.maxVisibleWindows))
-            let identities = self.currentWindows.map(PreviewWindowIdentity.init)
-            let identitySet = Set(identities)
-            self.currentImages = cachedImages.filter { identitySet.contains($0.key) }
             self.refreshPanel(target: target, message: snapshot.message)
             self.reconcileCaptureSessions(
-                snapshot: snapshot,
-                policy: policy,
                 target: target,
                 generation: generation,
                 targetIdentifier: targetIdentifier
@@ -211,17 +228,91 @@ final class CmdTabPreviewService {
         }
     }
 
+    private func replaceWindows(_ windows: [PreviewWindowInfo], preservingOrder: Bool) {
+        let previousIdentities = Set(currentWindows.map(PreviewWindowIdentity.init))
+        var orderedWindows = windows
+        if preservingOrder {
+            let byIdentity = Dictionary(
+                windows.map { (PreviewWindowIdentity($0), $0) }, uniquingKeysWith: { first, _ in first }
+            )
+            orderedWindows = currentWindows.compactMap { byIdentity[PreviewWindowIdentity($0)] }
+                + windows.filter { !previousIdentities.contains(PreviewWindowIdentity($0)) }
+        }
+        let policy = capturePolicy(windowCount: orderedWindows.count)
+        currentWindows = Array(orderedWindows.prefix(policy.maxVisibleWindows))
+        let identities = Set(currentWindows.map(PreviewWindowIdentity.init))
+        currentImages = currentImages.filter { identities.contains($0.key) }
+        captureRetryCounts = captureRetryCounts.filter { identities.contains($0.key) }
+        for identity in previousIdentities.subtracting(identities) {
+            captureSessionRegistry.remove(identity)
+        }
+        if let snapshot = captureSnapshot {
+            captureSnapshot = PreviewWindowSnapshot(
+                windows: currentWindows,
+                captureWindows: snapshot.captureWindows.filter { identities.contains($0.key) }
+            )
+        }
+    }
+
+    private func capturePolicy(windowCount: Int) -> PreviewCapturePolicy {
+        PreviewCapturePolicy.adaptive(
+            livePreviewsEnabled: settings.liveDockPreviewsEnabled, windowCount: windowCount,
+            powerState: .current, requestedLiveStreamCount: settings.livePreviewWindowLimit
+        )
+    }
+
+    private func handleInventoryChange(_ event: WindowInventoryEvent) {
+        guard isInteractionActive, let target = currentTarget else { return }
+        switch event {
+        case let .processTerminated(pid) where pid == target.processIdentifier,
+             let .processLaunched(pid) where pid == target.processIdentifier:
+            resetPresentation()
+        case let .windowRemoved(identity) where identity.processIdentifier == target.processIdentifier:
+            replaceWindows(currentWindows.filter { PreviewWindowIdentity($0) != identity }, preservingOrder: true)
+            scheduleInventoryRefresh(for: target)
+            refreshPanel(target: target, message: nil)
+        case let .processInvalidated(pid, reason)
+            where pid == target.processIdentifier && (reason == .created || reason == .destroyed):
+            scheduleInventoryRefresh(for: target)
+        default:
+            break
+        }
+    }
+
+    private func scheduleInventoryRefresh(for target: DockAppTarget) {
+        // Query revisions are separate from capture generations so retained streams
+        // can keep delivering frames while an out-of-date window query is rejected.
+        windowLoadGeneration &+= 1
+        publishButtonTargets()
+        guard inventoryRefreshWorkItem == nil else { return }
+        let generation = requestState.generation
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self,
+                  self.requestState.accepts(generation: generation, targetIdentifier: target.dockTileIdentifier)
+            else { return }
+            self.inventoryRefreshWorkItem = nil
+            guard self.canPresent else { self.endInteraction(); return }
+            guard let records = self.windowInventory.reconcileWindows(for: target.processIdentifier) else { return }
+            self.replaceWindows(records.map { $0.makePreviewWindowInfo() }, preservingOrder: true)
+            self.refreshPanel(target: target, message: nil)
+            guard !self.currentWindows.isEmpty, self.permissionSnapshotProvider().screenRecording else { return }
+            self.loadPreview(for: target, refreshingInventory: true)
+        }
+        inventoryRefreshWorkItem = workItem
+        DispatchQueue.main.async(execute: workItem)
+    }
+
     private func reconcileCaptureSessions(
-        snapshot: PreviewWindowSnapshot,
-        policy: PreviewCapturePolicy,
         target: DockAppTarget,
         generation: UInt64,
         targetIdentifier: String
     ) {
-        guard permissionService.snapshot().screenRecording else {
+        guard permissionSnapshotProvider().screenRecording else {
             captureSessionRegistry.stopAll()
             return
         }
+        guard let snapshot = captureSnapshot else { return }
+        let policy = capturePolicy(windowCount: currentWindows.count)
         let identities = currentWindows.map(PreviewWindowIdentity.init)
         captureSessionRegistry.reconcile(
             orderedIdentities: identities,
@@ -254,8 +345,6 @@ final class CmdTabPreviewService {
                 errorHandler: { [weak self] _ in
                     self?.handleCaptureFailure(
                         for: identity,
-                        snapshot: snapshot,
-                        policy: policy,
                         target: target,
                         generation: generation,
                         targetIdentifier: targetIdentifier
@@ -267,8 +356,6 @@ final class CmdTabPreviewService {
 
     private func handleCaptureFailure(
         for identity: PreviewWindowIdentity,
-        snapshot: PreviewWindowSnapshot,
-        policy: PreviewCapturePolicy,
         target: DockAppTarget,
         generation: UInt64,
         targetIdentifier: String
@@ -298,13 +385,12 @@ final class CmdTabPreviewService {
                     targetIdentifier: targetIdentifier
                   ),
                   self.isInteractionActive,
-                  self.currentTarget?.isSameDockTile(as: target) == true
+                  self.currentTarget?.isSameDockTile(as: target) == true,
+                  self.currentWindows.contains(where: { PreviewWindowIdentity($0) == identity })
             else {
                 return
             }
             self.reconcileCaptureSessions(
-                snapshot: snapshot,
-                policy: policy,
                 target: target,
                 generation: generation,
                 targetIdentifier: targetIdentifier
@@ -319,7 +405,7 @@ final class CmdTabPreviewService {
         generation: UInt64,
         targetIdentifier: String
     ) {
-        guard permissionService.snapshot().screenRecording,
+        guard permissionSnapshotProvider().screenRecording,
               requestState.accepts(
             generation: generation,
             targetIdentifier: targetIdentifier
@@ -334,8 +420,8 @@ final class CmdTabPreviewService {
     }
 
     private func refreshPanel(target: DockAppTarget, message: String?) {
-        let metadataOnly = !permissionService.snapshot().screenRecording
-        let displayableWindows = currentWindows.compactMap { window -> PreviewWindowInfo? in
+        let metadataOnly = !permissionSnapshotProvider().screenRecording
+        let displayableWindows = currentWindows.map { window -> PreviewWindowInfo in
             let identity = PreviewWindowIdentity(window)
             if metadataOnly {
                 return copy(window, image: nil, placeholderText: AppStrings.text(
@@ -352,7 +438,7 @@ final class CmdTabPreviewService {
                     placeholderText: AppStrings.text(.previewMinimizedClickRestore)
                 )
             }
-            return nil
+            return copy(window, image: nil, placeholderText: AppStrings.text(.previewWindowContentUnavailable))
         }
         guard !displayableWindows.isEmpty else {
             previewPanelController.hide()
@@ -379,10 +465,7 @@ final class CmdTabPreviewService {
     private func performPreviewButtonAction(_ invocation: CmdTabPreviewButtonInvocation) {
         guard isInteractionActive,
               let currentTarget,
-              requestState.accepts(
-                generation: invocation.requestGeneration,
-                targetIdentifier: invocation.targetIdentifier
-              ),
+              invocation.requestGeneration == windowLoadGeneration,
               currentTarget.dockTileIdentifier == invocation.targetIdentifier
         else {
             return
@@ -406,7 +489,7 @@ final class CmdTabPreviewService {
         observer.updatePreviewButtonTargets(
             previewPanelController.commandTabButtonHitTargets(),
             panelFrame: previewPanelController.frame,
-            requestGeneration: requestState.generation,
+            requestGeneration: windowLoadGeneration,
             targetIdentifier: currentTarget.dockTileIdentifier
         )
     }
@@ -429,10 +512,7 @@ final class CmdTabPreviewService {
         guard currentWindows.contains(where: { PreviewWindowIdentity($0) == identity }) else {
             return
         }
-        captureSessionRegistry.remove(identity)
-        currentWindows.removeAll { PreviewWindowIdentity($0) == identity }
-        currentImages[identity] = nil
-        captureRetryCounts[identity] = nil
+        replaceWindows(currentWindows.filter { PreviewWindowIdentity($0) != identity }, preservingOrder: true)
         previewService.removeCachedSnapshot(matching: window)
     }
 
@@ -457,8 +537,12 @@ final class CmdTabPreviewService {
     }
 
     private func resetPresentation() {
+        inventoryRefreshWorkItem?.cancel()
+        inventoryRefreshWorkItem = nil
+        windowLoadGeneration &+= 1
         requestState.cancel()
         captureSessionRegistry.stopAll()
+        captureSnapshot = nil
         currentWindows = []
         currentImages = [:]
         captureRetryCounts = [:]

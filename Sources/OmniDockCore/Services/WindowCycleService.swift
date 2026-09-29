@@ -467,6 +467,8 @@ final class WindowCycleService {
     private var currentImages: [PreviewWindowIdentity: NSImage] = [:]
     private var inventoryChangeObserverIdentifier: UUID?
     private var inventoryPrewarmWorkItem: DispatchWorkItem?
+    private var processRefreshWorkItem: DispatchWorkItem?
+    private var pendingProcessRefreshes = Set<pid_t>()
     private var hasPrewarmedInventory = false
     private var isAwaitingInventory = false
     private var isStarted = false
@@ -1127,6 +1129,9 @@ final class WindowCycleService {
         let wasActive = session != nil || sessionTarget != nil || inputMonitor.isMonitoring
         inventoryRefreshGeneration &+= 1
         sessionGeneration &+= 1
+        processRefreshWorkItem?.cancel()
+        processRefreshWorkItem = nil
+        pendingProcessRefreshes.removeAll()
         isAwaitingInventory = false
         stopObservingInventoryChanges()
         inputMonitor.stop()
@@ -1171,11 +1176,65 @@ final class WindowCycleService {
         switch event {
         case let .windowRemoved(identity):
             removeWindow(identity)
-        case let .processLaunched(processIdentifier), let .processTerminated(processIdentifier):
+        case let .processLaunched(processIdentifier):
             removeApplication(processIdentifier)
+            scheduleProcessRefresh(processIdentifier)
+        case let .processTerminated(processIdentifier):
+            pendingProcessRefreshes.remove(processIdentifier)
+            removeApplication(processIdentifier)
+        case let .processInvalidated(processIdentifier, reason) where reason == .created || reason == .destroyed:
+            scheduleProcessRefresh(processIdentifier)
         case .seed, .processInvalidated, .processActivated, .windowFocused, .activeSpaceChanged, .displayConfigurationChanged:
             break
         }
+    }
+
+    private func scheduleProcessRefresh(_ processIdentifier: pid_t) {
+        guard session != nil, canRun else { return }
+        pendingProcessRefreshes.insert(processIdentifier)
+        guard processRefreshWorkItem == nil else { return }
+        let generation = inventoryRefreshGeneration
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, generation == self.inventoryRefreshGeneration else { return }
+            self.processRefreshWorkItem = nil
+            let processIdentifiers = self.pendingProcessRefreshes.sorted()
+            self.pendingProcessRefreshes.removeAll()
+            guard self.canRun, self.session != nil else { return }
+            self.refreshProcesses(processIdentifiers)
+        }
+        processRefreshWorkItem = workItem
+        DispatchQueue.main.async(execute: workItem)
+    }
+
+    private func refreshProcesses(_ processIdentifiers: [pid_t]) {
+        guard let session else { return }
+        var replacements: [pid_t: [WindowInventoryRecord]] = [:]
+        for processIdentifier in processIdentifiers {
+            if let records = windowInventory.reconcileWindows(for: processIdentifier) {
+                replacements[processIdentifier] = records
+            }
+        }
+        guard !replacements.isEmpty else { return }
+        var remaining = Dictionary(uniqueKeysWithValues: replacements.values.flatMap { $0 }.map { ($0.identity, $0) })
+        // Surviving cards keep their relative order; new windows append without moving selection.
+        var records = session.windows.enumerated().compactMap { index, window -> WindowInventoryRecord? in
+            guard replacements[window.processIdentifier] != nil else {
+                return WindowInventoryRecord(window, displayOrder: index)
+            }
+            return remaining.removeValue(forKey: PreviewWindowIdentity(window))
+        }
+        for processIdentifier in processIdentifiers {
+            for record in replacements[processIdentifier, default: []] {
+                if let newRecord = remaining.removeValue(forKey: record.identity) {
+                    records.append(newRecord)
+                }
+            }
+        }
+        guard !records.isEmpty else {
+            endSession()
+            return
+        }
+        applyReconciledWindows(records)
     }
 
     private func updatePresentation(for session: WindowCycleSession) {

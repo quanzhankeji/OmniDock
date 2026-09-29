@@ -35,7 +35,7 @@ public final class ScreenCapturePreviewService {
     private var snapshotCleanupWorkItem: DispatchWorkItem?
     private var cachedShareableContent: CachedShareableContent?
     private var pendingShareableContentCompletions: [(SCShareableContent?, Error?) -> Void] = []
-    private var isLoadingShareableContent = false
+    private var shareableContentRequestIdentifier: UUID?
     private var shareableContentGeneration: UInt64 = 0
 
     public convenience init() {
@@ -117,7 +117,7 @@ public final class ScreenCapturePreviewService {
         shareableContentGeneration &+= 1
         let cancelledCompletions = pendingShareableContentCompletions
         pendingShareableContentCompletions.removeAll()
-        isLoadingShareableContent = false
+        shareableContentRequestIdentifier = nil
         snapshotCache.clearAll()
         cachedShareableContent = nil
         snapshotCleanupWorkItem?.cancel()
@@ -228,8 +228,19 @@ public final class ScreenCapturePreviewService {
         }
     }
 
-    func loadWindows(for target: DockAppTarget, completion: @escaping (PreviewWindowSnapshot) -> Void) {
-        loadWindows(for: target, allowsInventoryReuse: true, completion: completion)
+    func loadWindows(
+        for target: DockAppTarget,
+        requiresFreshContent: Bool = false,
+        completion: @escaping (PreviewWindowSnapshot) -> Void
+    ) {
+        dispatchPrecondition(condition: .onQueue(.main))
+        if requiresFreshContent {
+            // Keep waiting callers, but do not let a pre-change content request or
+            // cached surface list satisfy a structural window refresh.
+            cachedShareableContent = nil
+            shareableContentRequestIdentifier = nil
+        }
+        loadWindows(for: target, allowsInventoryReuse: !requiresFreshContent, completion: completion)
     }
 
     private func loadWindows(
@@ -240,7 +251,8 @@ public final class ScreenCapturePreviewService {
         dispatchPrecondition(condition: .onQueue(.main))
         guard hasScreenRecordingPermission() else {
             clearAllCachedSnapshots()
-            completion(metadataSnapshot(for: target))
+            completeWindowLoad(metadataSnapshot(for: target), for: target,
+                               inventoryRequestRevision: nil, completion: completion)
             return
         }
         if allowsInventoryReuse,
@@ -262,7 +274,8 @@ public final class ScreenCapturePreviewService {
             }
             guard self.hasScreenRecordingPermission() else {
                 self.clearAllCachedSnapshots()
-                completion(self.metadataSnapshot(for: target))
+                self.completeWindowLoad(self.metadataSnapshot(for: target), for: target,
+                                        inventoryRequestRevision: nil, completion: completion)
                 return
             }
             guard loadGeneration == self.shareableContentGeneration else {
@@ -371,17 +384,19 @@ public final class ScreenCapturePreviewService {
         }
 
         pendingShareableContentCompletions.append(completion)
-        guard !isLoadingShareableContent else {
+        guard shareableContentRequestIdentifier == nil else {
             return
         }
-        isLoadingShareableContent = true
+        let requestIdentifier = UUID()
+        shareableContentRequestIdentifier = requestIdentifier
         let generation = shareableContentGeneration
         shareableContentLoader { [weak self] content, error in
             DispatchQueue.main.async {
-                guard let self, generation == self.shareableContentGeneration else {
+                guard let self, generation == self.shareableContentGeneration,
+                      requestIdentifier == self.shareableContentRequestIdentifier else {
                     return
                 }
-                self.isLoadingShareableContent = false
+                self.shareableContentRequestIdentifier = nil
                 let content = self.hasScreenRecordingPermission() ? content : nil
                 if let content, self.hasScreenRecordingPermission() {
                     self.cachedShareableContent = CachedShareableContent(

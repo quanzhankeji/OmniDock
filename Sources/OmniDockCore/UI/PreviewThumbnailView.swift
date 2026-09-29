@@ -115,6 +115,14 @@ final class PreviewThumbnailView: NSView {
         return abs(previousSize.width - preferredTileSize.width) > 1
     }
 
+    func updateWindowStatus(_ info: PreviewWindowInfo) {
+        self.info = info
+        refreshStatus()
+        placeholderField.stringValue = info.placeholderText
+            ?? (info.isMinimized ? AppStrings.text(.previewMinimizedClickRestore) : "")
+        placeholderField.isHidden = placeholderField.stringValue.isEmpty || imageView.image != nil
+    }
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
     }

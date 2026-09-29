@@ -22,9 +22,12 @@ public enum WindowFiltering {
         layer == 0 && frame.width >= 80 && frame.height >= 60
     }
 
-    public static func shouldIncludeAXPreviewWindow(role: String?, subrole: String?, title: String?) -> Bool {
+    public static func shouldIncludeAXPreviewWindow(
+        role: String?, subrole: String?, title: String?, frame: CGRect? = nil
+    ) -> Bool {
         isNormalAXWindow(role: role, subrole: subrole)
             && !(title ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (frame.map { hasNormalWindowGeometry(layer: 0, frame: $0) } ?? true)
     }
 
     public static func isNormalAXWindow(role: String?, subrole: String?) -> Bool {

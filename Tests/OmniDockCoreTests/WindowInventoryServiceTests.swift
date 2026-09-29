@@ -1,8 +1,45 @@
 import AppKit
+import ApplicationServices
 import XCTest
 @testable import OmniDockCore
 
 final class WindowInventoryStateTests: XCTestCase {
+    func testEmptyApplicationRemainsTrackedUntilTermination() {
+        var state = WindowInventoryState()
+        _ = state.apply(.seed(processIdentifier: 101, revision: 1, records: []))
+        XCTAssertEqual(state.processIdentifiers, [101])
+        _ = state.apply(.processTerminated(processIdentifier: 101))
+        XCTAssertTrue(state.processIdentifiers.isEmpty)
+    }
+
+    func testSwitcherSnapshotIncludesNewAccessibilityWindowBeforeItsSurfaceAppears() {
+        let visible = record(windowID: 10, title: "Visible").makePreviewWindowInfo()
+        let newlyCreated = PreviewWindowInfo(
+            id: "new-window", windowID: 20, processIdentifier: 101, appName: "Example", title: "New document",
+            frame: CGRect(x: 40, y: 40, width: 800, height: 600), isMinimized: false
+        )
+        let windows = WindowInventorySwitcherSnapshotPolicy.merge(
+            accessibilityWindows: [visible, newlyCreated], windowServerWindows: [visible]
+        )
+        XCTAssertEqual(windows.compactMap(\.windowID), [10, 20])
+    }
+
+    func testSwitcherSnapshotDoesNotDuplicateAnUnmatchedTabOnAnExistingSurface() {
+        let visible = record(windowID: 10, title: "Visible").makePreviewWindowInfo()
+        let tab = record(windowID: 20, title: "Background tab").makePreviewWindowInfo()
+        let windows = WindowInventorySwitcherSnapshotPolicy.merge(
+            accessibilityWindows: [visible, tab], windowServerWindows: [visible]
+        )
+        XCTAssertEqual(windows.compactMap(\.windowID), [10])
+    }
+
+    func testBothAccessibilityCreationNotificationsInvalidateWindowStructure() {
+        XCTAssertEqual(WindowInventoryInvalidation(accessibilityNotification: kAXWindowCreatedNotification), .created)
+        XCTAssertEqual(WindowInventoryInvalidation(accessibilityNotification: kAXCreatedNotification), .created)
+        XCTAssertEqual(WindowInventoryInvalidation(accessibilityNotification: kAXUIElementDestroyedNotification), .destroyed)
+        XCTAssertNil(WindowInventoryInvalidation(accessibilityNotification: "AXUnrelatedNotification"))
+    }
+
     func testWindowStateSurvivesCaptureMergeAndInventoryRoundTrip() throws {
         let ax = PreviewWindowInfo(
             id: "ax-10", windowID: 10, processIdentifier: 101, appName: "Editor",
@@ -76,6 +113,39 @@ final class WindowInventoryStateTests: XCTestCase {
         )
 
         XCTAssertEqual(windows.map(\.windowID), [10])
+    }
+
+    func testMinimizedWindowWithoutAXNumberKeepsItsKnownIdentity() {
+        let previous = record(windowID: 10, title: "Document").makePreviewWindowInfo()
+        let minimized = PreviewWindowInfo(
+            id: "ax-minimized", windowID: nil, processIdentifier: 101, appName: "Example",
+            title: previous.title, frame: previous.frame, isMinimized: true
+        )
+        let windows = WindowInventorySwitcherSnapshotPolicy.merge(
+            accessibilityWindows: [minimized], windowServerWindows: [], previousWindows: [previous]
+        )
+        XCTAssertEqual(windows.map(\.windowID), [10])
+        XCTAssertEqual(windows.map(\.isMinimized), [true])
+    }
+
+    func testMinimizedIdentityFallbackRejectsAmbiguityOtherProcessesAndNewNormalWindows() {
+        let previous = record(windowID: 10, title: "Document").makePreviewWindowInfo()
+        let duplicate = record(windowID: 20, title: "Document").makePreviewWindowInfo()
+        func ax(_ id: String, pid: pid_t = 101, minimized: Bool = true) -> PreviewWindowInfo {
+            PreviewWindowInfo(id: id, windowID: nil, processIdentifier: pid, appName: "Example",
+                              title: previous.title, frame: previous.frame, isMinimized: minimized)
+        }
+        for (current, known) in [
+            ([ax("one")], [previous, duplicate]),
+            ([ax("one"), ax("two")], [previous]),
+            ([ax("other", pid: 202)], [previous]),
+            ([ax("new", minimized: false)], [previous])
+        ] {
+            let windows = WindowInventorySwitcherSnapshotPolicy.merge(
+                accessibilityWindows: current, windowServerWindows: [], previousWindows: known
+            )
+            XCTAssertTrue(windows.allSatisfy { $0.windowID == nil })
+        }
     }
 
     func testSeedRejectsOutOfOrderResultsForTheSameProcess() {
@@ -212,6 +282,112 @@ final class WindowInventoryStateTests: XCTestCase {
 
 @MainActor
 final class WindowInventoryServiceTests: XCTestCase {
+    func testApplicationLaunchIsPublishedBeforeItsFirstWindowIsKnown() async {
+        let application = NSRunningApplication.current
+        let center = NotificationCenter()
+        let service = WindowInventoryService(workspaceNotificationCenter: center)
+        service.start()
+        defer { service.stop() }
+        let launched = expectation(description: "An unindexed application launch is published")
+        service.observeChanges { event in
+            if case let .processLaunched(processIdentifier) = event,
+               processIdentifier == application.processIdentifier {
+                launched.fulfill()
+            }
+        }
+
+        center.post(name: NSWorkspace.didLaunchApplicationNotification, object: nil,
+                    userInfo: [NSWorkspace.applicationUserInfoKey: application])
+
+        await fulfillment(of: [launched], timeout: 1)
+    }
+
+    func testTargetedReconciliationReadsOnlyTheAffectedApplicationAndRejectsOldSnapshots() {
+        let target = target()
+        let updated = window(title: "Updated")
+        var reads: [pid_t] = []
+        let service = WindowInventoryService(
+            accessibilityWindowsProvider: { processIdentifier, _ in
+                reads.append(processIdentifier)
+                return [updated]
+            },
+            windowServerWindowsProvider: { [:] }
+        )
+        defer { service.stop() }
+        let oldSnapshot = PreviewWindowSnapshot(windows: [window(title: "Old")], captureWindows: [:])
+        service.seed(oldSnapshot, for: target)
+        let oldRevision = service.beginSnapshotRequest(for: target)
+
+        let records = service.reconcileWindows(for: target.processIdentifier)
+        service.seed(oldSnapshot, for: target, requestRevision: oldRevision)
+
+        XCTAssertEqual(reads, [target.processIdentifier])
+        XCTAssertEqual(records?.map(\.title), ["Updated"])
+        XCTAssertEqual(service.windows(for: target.processIdentifier).map(\.title), ["Updated"])
+        XCTAssertNil(service.previewSnapshot(for: target), "Structural refresh must discard cached closed surfaces")
+    }
+
+    func testTargetedReconciliationDistinguishesReadFailureFromAnEmptyWindowList() {
+        let target = target()
+        var accessibilityWindows: [PreviewWindowInfo]?
+        let service = WindowInventoryService(
+            accessibilityWindowsProvider: { _, _ in accessibilityWindows },
+            windowServerWindowsProvider: { [:] }
+        )
+        defer { service.stop() }
+        service.seed(PreviewWindowSnapshot(windows: [window(title: "Document")], captureWindows: [:]), for: target)
+
+        XCTAssertNil(service.reconcileWindows(for: target.processIdentifier))
+        XCTAssertEqual(service.windows(for: target.processIdentifier).count, 1)
+        accessibilityWindows = []
+        XCTAssertEqual(service.reconcileWindows(for: target.processIdentifier)?.count, 0)
+        XCTAssertTrue(service.windows(for: target.processIdentifier).isEmpty)
+    }
+
+    func testTargetedEmptyResultDoesNotRemoveAnotherApplicationsWindows() {
+        let target = target()
+        let otherTarget = DockAppTarget(processIdentifier: 202, bundleIdentifier: nil, localizedName: "Other",
+                                        dockElementTitle: "Other", hitPoint: .zero)
+        let otherWindow = PreviewWindowInfo(
+            id: "other", windowID: 20, processIdentifier: otherTarget.processIdentifier, appName: "Other",
+            title: "Other document", frame: CGRect(x: 0, y: 0, width: 800, height: 600), isMinimized: false
+        )
+        let service = WindowInventoryService(
+            accessibilityWindowsProvider: { _, _ in [] }, windowServerWindowsProvider: { [:] }
+        )
+        defer { service.stop() }
+        service.seed(PreviewWindowSnapshot(windows: [window(title: "Document")], captureWindows: [:]), for: target)
+        service.seed(PreviewWindowSnapshot(windows: [otherWindow], captureWindows: [:]), for: otherTarget)
+
+        _ = service.reconcileWindows(for: target.processIdentifier)
+
+        XCTAssertEqual(service.allWindows().map(\.identity), [PreviewWindowIdentity(otherWindow)])
+    }
+
+    func testRepeatedVisibilityChangesArePublishedUntilTheNextSnapshot() async {
+        let application = NSRunningApplication.current
+        let center = NotificationCenter()
+        let service = WindowInventoryService(workspaceNotificationCenter: center)
+        service.start()
+        defer { service.stop() }
+        var invalidations = 0
+        service.observeChanges { event in
+            if case let .processInvalidated(pid, .visibilityChanged) = event,
+               pid == application.processIdentifier {
+                invalidations += 1
+            }
+        }
+        for notification in [NSWorkspace.didHideApplicationNotification, NSWorkspace.didUnhideApplicationNotification] {
+            center.post(
+                name: notification, object: nil, userInfo: [NSWorkspace.applicationUserInfoKey: application]
+            )
+            let drained = expectation(description: "Visibility notification delivered")
+            DispatchQueue.main.async { drained.fulfill() }
+            await fulfillment(of: [drained], timeout: 1)
+        }
+        XCTAssertEqual(invalidations, 2)
+    }
+
     func testDisplayObserverDoesNotDuplicateOrOutliveInventoryService() {
         let applicationCenter = NotificationCenter()
         let service = WindowInventoryService(applicationNotificationCenter: applicationCenter)

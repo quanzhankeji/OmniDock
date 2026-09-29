@@ -63,6 +63,7 @@
 		7AA0A381BFEDFC4409B64C13 /* PreviewSnapshotCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91BD21CE80CD6DADCCDA4A76 /* PreviewSnapshotCache.swift */; };
 		FDE57ECC274361848D4456E5 /* PreviewWindowCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 921D7AEF502993214CDBBF1D /* PreviewWindowCatalog.swift */; };
 		DC10EC511D7FE28C0905ED7D /* PreviewWindowSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97FEBD038F273A01C5C8A874 /* PreviewWindowSnapshot.swift */; };
+		91BD69ABF25239FE5FCEDECF /* PreviewWindowStatusMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53614078BB79E4D4044DF4D8 /* PreviewWindowStatusMonitor.swift */; };
 		DC140E590459EDB70B755C59 /* PreviewWorkspaceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1093C3128C9370902210F934 /* PreviewWorkspaceMonitor.swift */; };
 		597103B0BDB0E58D4C735A5E /* RuntimeActivityLease.swift in Sources */ = {isa = PBXBuildFile; fileRef = 031DFBE5D4B913CE6233CCBC /* RuntimeActivityLease.swift */; };
 		69824675CD734714340D37E1 /* ScreenCapturePreviewService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42D783D2FE7F45297F57AFA4 /* ScreenCapturePreviewService.swift */; };
@@ -196,6 +197,7 @@
 		91BD21CE80CD6DADCCDA4A76 /* PreviewSnapshotCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/PreviewSnapshotCache.swift"; sourceTree = SOURCE_ROOT; };
 		921D7AEF502993214CDBBF1D /* PreviewWindowCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/PreviewWindowCatalog.swift"; sourceTree = SOURCE_ROOT; };
 		97FEBD038F273A01C5C8A874 /* PreviewWindowSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/PreviewWindowSnapshot.swift"; sourceTree = SOURCE_ROOT; };
+		53614078BB79E4D4044DF4D8 /* PreviewWindowStatusMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/PreviewWindowStatusMonitor.swift"; sourceTree = SOURCE_ROOT; };
 		1093C3128C9370902210F934 /* PreviewWorkspaceMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/PreviewWorkspaceMonitor.swift"; sourceTree = SOURCE_ROOT; };
 		031DFBE5D4B913CE6233CCBC /* RuntimeActivityLease.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/RuntimeActivityLease.swift"; sourceTree = SOURCE_ROOT; };
 		42D783D2FE7F45297F57AFA4 /* ScreenCapturePreviewService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Sources/OmniDockCore/Services/ScreenCapturePreviewService.swift"; sourceTree = SOURCE_ROOT; };
@@ -390,6 +392,7 @@
 				91BD21CE80CD6DADCCDA4A76 /* PreviewSnapshotCache.swift */,
 				921D7AEF502993214CDBBF1D /* PreviewWindowCatalog.swift */,
 				97FEBD038F273A01C5C8A874 /* PreviewWindowSnapshot.swift */,
+				53614078BB79E4D4044DF4D8 /* PreviewWindowStatusMonitor.swift */,
 				1093C3128C9370902210F934 /* PreviewWorkspaceMonitor.swift */,
 				031DFBE5D4B913CE6233CCBC /* RuntimeActivityLease.swift */,
 				42D783D2FE7F45297F57AFA4 /* ScreenCapturePreviewService.swift */,
@@ -707,6 +710,7 @@
 				7AA0A381BFEDFC4409B64C13 /* PreviewSnapshotCache.swift in Sources */,
 				FDE57ECC274361848D4456E5 /* PreviewWindowCatalog.swift in Sources */,
 				DC10EC511D7FE28C0905ED7D /* PreviewWindowSnapshot.swift in Sources */,
+				91BD69ABF25239FE5FCEDECF /* PreviewWindowStatusMonitor.swift in Sources */,
 				DC140E590459EDB70B755C59 /* PreviewWorkspaceMonitor.swift in Sources */,
 				597103B0BDB0E58D4C735A5E /* RuntimeActivityLease.swift in Sources */,
 				69824675CD734714340D37E1 /* ScreenCapturePreviewService.swift in Sources */,

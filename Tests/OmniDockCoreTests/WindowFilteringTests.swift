@@ -111,6 +111,29 @@ final class WindowFilteringTests: XCTestCase {
         )
     }
 
+    func testAXPreviewFilteringRejectsSmallSharingIndicators() {
+        XCTAssertFalse(WindowFiltering.shouldIncludeAXPreviewWindow(
+            role: kAXWindowRole as String, subrole: kAXDialogSubrole as String,
+            title: "Window", frame: CGRect(x: 222, y: 79, width: 52, height: 20)
+        ))
+        XCTAssertFalse(WindowFiltering.shouldIncludeAXPreviewWindow(
+            role: kAXWindowRole as String, subrole: kAXStandardWindowSubrole as String,
+            title: "Window", frame: CGRect(x: 222, y: 79, width: 52, height: 20)
+        ))
+    }
+
+    func testAXPreviewFilteringRetainsDocumentAndRegularDialogGeometry() {
+        for subrole in [kAXStandardWindowSubrole as String, kAXDialogSubrole as String] {
+            XCTAssertTrue(WindowFiltering.shouldIncludeAXPreviewWindow(
+                role: kAXWindowRole as String, subrole: subrole, title: "Document",
+                frame: CGRect(x: 0, y: 0, width: 600, height: 400)
+            ))
+            XCTAssertTrue(WindowFiltering.shouldIncludeAXPreviewWindow(
+                role: kAXWindowRole as String, subrole: subrole, title: "Document", frame: nil
+            ), "Missing AX geometry must not discard an otherwise valid window")
+        }
+    }
+
     func testDockClickBringsForwardTopmostApplicationWithoutOnscreenWindows() {
         XCTAssertEqual(
             WindowFiltering.dockIconClickAction(

@@ -15,9 +15,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var dockHitTester = DockHitTester(permissionService: permissionService)
     private lazy var windowInventory = WindowInventoryService()
     private lazy var previewService = ScreenCapturePreviewService(windowInventory: windowInventory)
-    private lazy var previewPanelController = PreviewPanelController(
-        windowControlService: windowControlService
-    )
+    private lazy var previewPanelController: PreviewPanelController = {
+        let controller = PreviewPanelController(windowControlService: windowControlService)
+        controller.observeWindowStatus(using: PreviewWindowStatusMonitor(inventory: windowInventory))
+        return controller
+    }()
     private lazy var hotkeyService = AppHotkeyService(
         settings: settings,
         permissionService: permissionService,
@@ -36,6 +38,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var cmdTabPreviewService = CmdTabPreviewService(
         settings: settings,
         permissionService: permissionService,
+        windowInventory: windowInventory,
         previewService: previewService,
         previewPanelController: previewPanelController,
         onActivityChanged: { [weak self] isActive in

@@ -97,6 +97,9 @@ already inactive user session.
 | W2 | Quit an application that had windows listed | Its entries go, and nothing else does |
 | W3 | Relaunch that application | Its windows come back once, not twice |
 | W4 | Minimise, hide, and restore | State is shown accurately and the window is still reachable |
+| W5 | Close the final listed window while Option-Tab remains open | The panel dismisses, input monitoring ends, and no window is focused; a temporary AX read failure alone must not clear the panel |
+| W6 | Open a first window in an app with no windows, or launch another app, while Option-Tab is open | Its independent windows join the list once, the current selection stays on the same surviving window, and a delayed capture surface can use a metadata card |
+| W7 | Trigger a window change, then cancel or disable Option-Tab before the refresh arrives | No delayed panel or focus action appears; reopening the switcher starts a fresh session |
 
 A ghost window — one listed after it is gone — and a lost window — one missing
 while it is on screen — are both failures here. Note which.
@@ -108,8 +111,8 @@ both thumbnail capture and metadata-only navigation.
 
 | # | Do this | Expect |
 |---|---|---|
-| V1 | Minimize a window after a thumbnail has been captured | The minimized label remains visible beside the cached image |
-| V2 | Hide an app with both minimized and normal windows, then restore it | App-hidden and minimized are independent; both may be shown, and stale hidden labels clear when the inventory refreshes |
+| V1 | Keep a preview open and repeatedly minimize/restore a window after capturing a thumbnail | The minimized label updates beside the cached image without replacing the card or selected window; metadata-only placeholder text also follows the state |
+| V2 | Hide an app with both minimized and normal windows, then restore it while the preview remains open | App-hidden and minimized are independent; repeated visibility notifications clear stale labels without requiring the panel to reopen |
 | V3 | Enter native full screen, leave it, then maximize without entering full screen | Full screen appears only when reported by the owning app's Accessibility interface; maximized size alone does not produce the label |
 | V4 | Move windows between screens arranged left, right, above, and below the primary screen | The label follows the largest overlap of the latest known window frame; equal overlap and unknown geometry stay unknown |
 | V5 | Disconnect a screen while the panel is open, then reopen the panel | Display labels use the current screen list; record placement and stale-window geometry separately under S3 |
@@ -118,8 +121,12 @@ both thumbnail capture and metadata-only navigation.
 These labels do not establish Space membership. No window is removed from the
 list based on the new status metadata, and no Space/display filter is added.
 Hidden, minimized and cached windows can retain their last observed frame or
-full-screen state until refreshed. Geometry and synthetic notification tests
-do not replace a real multi-display or full-screen acceptance run.
+full-screen state until a matching Accessibility observation arrives. Visible
+cards refresh from coalesced window/workspace events, not a new polling timer.
+Ambiguous matches remain unchanged. If a Space/display transition cancels a
+preview session, status callbacks must not reopen it. Geometry and synthetic
+notification tests do not replace a real multi-display or full-screen acceptance
+run.
 
 ### Exact window focus
 
@@ -779,3 +786,115 @@ has passed on three machines and fails on a fourth is worth being able to see.
   gate is closed by this smoke test. Temporary test windows were closed and
   modifier holds released; existing documents were left untouched. No runtime
   change, commit, push or release publication occurred.
+
+### 2026-09-28 · event-driven preview status refresh
+
+- Dock, enhanced Command-Tab and Option-Tab share a visible-panel status
+  observer. Coalesced Accessibility/workspace events refresh minimized, hidden,
+  full-screen and frame metadata without restarting capture or rebuilding cards.
+  Metadata-only window loads now seed the inventory and its AX tracking.
+- Added 12 regressions covering repeated visibility changes, metadata-only
+  inventory seeding, in-place panel updates, retained live images, late snapshot
+  state, queued-work cancellation, removed cards, minimize/restore placeholders,
+  and ambiguous or cross-process identities. An unnumbered AX record must match
+  exactly one visible card in both directions before supplying state.
+- **Passed on macOS 26.6.2, arm64:** all 803 tests with warnings as errors;
+  SwiftPM Release and Xcode Release app/Finder-extension builds with compiler
+  warnings as errors; generated-project consistency and diff whitespace checks.
+  Xcode reports its existing skipped App Intents metadata-extraction warning;
+  this is not a Swift compiler warning or a new framework dependency.
+- The SwiftPM staged bundle passed resource and strict ad-hoc signature checks.
+  The Xcode build was unsigned. These are local build checks, not Developer ID
+  distribution, notarization or release acceptance. The temporary Xcode product
+  was unregistered after validation; Finder Sync still has one registered copy
+  under the installed application.
+- **Still required:** V1-V6 with real applications, full-screen/Space transitions,
+  extended displays and macOS 15. Synthetic state notifications do not establish
+  those results. This batch did not install or launch a replacement app, change
+  feature/permission preferences, push commits or publish a release.
+
+### 2026-09-28 · Option-Tab window lifecycle refresh
+
+- The inventory now observes the dedicated AX window-created notification as
+  well as generic creation events. Apps with an empty window list stay tracked
+  so their next window can be discovered. Failed AX list reads retain existing
+  facts and observers instead of masquerading as confirmed empty lists.
+- Option-Tab coalesces create/destroy events and reconciles only the affected
+  processes. Surviving windows retain their order and selected identity; removed
+  windows release their captures. A confirmed empty final list closes the panel
+  and stops input monitoring. Session cancellation invalidates queued work.
+- New AX-backed windows can appear as metadata cards before their WindowServer
+  surfaces are available. Existing tab/frame deduplication and AX validation of
+  residual WindowServer surfaces remain in place.
+- Added 12 regressions covering creation notifications, empty-app tracking,
+  application launch/termination, event coalescing, retained selection, last-window
+  cleanup, cancellation, failed versus empty reads, old snapshot rejection, and
+  delayed surfaces without duplicate tabs. Initial failing tests reproduced the
+  missed refresh and lingering panel/input monitor.
+- **Passed on macOS 26.6.2, arm64:** 82 focused tests, all 815 tests with warnings
+  as errors, strict SwiftPM Release and unsigned Xcode Release app/extension
+  builds, generated-project consistency and diff whitespace checks. The existing
+  skipped App Intents metadata-extraction warnings remain non-blocking.
+- Staged resource and strict ad-hoc signature verification passed in a local
+  temporary directory. The first staging attempt in the workspace failed because
+  Finder metadata had been attached to the bundle; the retry did not alter source
+  resources or the installed app. The temporary Xcode product was unregistered;
+  only the installed Finder Sync extension remains registered.
+- **Not established:** real-application W1-W7, capture continuity during those
+  interactions, macOS 15, multi-display, permission changes or sleep/wake
+  acceptance. Injected AX results and workspace notifications do not close these
+  gates. No installed host/guest app, permissions or feature preferences were
+  changed; no commit, push, distribution signing or release was performed.
+
+### 2026-09-29 · enhanced Command-Tab lifecycle and macOS 15 acceptance
+
+- Enhanced Command-Tab now reconciles window creation/removal for the selected
+  process without changing the native switcher selection. Surviving cards keep
+  their order, images and captures. Confirmed empty lists hide the panel while
+  observation continues; failed AX reads retain the last known list. Ending the
+  interaction invalidates queued queries and input callbacks. Fresh capture-list
+  requests reject superseded results without losing pending completions.
+- Horizontal preview layout now sizes the stack before its enclosing panel and
+  preserves fixed tile sizes while cards are inserted or removed. A targeted
+  debugger run no longer emits the reproduced conflicting-constraint or invalid
+  geometry warnings.
+- Real guest testing exposed two additional defects. Tiny screen-sharing
+  indicator windows were admitted as unavailable previews; AX windows with known
+  geometry now use the existing normal-window size filter. Minimizing a window
+  could temporarily remove its AX window ID and discard its cached card. A
+  minimized, unnumbered record now retains a known identity only for a unique,
+  same-process, bidirectional title/frame match. Ambiguous and cross-process
+  matches remain rejected.
+- **Automated checks passed on macOS 26.6.2, arm64:** all 833 tests with warnings
+  as errors, strict SwiftPM Release and unsigned Xcode Release app/extension
+  builds, generated-project consistency, staged resource/ad-hoc signature
+  verification and diff whitespace checks. The existing skipped App Intents
+  metadata-extraction warning remains non-blocking.
+- Installed a same-Developer-ID-signed `1.2.9` / build `19` candidate in macOS
+  `15.6.1` (`24G90`), arm64, one virtual display. Archive/executable hashes,
+  strict/deep/all-architecture signature checks and the prior installation's
+  designated requirement passed. A rollback copy was retained. This arm64 local
+  candidate is not Universal 2, notarization or release-distribution evidence.
+- **Guest interaction checks passed:** distinct previews for two same-named
+  TextEdit documents; a third window added while Command-Tab remains held;
+  minimized/restored middle card retains its image and position; closed cards
+  disappear; closing the final document hides the panel and creating a new one
+  restores it during the same interaction. No sharing-indicator cards remained.
+  Five Command-Tab/Esc cycles dismissed the panel without changing the foreground
+  app, and ordinary text input reached a disposable document afterward.
+- All five permission statuses remained enabled. Actual settings were checked
+  in the UI: Dock, Command-Tab and live previews enabled; Option-Tab, Dock
+  hide/show and minimize-instead-of-hide disabled. An initial legacy-container
+  defaults read was stale and was not used as the runtime settings baseline.
+  Feature preferences, privacy grants and the host installation were unchanged.
+- **Still open:** exact-window pointer confirmation, Dock hover retention,
+  enabled Option-Tab and Dock hide/show, real full-screen/Space transitions,
+  permission revocation/recovery, sleep/wake, lock/user switching, independent
+  displays and other macOS versions. This partial guest acceptance does not
+  close OD-02 or the full P0 matrix. It also does not establish Finder write
+  access, updater installation or uninterrupted live capture in every scenario.
+- Temporary fixture windows were closed and held modifiers released; existing
+  user documents were preserved. The candidate remains running in the guest.
+  Logs, package fingerprints and screenshots are recorded in the ignored local
+  `20260929-vm-acceptance.iQ4BrX/acceptance.md` under `.private/local-builds`.
+  No commit, push, version bump or release publication was performed.

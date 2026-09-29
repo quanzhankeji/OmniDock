@@ -5,6 +5,75 @@ import XCTest
 
 @MainActor
 final class ScreenCapturePermissionTests: XCTestCase {
+    func testStructuralRefreshBypassesInventoryAndSupersedesInFlightContentWithoutLosingCallers() async {
+        let inventory = WindowInventoryService()
+        let info = window()
+        var replies: [(SCShareableContent?, Error?) -> Void] = []
+        let service = ScreenCapturePreviewService(
+            windowInventory: inventory, hasScreenRecordingPermission: { true },
+            accessibilityWindows: { _ in [info] }, shareableContentLoader: { replies.append($0) }
+        )
+        var completed = 0
+        service.loadWindows(for: target) { _ in completed += 1 }
+        XCTAssertEqual(replies.count, 1)
+        inventory.seed(PreviewWindowSnapshot(windows: [info], captureWindows: [:]), for: target)
+        service.loadWindows(for: target, requiresFreshContent: true) { _ in completed += 1 }
+        XCTAssertEqual(replies.count, 2, "A structural refresh must not reuse an old inventory or in-flight query")
+        guard replies.count == 2 else { return }
+
+        replies[0](nil, NSError(domain: "OldWindowList", code: 1))
+        await drainMainQueue()
+        XCTAssertEqual(completed, 0, "The superseded query must not consume waiting callbacks")
+        replies[1](nil, nil)
+        await drainMainQueue()
+        XCTAssertEqual(completed, 2)
+        replies[0](nil, nil)
+        await drainMainQueue()
+        XCTAssertEqual(completed, 2)
+    }
+
+    func testClearingSnapshotsCancelsBothOriginalAndReplacementContentRequests() async {
+        var replies: [(SCShareableContent?, Error?) -> Void] = []
+        let service = ScreenCapturePreviewService(
+            windowInventory: nil, hasScreenRecordingPermission: { true }, accessibilityWindows: { _ in [] },
+            shareableContentLoader: { replies.append($0) }
+        )
+        var completed = 0
+        service.loadWindows(for: target) { _ in completed += 1 }
+        service.loadWindows(for: target, requiresFreshContent: true) { _ in completed += 1 }
+        XCTAssertEqual(replies.count, 2)
+        service.clearAllCachedSnapshots()
+        XCTAssertEqual(completed, 2)
+        replies.forEach { $0(nil, nil) }
+        await drainMainQueue()
+        XCTAssertEqual(completed, 2)
+
+        service.loadWindows(for: target) { _ in completed += 1 }
+        XCTAssertEqual(replies.count, 3)
+        replies.last?(nil, nil)
+        await drainMainQueue()
+        XCTAssertEqual(completed, 3)
+    }
+
+    private func drainMainQueue() async {
+        let drained = expectation(description: "Capture callbacks drained")
+        DispatchQueue.main.async { drained.fulfill() }
+        await fulfillment(of: [drained], timeout: 2)
+    }
+
+    func testMetadataOnlyLoadSeedsInventoryWithoutRequestingCapture() {
+        let inventory = WindowInventoryService()
+        let info = window(isMinimized: true)
+        let service = ScreenCapturePreviewService(
+            windowInventory: inventory, hasScreenRecordingPermission: { false },
+            accessibilityWindows: { _ in [info] },
+            shareableContentLoader: { _ in XCTFail("Metadata navigation must not request capture") }
+        )
+        service.loadWindows(for: target) { _ in }
+        XCTAssertEqual(inventory.windows(for: target.processIdentifier).map(\.identity), [PreviewWindowIdentity(info)])
+        XCTAssertEqual(inventory.windows(for: target.processIdentifier).first?.isMinimized, true)
+    }
+
     func testClearingGeometryAllowsFreshQueryAndRejectsTheOldReply() async {
         var replies: [(SCShareableContent?, Error?) -> Void] = []
         let service = ScreenCapturePreviewService(

@@ -32,6 +32,21 @@ enum PreviewWindowCatalog {
         to window: PreviewWindowInfo,
         axWindows: [PreviewWindowInfo]
     ) -> PreviewWindowInfo {
+        guard let state = matchingAccessibilityWindow(for: window, in: axWindows) else { return window }
+        return PreviewWindowInfo(
+            id: window.id, windowID: window.windowID, processIdentifier: window.processIdentifier,
+            appName: window.appName, title: window.title, frame: window.frame,
+            isMinimized: window.isMinimized,
+            isApplicationHidden: state.isApplicationHidden ?? window.isApplicationHidden,
+            isFullScreen: state.isFullScreen,
+            staticPreviewImage: window.staticPreviewImage, placeholderText: window.placeholderText
+        )
+    }
+
+    static func matchingAccessibilityWindow(
+        for window: PreviewWindowInfo,
+        in axWindows: [PreviewWindowInfo]
+    ) -> PreviewWindowInfo? {
         let sameProcess = axWindows.filter { $0.processIdentifier == window.processIdentifier }
         let exactMatches = sameProcess.filter {
             window.windowID != nil && $0.windowID == window.windowID
@@ -47,15 +62,7 @@ enum PreviewWindowCatalog {
                     && framesMatch($0.frame, window.frame)
             }
         }
-        guard matches.count == 1, let state = matches.first else { return window }
-        return PreviewWindowInfo(
-            id: window.id, windowID: window.windowID, processIdentifier: window.processIdentifier,
-            appName: window.appName, title: window.title, frame: window.frame,
-            isMinimized: window.isMinimized,
-            isApplicationHidden: state.isApplicationHidden ?? window.isApplicationHidden,
-            isFullScreen: state.isFullScreen,
-            staticPreviewImage: window.staticPreviewImage, placeholderText: window.placeholderText
-        )
+        return matches.count == 1 ? matches.first : nil
     }
 
     static func collapseTabbedWindows(
