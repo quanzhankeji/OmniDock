@@ -4,6 +4,64 @@ import XCTest
 
 @MainActor
 final class WindowCycleTests: XCTestCase {
+    func testTitleChangeWithUnnumberedAXWindowPreservesSelectedWindowForConfirmation() async {
+        _ = NSApplication.shared
+        let pid = pid_t.max
+        let original = window(id: 1, processIdentifier: pid)
+        var current = [original]
+        var surfaces = [original]
+        let inventory = WindowInventoryService(
+            accessibilityWindowsProvider: { processIdentifier, _ in processIdentifier == pid ? current : nil },
+            windowServerWindowsProvider: { [pid: surfaces] }
+        )
+        let registry = TestHotkeyRegistry()
+        let input = TestWindowCycleInputMonitor()
+        var focused: (pid_t, String?, CGWindowID?)?
+        let panel = PreviewPanelController(
+            requestWindowFocus: { pid, title, windowID, completion in focused = (pid, title, windowID); completion(.focused) },
+            requestWindowClose: { _, _, _, _ in }
+        )
+        let service = makeService(
+            settings: configuredSettings(), registry: registry, panel: panel, inventory: inventory,
+            inputMonitor: input,
+            permissions: { PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: true) }
+        )
+        service.start()
+        defer { service.stop(); inventory.stop(); panel.hide() }
+        await drainMainQueue()
+        seedWindows([original], in: inventory)
+        let initialLoad = expectation(description: "Initial delayed reconciliation completed")
+        let initialObserver = inventory.observeChanges { event in
+            if case let .seed(processIdentifier, _, _) = event, processIdentifier == pid { initialLoad.fulfill() }
+        }
+        registry.onTrigger?(.forward)
+        XCTAssertEqual(panel.displayedWindowCount, 1)
+        await fulfillment(of: [initialLoad], timeout: 1)
+        inventory.removeChangeObserver(initialObserver)
+        await drainMainQueue()
+        func renamed(number: CGWindowID?) -> PreviewWindowInfo {
+            PreviewWindowInfo(id: "renamed", windowID: number, processIdentifier: pid,
+                              appName: original.appName, title: "Renamed document", frame: original.frame, isMinimized: false)
+        }
+        current = [renamed(number: nil)]
+        surfaces = [renamed(number: 1)]
+        let refreshed = expectation(description: "Renamed selection reconciled")
+        inventory.observeChanges { event in
+            if case let .seed(processIdentifier, _, records) = event, processIdentifier == pid,
+               records.contains(where: { $0.makePreviewWindowInfo().title == "Renamed document" }) {
+                refreshed.fulfill()
+            }
+        }
+        inventory.invalidate(processIdentifier: pid, reason: .titleChanged)
+        await fulfillment(of: [refreshed], timeout: 1)
+        await drainMainQueue()
+        XCTAssertEqual(panel.displayedWindowCount, 1)
+        input.onEvent?(.confirm)
+        XCTAssertEqual(focused?.0, original.processIdentifier)
+        XCTAssertEqual(focused?.1, "Renamed document")
+        XCTAssertEqual(focused?.2, original.windowID)
+    }
+
     func testNewlyLaunchedApplicationJoinsAnOpenSwitcher() async {
         _ = NSApplication.shared
         let application = NSRunningApplication.current

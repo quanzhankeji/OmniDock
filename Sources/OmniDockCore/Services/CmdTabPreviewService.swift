@@ -272,7 +272,7 @@ final class CmdTabPreviewService {
             scheduleInventoryRefresh(for: target)
             refreshPanel(target: target, message: nil)
         case let .processInvalidated(pid, reason)
-            where pid == target.processIdentifier && (reason == .created || reason == .destroyed):
+            where pid == target.processIdentifier && (reason == .created || reason == .destroyed || reason == .titleChanged):
             scheduleInventoryRefresh(for: target)
         default:
             break

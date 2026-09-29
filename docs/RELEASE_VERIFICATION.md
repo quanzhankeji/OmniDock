@@ -898,3 +898,88 @@ has passed on three machines and fails on a fourth is worth being able to see.
   Logs, package fingerprints and screenshots are recorded in the ignored local
   `20260929-vm-acceptance.iQ4BrX/acceptance.md` under `.private/local-builds`.
   No commit, push, version bump or release publication was performed.
+
+### 2026-09-29 · live preview titles and local installation
+
+- Committed the preceding lifecycle/status work as `500abab`, then rebuilt and
+  replaced the host application with the same Developer ID identity. A backup
+  of the prior installation and a ZIP of the committed candidate were retained.
+  No commits were pushed and the marketing/build version remained `1.2.9` / `19`.
+- Follow-up testing reproduced stale titles in an open preview. Status updates
+  now propagate the observed title into the existing card, tooltip and action
+  data while retaining identity, image, size and selection. Old query results
+  cannot overwrite a more recently observed title.
+- Some native windows expose no AX window number. Renaming them invalidates a
+  title/frame fallback match, so both keyboard switchers now also reconcile the
+  affected application's list on title notifications. This reuses the existing
+  AX-backed WindowServer reconciliation, event coalescing and stale-query guards;
+  it does not add polling or loosen identity matching to geometry alone.
+- Added five tests and extended the shared three-entry panel regression. Initial
+  failing tests covered stale card text and unnumbered-window rename handling.
+  **Passed:** 95 focused tests, all 838 tests with warnings as errors, strict
+  SwiftPM Release, Xcode Release app/extension builds with compiler warnings as
+  errors, generated-project consistency, staged resource/signature verification
+  and diff whitespace checks. Existing App Intents metadata warnings remain.
+- Installed the final follow-up build on macOS 26.6.2, arm64. Strict/deep/all-
+  architecture signature checks, the previous designated requirement and
+  installed/candidate executable hashes passed. Finder Sync has one registered
+  copy under `/Applications/OmniDock.app`. All five permission statuses show
+  enabled; feature settings and privacy grants were not changed.
+- **Host interaction checks:** two disposable native windows were shown in
+  Command-Tab, Option-Tab and Dock previews. Accessibility text readback confirmed
+  in-place title changes in all three; Command-Tab also passed a second rename
+  during the same held interaction. The sibling title stayed unchanged. A
+  straight Dock-to-panel pointer path retained the preview; leaving dismissed it.
+  The display configuration was mirrored U32J59x/Color LCD at 3008 x 1692 logical
+  resolution, not independent-display acceptance.
+- **Limits:** a screen-capture command timed out and was terminated, so no new
+  screenshot-based visual pass is claimed. An additional programmatic click
+  probe did not establish exact-window focus; that gate remains open. These
+  observations do not close the full focus, hover, permission, sleep/wake or
+  multi-display matrices. The macOS 15 guest was not replaced in this follow-up.
+- Closed only the disposable fixture and management windows opened for testing,
+  released held modifiers and restored the pointer. The host app remains running.
+  Final local ZIP, rollback archive, logs and scope details are in the ignored
+  `.private/local-builds/20260929-priority-followup` directory. The title follow-up
+  remains uncommitted; no notarization, version bump, push or release was performed.
+
+### 2026-09-29 · title follow-up acceptance on macOS 15
+
+- Reused the preceding Developer ID arm64 `1.2.9` / build `19` candidate.
+  Installed it in macOS `15.6.1` (`24G90`) after checking the archive, executable
+  hashes, strict nested signatures and the previous designated requirement. A
+  rollback copy was retained; the host installation was not replaced again.
+- Host follow-up confirmed distinct thumbnail content and exact focus of each
+  differently titled native fixture window. Foreground process, main-window
+  title and panel dismissal were read back independently after pointer input.
+- Guest checks passed for two consecutive title changes during one held
+  Command-Tab interaction, a title change in an open Dock preview, minimized
+  status and cached-image retention, restoration, exact focus of a differently
+  titled window, and exact restoration/focus of its minimized sibling. Screenshots
+  confirmed distinct content, unchanged sibling titles and readable status labels.
+- Five Command-Tab/Esc cycles dismissed without switching the foreground app;
+  ordinary typing worked afterward. Moving from a visible preview to Launchpad
+  or an unopened app removed the old panel. Quitting with a preview open and
+  relaunching permitted a fresh preview with current windows.
+- **F1 did not pass:** two same-named TextEdit documents showed the correct,
+  distinct previews, but selecting one did not focus that document. Both AX
+  windows omitted `AXWindowNumber`; the current focus resolver rejects the
+  ambiguous title and does not reuse the association that distinguished the
+  cards. The foreground process and AXDocument URL confirmed the failed focus.
+  This is not evidence of a missing permission, and must not be addressed by
+  picking the first same-named window or by geometry-only matching. OD-01 and
+  the complete release gate remain open.
+- All five permission statuses remained enabled, and the six preview settings
+  were unchanged: Dock, Command-Tab and live previews on; Option-Tab, Dock
+  hide/show and minimize-instead-of-hide off. Finder Sync had one enabled
+  registration at the installed path. No privacy grants or feature switches
+  were changed. Enabled Option-Tab and Dock hide/show were not tested.
+- Repeated the full warnings-as-errors suite: **838 tests passed**. No runtime
+  code changed during this acceptance run. Physical interruptions, independent
+  displays, side Dock, full-screen/Space and real permission transitions remain
+  unverified; partial pointer results do not close the full F/H matrices.
+- Closed the owned fixture windows/documents and management windows, released
+  modifiers and restored pointers. The candidate remains running in the guest.
+  Detailed scope, logs, package fingerprints and screenshots are in the ignored
+  `.private/local-builds/20260929-acceptance-continue.r5aCqd/acceptance.md`.
+  No commit, push, version bump, notarization or release was performed.

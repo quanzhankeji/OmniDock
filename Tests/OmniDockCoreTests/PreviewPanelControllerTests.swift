@@ -13,7 +13,7 @@ final class PreviewPanelControllerTests: XCTestCase {
         let original = previewInfo()
         let updated = PreviewWindowInfo(
             id: original.id, windowID: original.windowID, processIdentifier: original.processIdentifier,
-            appName: original.appName, title: original.title, frame: original.frame,
+            appName: original.appName, title: "Renamed document", frame: original.frame,
             isMinimized: true, isApplicationHidden: true, isFullScreen: true
         )
         let controller = PreviewPanelController(
@@ -41,6 +41,11 @@ final class PreviewPanelControllerTests: XCTestCase {
             XCTAssertTrue(tile.info.isMinimized)
             XCTAssertEqual(tile.info.isApplicationHidden, true)
             XCTAssertEqual(tile.info.isFullScreen, true)
+            XCTAssertEqual(tile.info.title, updated.title)
+            XCTAssertTrue(tile.subviews.compactMap { $0 as? NSTextField }.contains {
+                !$0.isHidden && $0.stringValue == updated.title
+            })
+            XCTAssertTrue(tile.toolTip?.contains(updated.title) == true)
             XCTAssertTrue(tile.subviews.compactMap { $0 as? NSImageView }.contains { $0.image === liveImage })
             XCTAssertEqual(tile.frame, tileFrame)
             XCTAssertEqual(controller.frame, panelFrame)
@@ -49,6 +54,7 @@ final class PreviewPanelControllerTests: XCTestCase {
 
             controller.update(target: target, windows: [original], message: nil)
             XCTAssertTrue(tile.info.isMinimized, "An older inventory result must not revert observed state")
+            XCTAssertEqual(tile.info.title, updated.title)
             controller.hide()
             center.post(name: NSApplication.didChangeScreenParametersNotification, object: nil)
             for _ in 0..<3 { await settleMainActor() }

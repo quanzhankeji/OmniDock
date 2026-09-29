@@ -125,7 +125,7 @@ final class PreviewWindowStatusMonitor {
         // newer state than an in-flight thumbnail or inventory response.
         return PreviewWindowInfo(
             id: window.id, windowID: window.windowID, processIdentifier: window.processIdentifier,
-            appName: window.appName, title: window.title, frame: state.frame,
+            appName: window.appName, title: state.title, frame: state.frame,
             isMinimized: state.isMinimized, isApplicationHidden: state.isApplicationHidden,
             isFullScreen: state.isFullScreen, staticPreviewImage: window.staticPreviewImage,
             placeholderText: placeholder

@@ -117,6 +117,7 @@ final class PreviewThumbnailView: NSView {
 
     func updateWindowStatus(_ info: PreviewWindowInfo) {
         self.info = info
+        titleField.stringValue = info.title
         refreshStatus()
         placeholderField.stringValue = info.placeholderText
             ?? (info.isMinimized ? AppStrings.text(.previewMinimizedClickRestore) : "")

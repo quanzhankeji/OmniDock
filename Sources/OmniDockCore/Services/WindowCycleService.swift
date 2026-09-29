@@ -1182,7 +1182,8 @@ final class WindowCycleService {
         case let .processTerminated(processIdentifier):
             pendingProcessRefreshes.remove(processIdentifier)
             removeApplication(processIdentifier)
-        case let .processInvalidated(processIdentifier, reason) where reason == .created || reason == .destroyed:
+        case let .processInvalidated(processIdentifier, reason)
+            where reason == .created || reason == .destroyed || reason == .titleChanged:
             scheduleProcessRefresh(processIdentifier)
         case .seed, .processInvalidated, .processActivated, .windowFocused, .activeSpaceChanged, .displayConfigurationChanged:
             break

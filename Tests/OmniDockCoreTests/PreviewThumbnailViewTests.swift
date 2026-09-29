@@ -3,6 +3,33 @@ import XCTest
 @testable import OmniDockCore
 
 final class PreviewThumbnailViewTests: XCTestCase {
+    func testTitleOnlyUpdatePreservesLiveImageLayoutAndActionIdentity() throws {
+        let original = previewInfo()
+        let tile = PreviewThumbnailView(info: original)
+        let image = NSImage(size: NSSize(width: 800, height: 500))
+        tile.update(image: image)
+        let originalSize = tile.preferredTileSize
+        let updated = PreviewWindowInfo(
+            id: original.id, windowID: original.windowID, processIdentifier: original.processIdentifier,
+            appName: original.appName, title: "A renamed document", frame: original.frame, isMinimized: false
+        )
+        tile.updateWindowStatus(updated)
+
+        XCTAssertTrue(tile.subviews.compactMap { $0 as? NSTextField }.contains {
+            !$0.isHidden && $0.stringValue == updated.title
+        })
+        XCTAssertTrue(tile.toolTip?.contains(updated.title) == true)
+        XCTAssertTrue(tile.subviews.compactMap { $0 as? NSImageView }.contains { $0.image === image })
+        XCTAssertEqual(tile.preferredTileSize, originalSize)
+        XCTAssertEqual(PreviewWindowIdentity(tile.info), PreviewWindowIdentity(original))
+        var closed: PreviewWindowInfo?
+        tile.onClose = { closed = $0 }
+        let closeButton = try XCTUnwrap(tile.subviews.compactMap { $0 as? PreviewCloseButtonView }.first)
+        closeButton.onClose?()
+        XCTAssertEqual(closed?.title, updated.title)
+        XCTAssertEqual(closed.map(PreviewWindowIdentity.init), PreviewWindowIdentity(original))
+    }
+
     func testStatusRowFitsNarrowCardsAndUpdatesWhenADisplayDisappears() throws {
         let name = String(repeating: "External Display ", count: 5)
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {

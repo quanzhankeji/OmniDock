@@ -5,6 +5,42 @@ import XCTest
 
 @MainActor
 final class CmdTabPreviewServiceTests: XCTestCase {
+    func testTitleChangeUsesVerifiedSurfaceIdentityWhenAXWindowNumberIsMissing() async throws {
+        let fixture = Fixture()
+        defer { fixture.stop() }
+        fixture.hasRecording = true
+        let image = NSImage(size: NSSize(width: 80, height: 60))
+        let original = fixture.window(1, image: image)
+        let sibling = fixture.window(2, image: image)
+        fixture.windows = [original, sibling]
+        fixture.previewService.storeCachedSnapshotWindows([original, sibling], for: fixture.pid)
+        fixture.inventory.seed(PreviewWindowSnapshot(windows: [original, sibling], captureWindows: [:]), for: fixture.target())
+        fixture.show()
+        let tile = try XCTUnwrap(fixture.tiles().first { $0.info.windowID == 1 })
+        func renamed(number: CGWindowID?) -> PreviewWindowInfo {
+            PreviewWindowInfo(id: "renamed", windowID: number, processIdentifier: fixture.pid,
+                              appName: original.appName, title: "Renamed document", frame: original.frame, isMinimized: false)
+        }
+        fixture.windows = [renamed(number: nil), sibling]
+        fixture.serverWindows = [fixture.pid: [renamed(number: 1), sibling]]
+        let refreshed = expectation(description: "Renamed window reconciled")
+        fixture.inventory.observeChanges { event in
+            if case let .seed(pid, _, records) = event, pid == fixture.pid,
+               records.contains(where: { $0.makePreviewWindowInfo().title == "Renamed document" }) {
+                refreshed.fulfill()
+            }
+        }
+        fixture.inventory.invalidate(processIdentifier: fixture.pid, reason: .titleChanged)
+        await fulfillment(of: [refreshed], timeout: 1)
+        await drainMainQueue()
+
+        XCTAssertEqual(fixture.inventoryReads, [fixture.pid])
+        XCTAssertEqual(fixture.displayedIDs, [1, 2])
+        XCTAssertTrue(try fixture.tiles().first { $0.info.windowID == 1 } === tile)
+        XCTAssertEqual(tile.info.title, "Renamed document")
+        XCTAssertTrue(tile.subviews.compactMap { $0 as? NSImageView }.contains { $0.image === image })
+    }
+
     func testWindowEventsRefreshOnlyTheSelectedApplicationAndCoalesce() async {
         let fixture = Fixture()
         defer { fixture.stop() }
@@ -261,6 +297,7 @@ final class CmdTabPreviewServiceTests: XCTestCase {
         let pid = pid_t.max
         let settings: SettingsStore
         var windows: [PreviewWindowInfo]?
+        var serverWindows: [pid_t: [PreviewWindowInfo]] = [:]
         var inventoryReads: [pid_t] = []
         var hasRecording = false
         var hasAccessibility = true
@@ -271,7 +308,7 @@ final class CmdTabPreviewServiceTests: XCTestCase {
             accessibilityWindowsProvider: { [unowned self] pid, _ in
                 inventoryReads.append(pid)
                 return windows
-            }, windowServerWindowsProvider: { [:] }
+            }, windowServerWindowsProvider: { [unowned self] in serverWindows }
         )
         lazy var previewService = ScreenCapturePreviewService(
             windowInventory: inventory, hasScreenRecordingPermission: { [unowned self] in hasRecording },
