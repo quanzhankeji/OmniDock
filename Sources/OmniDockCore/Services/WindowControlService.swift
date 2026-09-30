@@ -1000,7 +1000,9 @@ public final class WindowControlService {
         guard query.succeeded else { return .unreadable }
         let candidates = normalWindowCandidates(in: query.windows)
         if target == nil {
-            target = focusWindowMatch(in: candidates, title: title, windowID: windowID)
+            target = focusWindowMatch(
+                in: candidates, processIdentifier: processIdentifier, title: title, windowID: windowID
+            )
         }
         guard let target, candidates.contains(where: { CFEqual($0, target) }) else {
             return .unavailable
@@ -1031,20 +1033,47 @@ public final class WindowControlService {
 
     private func focusWindowMatch(
         in windows: [AXUIElement],
+        processIdentifier: pid_t,
         title: String?,
         windowID: CGWindowID?
     ) -> AXUIElement? {
-        let candidates = windows.enumerated().map { index, window in
+        var candidates = windows.enumerated().map { index, window in
             WindowFocusCandidate(
                 index: index,
                 windowID: intAttribute("AXWindowNumber", from: window).map(CGWindowID.init),
                 title: stringAttribute(kAXTitleAttribute, from: window)
             )
         }
+        if let index = WindowFocusMatchPolicy.matchingIndex(in: candidates, title: title, windowID: windowID) {
+            return windows[index]
+        }
+        guard windowID != nil, candidates.allSatisfy({ $0.windowID == nil }),
+              let rawWindows = CGWindowListCopyWindowInfo(
+                [.optionAll, .excludeDesktopElements], kCGNullWindowID
+              ) as? [[String: Any]] else { return nil }
+        for index in candidates.indices {
+            guard let origin = pointAttribute(kAXPositionAttribute, from: windows[index]),
+                  let size = sizeAttribute(kAXSizeAttribute, from: windows[index]) else { continue }
+            candidates[index].frame = CGRect(origin: origin, size: size)
+        }
+        let serverWindows = rawWindows.enumerated().compactMap { index, window -> WindowFocusCandidate? in
+            guard CGWindowDictionary.intValue(kCGWindowOwnerPID, from: window) == Int(processIdentifier),
+                  let number = CGWindowDictionary.intValue(kCGWindowNumber, from: window),
+                  let identifier = CGWindowID(exactly: number), identifier != kCGNullWindowID,
+                  let layer = CGWindowDictionary.intValue(kCGWindowLayer, from: window),
+                  WindowFiltering.hasNormalWindowGeometry(layer: layer, frame: windowFrame(from: window))
+            else { return nil }
+            return WindowFocusCandidate(
+                index: index, windowID: identifier,
+                title: CGWindowDictionary.stringValue(kCGWindowName, from: window),
+                frame: windowFrame(from: window)
+            )
+        }
         guard let index = WindowFocusMatchPolicy.matchingIndex(
             in: candidates,
             title: title,
-            windowID: windowID
+            windowID: windowID,
+            serverWindows: serverWindows
         ), windows.indices.contains(index) else {
             return nil
         }
@@ -1074,6 +1103,7 @@ public final class WindowControlService {
         let candidates = normalWindowCandidates(in: windows(for: appElement))
         if let target = focusWindowMatch(
             in: candidates,
+            processIdentifier: processIdentifier,
             title: rememberedTarget.title,
             windowID: rememberedTarget.windowID
         ) {

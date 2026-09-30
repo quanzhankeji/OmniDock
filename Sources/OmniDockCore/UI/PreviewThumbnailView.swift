@@ -15,6 +15,7 @@ enum PreviewFileDragDetector {
 }
 
 enum PreviewThumbnailAction: Equatable {
+    case focusWindow(PreviewWindowIdentity)
     case closeWindow(PreviewWindowIdentity)
     case quitApplication(pid_t)
 }
@@ -32,7 +33,7 @@ final class PreviewThumbnailView: NSView {
     var onHorizontalDrag: ((CGFloat) -> Void)?
     var onFileDragEntered: ((PreviewWindowInfo) -> Void)?
 
-    private static let dragThreshold: CGFloat = 5
+    static let dragThreshold: CGFloat = 5
     private static let applicationIconSize: CGFloat = 16
     static let statusRowHeight: CGFloat = 18
     private let imageView = NSImageView()
@@ -230,6 +231,7 @@ final class PreviewThumbnailView: NSView {
 
     func actionButtonHitTargets(in window: NSWindow) -> [PreviewThumbnailActionHitTarget] {
         layoutSubtreeIfNeeded()
+        let visibleFrame = window.convertToScreen(convert(visibleRect, to: nil))
         return [
             actionHitTarget(
                 for: quitButton,
@@ -240,8 +242,15 @@ final class PreviewThumbnailView: NSView {
                 for: closeButton,
                 action: .closeWindow(PreviewWindowIdentity(info)),
                 in: window
+            ),
+            PreviewThumbnailActionHitTarget(
+                action: .focusWindow(PreviewWindowIdentity(info)),
+                screenFrame: visibleFrame
             )
-        ]
+        ].compactMap { target in
+            let frame = target.screenFrame.intersection(visibleFrame)
+            return frame.isEmpty ? nil : PreviewThumbnailActionHitTarget(action: target.action, screenFrame: frame)
+        }
     }
 
     func setCommandTabHoveredAction(_ action: PreviewThumbnailAction?) {

@@ -84,6 +84,10 @@ final class CmdTabPreviewService {
         observer.onPreviewButtonAction = { [weak self] invocation in
             self?.performPreviewButtonAction(invocation)
         }
+        observer.onPreviewScroll = { [weak self] invocation, deltaX in
+            guard let self, self.accepts(invocation) else { return }
+            self.previewPanelController.scrollCommandTabPreview(deltaX: deltaX)
+        }
         observer.onPreviewButtonHoverChanged = { [weak self] action in
             self?.previewPanelController.setCommandTabHoveredAction(action)
         }
@@ -463,14 +467,14 @@ final class CmdTabPreviewService {
     }
 
     private func performPreviewButtonAction(_ invocation: CmdTabPreviewButtonInvocation) {
-        guard isInteractionActive,
-              let currentTarget,
-              invocation.requestGeneration == windowLoadGeneration,
-              currentTarget.dockTileIdentifier == invocation.targetIdentifier
-        else {
-            return
-        }
+        guard accepts(invocation) else { return }
         previewPanelController.performCommandTabAction(invocation.action)
+    }
+
+    private func accepts(_ invocation: CmdTabPreviewButtonInvocation) -> Bool {
+        isInteractionActive
+            && invocation.requestGeneration == windowLoadGeneration
+            && currentTarget?.dockTileIdentifier == invocation.targetIdentifier
     }
 
     private func publishButtonTargets() {

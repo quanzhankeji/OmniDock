@@ -187,6 +187,101 @@ final class WindowControlPoliciesTests: XCTestCase {
         ]))
     }
 
+    func testFocusMatchResolvesUnnumberedSameTitleWindowsUsingCurrentSurfaces() {
+        let first = CGRect(x: 100, y: 100, width: 800, height: 600)
+        let second = CGRect(x: 300, y: 200, width: 800, height: 600)
+        let candidates = [
+            WindowFocusCandidate(index: 4, windowID: nil, title: "Document", frame: first),
+            WindowFocusCandidate(index: 8, windowID: nil, title: "Document", frame: second)
+        ]
+        let surfaces = [
+            WindowFocusCandidate(index: 0, windowID: 10, title: "Document", frame: first),
+            WindowFocusCandidate(index: 1, windowID: 20, title: "Document", frame: second)
+        ]
+        for order in [candidates, candidates.reversed()] {
+            XCTAssertEqual(WindowFocusMatchPolicy.matchingIndex(
+                in: order, title: "Document", windowID: 10, serverWindows: surfaces
+            ), 4)
+            XCTAssertEqual(WindowFocusMatchPolicy.matchingIndex(
+                in: order, title: "Document", windowID: 20, serverWindows: surfaces.reversed()
+            ), 8)
+        }
+    }
+
+    func testFocusSurfaceMatchRejectsAmbiguityInEitherDirection() {
+        let frame = CGRect(x: 100, y: 100, width: 800, height: 600)
+        let otherFrame = frame.offsetBy(dx: 200, dy: 100)
+        let first = WindowFocusCandidate(index: 0, windowID: nil, title: "Document", frame: frame)
+        let surface = WindowFocusCandidate(index: 0, windowID: 10, title: "Document", frame: frame)
+        XCTAssertNil(WindowFocusMatchPolicy.matchingIndex(
+            in: [first, WindowFocusCandidate(index: 1, windowID: nil, title: "Document", frame: frame)],
+            title: "Document", windowID: 10, serverWindows: [surface]
+        ))
+        XCTAssertNil(WindowFocusMatchPolicy.matchingIndex(
+            in: [first, WindowFocusCandidate(index: 1, windowID: nil, title: "Document", frame: otherFrame)],
+            title: "Document", windowID: 10,
+            serverWindows: [surface, WindowFocusCandidate(index: 1, windowID: 20, title: "Document", frame: frame)]
+        ))
+    }
+
+    func testFocusMatchDoesNotSubstituteTheLastSameNamedSiblingForAClosedSurface() {
+        let frame = CGRect(x: 100, y: 100, width: 800, height: 600)
+        let remaining = WindowFocusCandidate(index: 0, windowID: nil, title: "Document", frame: frame)
+        let surface = WindowFocusCandidate(index: 0, windowID: 20, title: "Document", frame: frame)
+        XCTAssertNil(WindowFocusMatchPolicy.matchingIndex(
+            in: [remaining], title: "Document", windowID: 10, serverWindows: [surface]
+        ))
+        XCTAssertNil(WindowFocusMatchPolicy.matchingIndex(
+            in: [remaining], title: "Document", windowID: 10
+        ))
+        XCTAssertEqual(WindowFocusMatchPolicy.matchingIndex(
+            in: [remaining], title: "Document", windowID: 20, serverWindows: [surface]
+        ), 0)
+        XCTAssertNil(WindowFocusMatchPolicy.matchingIndex(
+            in: [WindowFocusCandidate(index: 0, windowID: nil, title: nil)], title: nil, windowID: 10
+        ))
+    }
+
+    func testFocusSurfaceMatchRequiresTheRequestedIdentifierAndMatchingTitle() {
+        let frame = CGRect(x: 100, y: 100, width: 800, height: 600)
+        let candidates = [
+            WindowFocusCandidate(index: 0, windowID: nil, title: "Document", frame: frame),
+            WindowFocusCandidate(index: 1, windowID: nil, title: "Document", frame: frame.offsetBy(dx: 200, dy: 100))
+        ]
+        for surfaces in [
+            [],
+            [WindowFocusCandidate(index: 0, windowID: 20, title: "Document", frame: frame)],
+            [WindowFocusCandidate(index: 0, windowID: 10, title: nil, frame: frame)],
+            [WindowFocusCandidate(index: 0, windowID: 10, title: "Other document", frame: frame)],
+            [WindowFocusCandidate(index: 0, windowID: 10, title: "Document", frame: .zero)],
+            [WindowFocusCandidate(index: 0, windowID: 10, title: "Document", frame: frame.offsetBy(dx: 10, dy: 0))]
+        ] {
+            XCTAssertNil(WindowFocusMatchPolicy.matchingIndex(
+                in: candidates, title: "Document", windowID: 10, serverWindows: surfaces
+            ))
+        }
+        XCTAssertNil(WindowFocusMatchPolicy.matchingIndex(
+            in: candidates, title: "Document", windowID: nil,
+            serverWindows: [WindowFocusCandidate(index: 0, windowID: 10, title: "Document", frame: frame)]
+        ))
+    }
+
+    func testFocusSurfaceMatchCannotOverrideKnownAccessibilityIdentifiers() {
+        let frame = CGRect(x: 100, y: 100, width: 800, height: 600)
+        let candidates = [
+            WindowFocusCandidate(index: 0, windowID: 30, title: "Document", frame: frame),
+            WindowFocusCandidate(index: 1, windowID: nil, title: "Document", frame: frame.offsetBy(dx: 200, dy: 100))
+        ]
+        XCTAssertNil(WindowFocusMatchPolicy.matchingIndex(
+            in: candidates, title: "Document", windowID: 10,
+            serverWindows: [WindowFocusCandidate(index: 0, windowID: 10, title: "Document", frame: frame)]
+        ))
+        XCTAssertEqual(WindowFocusMatchPolicy.matchingIndex(
+            in: candidates, title: "Old title", windowID: 30,
+            serverWindows: [WindowFocusCandidate(index: 0, windowID: 30, title: "Other title", frame: .zero)]
+        ), 0)
+    }
+
     func testFocusMatchUsesExactIdentifierForDuplicateWindowTitles() {
         let candidates = [
             WindowFocusCandidate(index: 0, windowID: 10, title: "Start Page"),

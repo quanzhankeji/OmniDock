@@ -983,3 +983,87 @@ has passed on three machines and fails on a fourth is worth being able to see.
   Detailed scope, logs, package fingerprints and screenshots are in the ignored
   `.private/local-builds/20260929-acceptance-continue.r5aCqd/acceptance.md`.
   No commit, push, version bump, notarization or release was performed.
+
+### 2026-09-29 · unnumbered same-title window focus
+
+- Committed the preceding title refresh and acceptance records as `fab835f`.
+  The following focus correction is a separate, uncommitted change.
+- When AX omits window numbers, a requested WindowServer ID is now resolved
+  against current normal surfaces owned by the target process. The requested
+  ID, nonempty title and frame must identify exactly one surface and one AX
+  window. Known conflicting IDs, missing geometry, coincident matches and
+  closed targets remain rejected. A remaining same-named sibling cannot replace
+  a closed target. The resolved AX object is retained across focus retries.
+- Additional geometry and WindowServer reads occur only on this fallback path;
+  exact AX-number and unnumbered metadata-only unique-title matching stay on the
+  existing fast path. No capture, close-button or polling behavior changed.
+- Added five policy regressions, including initially failing duplicate-title
+  and closed-sibling cases. All **843 tests** passed with warnings as errors;
+  strict SwiftPM/Xcode Release builds, generated-project consistency, staged
+  bundle checks, archive round-trip signatures and diff checks passed.
+- Installed the final Developer ID arm64 candidate in macOS 15.6.1 with rollback
+  copies. Native pointer clicks selected each of two same-named TextEdit
+  documents correctly; foreground process, AXDocument and AXMain confirmed the
+  result. Single-window minimized restoration also passed. The first candidate
+  additionally passed selecting a window moved while its Dock preview was open.
+- **Command-Tab pointer acceptance remains open:** selecting a card dismissed
+  the preview without focusing its window, even with a single document. The
+  same single-document probe failed in the preceding signed title-refresh build;
+  this observation is not introduced by the new resolver. The final candidate
+  was restored after that comparison. Further input-routing diagnosis is needed.
+- No privacy grants or feature switches changed. After re-registering the
+  installed Finder extension following the version comparison, the final check
+  showed all five permissions enabled and one registered extension. Option-Tab
+  and Dock hide/show remained off and were not exercised.
+  The host installation was not replaced. This does not close the full focus,
+  input, physical interruption or independent-display release gates.
+- Candidate hashes, rollback paths, logs and screenshots are recorded under the
+  ignored `.private/local-builds/20260929-exact-focus` directory. No version bump,
+  push, notarization or release publication was performed.
+
+### 2026-09-29 · Command-Tab card pointer routing
+
+- A failing panel regression confirmed that card bodies had no intercepted hit
+  target. Only the close/quit controls used the pointer event tap; body clicks
+  were passed to the native switcher instead of reliably reaching the panel.
+- Card bodies now publish an exact-window focus action after their close/quit
+  targets. The existing pointer capture validates the presentation generation,
+  application and current hit target on release. Dragging keeps the existing
+  five-point threshold, scrolls the list, and cannot turn into a focus click.
+  Hit targets are clipped to visible card content and refreshed after scrolling.
+  No synthetic Escape or modifier release was added to application code.
+- Added six regressions for card focus, control priority, dragging, stale or
+  removed targets, and visible hit targets after scrolling. All **849 tests**
+  passed with warnings as errors. Strict SwiftPM/Xcode Release builds, generated
+  project consistency, staged bundle/resource checks, archive round-trip signing
+  checks and diff checks passed. The existing App Intents extraction warning is
+  unrelated to Swift/compiler warnings.
+- Installed the same Developer ID arm64 `1.2.9` / build `19` candidate on the
+  macOS 26.6.2 host and macOS 15.6.1 guest. Main/extension executable hashes match
+  across both installations; strict nested signatures and the preceding
+  designated requirement pass. Rollback packages/copies were retained. Each
+  environment has one enabled Finder extension at the installed path.
+- **Guest interaction pass:** distinct thumbnails for two same-named TextEdit
+  documents; clicking either Command-Tab card selects the corresponding
+  AXDocument/AXMain and foreground process. Releasing Command preserves that
+  selection. Single-window minimized restoration, Dock card focus, the close
+  control, drag-without-focus, and Escape between pointer-down/up also passed.
+  The last case swallowed the stale release without activating a window.
+- All five guest permission statuses remain enabled. Preview switches remain
+  `{1, 1, 0, 1, 0, 0}` in settings order: Option-Tab and Dock hide/show remain
+  disabled and were not tested. Only disposable documents and management
+  windows were closed, and held modifiers were released.
+- **Remaining identity limit:** with two same-named unnumbered AX windows,
+  minimizing one can remove the current surface association needed to resolve
+  it safely. That restoration probe was rejected without selecting the sibling.
+  Single-window restoration is not evidence that this ambiguous case passes;
+  OD-01 remains open for a durable, verified AX association.
+- **Host interaction blocked:** installation, startup and signature checks
+  passed, but the host was at the lock screen when interactive checks began.
+  No host pointer/focus acceptance is claimed for this build. Unlocking must be
+  performed by the user; no password or privacy setting was changed. Full
+  interruption, independent-display, Space/full-screen and remaining OS gates
+  are also still open.
+- Detailed fingerprints, rollback locations, logs and guest screenshots are in
+  the ignored `.private/local-builds/20260929-command-tab/acceptance.md`.
+  No commit, push, version bump, notarization or release was performed.

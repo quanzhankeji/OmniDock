@@ -158,6 +158,7 @@ enum CmdTabPreviewPointerEventOutcome: Equatable {
     case passThrough
     case swallow
     case invoke(CmdTabPreviewButtonInvocation)
+    case scroll(CmdTabPreviewButtonInvocation, deltaX: CGFloat)
     case endInteraction
 }
 
@@ -172,6 +173,8 @@ struct CmdTabPreviewPointerState {
     private var pressedButtonFrame: CGRect?
     private var hoveredAction: PreviewThumbnailAction?
     private var lastPointerLocation: CGPoint?
+    private var mouseDownLocation: CGPoint?
+    private var isDraggingPreview = false
 
     var isCapturingPointer: Bool {
         pressedInvocation != nil
@@ -200,29 +203,43 @@ struct CmdTabPreviewPointerState {
             targetIdentifier: snapshot.targetIdentifier
         )
         pressedButtonFrame = target.eventTapFrame
+        mouseDownLocation = point
+        isDraggingPreview = false
         return .swallow
     }
 
     mutating func mouseDragged(at point: CGPoint) -> CmdTabPreviewPointerEventOutcome {
-        lastPointerLocation = point
-        return isCapturingPointer
-            ? CmdTabPreviewPointerEventOutcome.swallow
-            : CmdTabPreviewPointerEventOutcome.passThrough
+        defer { lastPointerLocation = point }
+        guard let pressedInvocation else { return .passThrough }
+        guard case .focusWindow = pressedInvocation.action,
+              let mouseDownLocation,
+              let lastPointerLocation,
+              snapshot?.requestGeneration == pressedInvocation.requestGeneration,
+              snapshot?.targetIdentifier == pressedInvocation.targetIdentifier else { return .swallow }
+        if !isDraggingPreview {
+            guard hypot(point.x - mouseDownLocation.x, point.y - mouseDownLocation.y)
+                >= PreviewThumbnailView.dragThreshold else { return .swallow }
+            isDraggingPreview = true
+        }
+        return .scroll(pressedInvocation, deltaX: point.x - lastPointerLocation.x)
     }
 
     mutating func mouseUp(at point: CGPoint) -> CmdTabPreviewPointerEventOutcome {
         lastPointerLocation = point
         defer {
-            pressedInvocation = nil
-            pressedButtonFrame = nil
+            cancelPointerCapture()
         }
         guard let pressedInvocation, let pressedButtonFrame else {
             return .passThrough
         }
-        guard pressedButtonFrame.contains(point),
+        guard !isDraggingPreview,
+              pressedButtonFrame.contains(point),
               let snapshot,
               snapshot.requestGeneration == pressedInvocation.requestGeneration,
-              snapshot.targetIdentifier == pressedInvocation.targetIdentifier
+              snapshot.targetIdentifier == pressedInvocation.targetIdentifier,
+              snapshot.buttonTargets.contains(where: {
+                  $0.action == pressedInvocation.action && $0.eventTapFrame.contains(point)
+              })
         else {
             return .swallow
         }
@@ -237,6 +254,8 @@ struct CmdTabPreviewPointerState {
     mutating func cancelPointerCapture() {
         pressedInvocation = nil
         pressedButtonFrame = nil
+        mouseDownLocation = nil
+        isDraggingPreview = false
     }
 
     private mutating func setHoveredAction(
@@ -280,6 +299,7 @@ final class CmdTabPreviewObserver {
     var onSelectionBecameUnavailable: (() -> Void)?
     var onInteractionEnded: (() -> Void)?
     var onPreviewButtonAction: ((CmdTabPreviewButtonInvocation) -> Void)?
+    var onPreviewScroll: ((CmdTabPreviewButtonInvocation, CGFloat) -> Void)?
     var onPreviewButtonHoverChanged: ((PreviewThumbnailAction?) -> Void)?
 
     private let isFeatureEnabled: () -> Bool
@@ -325,6 +345,9 @@ final class CmdTabPreviewObserver {
         }
         pointerEventTap.onAction = { [weak self] invocation in
             self?.onPreviewButtonAction?(invocation)
+        }
+        pointerEventTap.onScroll = { [weak self] invocation, deltaX in
+            self?.onPreviewScroll?(invocation, deltaX)
         }
         pointerEventTap.onHoverChanged = { [weak self] action in
             self?.onPreviewButtonHoverChanged?(action)
@@ -687,6 +710,7 @@ final class CmdTabPreviewObserver {
 
 private final class CmdTabPreviewPointerEventTap {
     var onAction: ((CmdTabPreviewButtonInvocation) -> Void)?
+    var onScroll: ((CmdTabPreviewButtonInvocation, CGFloat) -> Void)?
     var onOutsidePrimaryPointerDown: (() -> Void)?
     var onHoverChanged: ((PreviewThumbnailAction?) -> Void)?
 
@@ -804,6 +828,11 @@ private final class CmdTabPreviewPointerEventTap {
         case let .invoke(invocation):
             DispatchQueue.main.async { [weak self] in
                 self?.onAction?(invocation)
+            }
+            return nil
+        case let .scroll(invocation, deltaX):
+            DispatchQueue.main.async { [weak self] in
+                self?.onScroll?(invocation, deltaX)
             }
             return nil
         case .endInteraction:

@@ -419,6 +419,13 @@ public final class PreviewPanelController {
         }
 
         switch action {
+        case let .focusWindow(identity):
+            guard let window = currentWindows.first(where: {
+                PreviewWindowIdentity($0) == identity
+            }) else {
+                return
+            }
+            focusWindowAndHidePreview(window)
         case let .closeWindow(identity):
             guard let window = currentWindows.first(where: {
                 PreviewWindowIdentity($0) == identity
@@ -443,6 +450,12 @@ public final class PreviewPanelController {
         thumbnailViewsByIdentity.values.forEach { tile in
             tile.setCommandTabHoveredAction(action)
         }
+    }
+
+    func scrollCommandTabPreview(deltaX: CGFloat) {
+        guard currentTarget?.previewAnchorKind == .commandTab else { return }
+        scrollPreviewContent(deltaX: deltaX)
+        notifyCommandTabButtonTargetsChanged()
     }
 
     private func makePanel() -> NSPanel {

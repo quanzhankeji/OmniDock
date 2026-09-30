@@ -185,13 +185,15 @@ struct WindowFocusCandidate: Equatable {
     let index: Int
     let windowID: CGWindowID?
     let title: String?
+    var frame: CGRect = .zero
 }
 
 enum WindowFocusMatchPolicy {
     static func matchingIndex(
         in candidates: [WindowFocusCandidate],
         title: String?,
-        windowID: CGWindowID?
+        windowID: CGWindowID?,
+        serverWindows: [WindowFocusCandidate] = []
     ) -> Int? {
         if let windowID,
            let exactMatch = candidates.first(where: { $0.windowID == windowID }) {
@@ -209,13 +211,34 @@ enum WindowFocusMatchPolicy {
             let titleMatches = candidates.filter {
                 DockTitleMatcher.normalized($0.title) == normalizedTitle
             }
-            if titleMatches.count == 1 {
+            if titleMatches.count == 1, windowID == nil {
                 return titleMatches[0].index
             }
-            return nil
+            guard !titleMatches.isEmpty, let windowID else { return nil }
+            let requestedSurfaces = serverWindows.filter { $0.windowID == windowID }
+            guard requestedSurfaces.count == 1, let surface = requestedSurfaces.first,
+                  DockTitleMatcher.normalized(surface.title) == normalizedTitle,
+                  !surface.frame.isEmpty,
+                  [surface.frame.minX, surface.frame.minY, surface.frame.width, surface.frame.height]
+                    .allSatisfy(\.isFinite)
+            else { return nil }
+
+            let frameKey = WindowFrameKey(surface.frame)
+            func matches(_ candidate: WindowFocusCandidate) -> Bool {
+                !candidate.frame.isEmpty
+                    && [candidate.frame.minX, candidate.frame.minY, candidate.frame.width, candidate.frame.height]
+                        .allSatisfy(\.isFinite)
+                    && DockTitleMatcher.normalized(candidate.title) == normalizedTitle
+                    && WindowFrameKey(candidate.frame) == frameKey
+            }
+            // Both live lists must identify exactly one window. Coincident
+            // surfaces and same-title AX siblings must never be selected by order.
+            let axMatches = titleMatches.filter(matches)
+            guard axMatches.count == 1, serverWindows.filter(matches).count == 1 else { return nil }
+            return axMatches[0].index
         }
 
-        return candidates.count == 1 ? candidates[0].index : nil
+        return windowID == nil && candidates.count == 1 ? candidates[0].index : nil
     }
 }
 

@@ -212,6 +212,73 @@ final class CmdTabPreviewTests: XCTestCase {
         XCTAssertEqual(state.mouseMoved(at: CGPoint(x: 60, y: 60)), .changed(nil))
     }
 
+    func testCardClickKeepsExactIdentityAndButtonPriority() {
+        var state = CmdTabPreviewPointerState()
+        let snapshot = cardSnapshot()
+        state.update(snapshot: snapshot)
+        XCTAssertEqual(state.mouseDown(at: CGPoint(x: 15, y: 15)), .swallow)
+        XCTAssertEqual(state.mouseUp(at: CGPoint(x: 15, y: 15)), .invoke(.init(
+            action: .quitApplication(101), requestGeneration: 3, targetIdentifier: snapshot.targetIdentifier
+        )))
+        XCTAssertEqual(state.mouseDown(at: CGPoint(x: 60, y: 60)), .swallow)
+        XCTAssertEqual(state.mouseDragged(at: CGPoint(x: 62, y: 60)), .swallow)
+        XCTAssertEqual(state.mouseUp(at: CGPoint(x: 62, y: 60)), .invoke(.init(
+            action: snapshot.buttonTargets[1].action, requestGeneration: 3, targetIdentifier: snapshot.targetIdentifier
+        )))
+    }
+
+    func testCardDragScrollsWithoutFocusingOnReleaseEvenAfterReturningToOrigin() {
+        var state = CmdTabPreviewPointerState()
+        let snapshot = cardSnapshot()
+        let invocation = CmdTabPreviewButtonInvocation(
+            action: snapshot.buttonTargets[1].action, requestGeneration: 3, targetIdentifier: snapshot.targetIdentifier
+        )
+        state.update(snapshot: snapshot)
+        XCTAssertEqual(state.mouseDown(at: CGPoint(x: 60, y: 60)), .swallow)
+        XCTAssertEqual(state.mouseDragged(at: CGPoint(x: 70, y: 60)), .scroll(invocation, deltaX: 10))
+        XCTAssertEqual(state.mouseDragged(at: CGPoint(x: 60, y: 60)), .scroll(invocation, deltaX: -10))
+        XCTAssertEqual(state.mouseUp(at: CGPoint(x: 60, y: 60)), .swallow)
+        XCTAssertFalse(state.isCapturingPointer)
+    }
+
+    func testCardCannotFocusAfterItsTargetIsRemovedOrReplaced() {
+        let original = cardSnapshot()
+        let replacements: [CmdTabPreviewPointerSnapshot?] = [
+            nil, pointerSnapshot(), cardSnapshot(generation: 4),
+            cardSnapshot(windowID: 202), cardSnapshot(targetIdentifier: "command-tab:other")
+        ]
+        for replacement in replacements {
+            var state = CmdTabPreviewPointerState()
+            state.update(snapshot: original)
+            XCTAssertEqual(state.mouseDown(at: CGPoint(x: 60, y: 60)), .swallow)
+            state.update(snapshot: replacement)
+            XCTAssertEqual(state.mouseUp(at: CGPoint(x: 60, y: 60)), .swallow)
+        }
+    }
+
+    func testCardDragDoesNotScrollANewerPresentation() {
+        var state = CmdTabPreviewPointerState()
+        state.update(snapshot: cardSnapshot())
+        XCTAssertEqual(state.mouseDown(at: CGPoint(x: 60, y: 60)), .swallow)
+        state.update(snapshot: cardSnapshot(generation: 4))
+        XCTAssertEqual(state.mouseDragged(at: CGPoint(x: 80, y: 60)), .swallow)
+        XCTAssertEqual(state.mouseUp(at: CGPoint(x: 80, y: 60)), .swallow)
+    }
+
+    private func cardSnapshot(
+        generation: UInt64 = 3, windowID: CGWindowID = 201, targetIdentifier: String = "command-tab:101"
+    ) -> CmdTabPreviewPointerSnapshot {
+        let buttons = pointerSnapshot().buttonTargets
+        return CmdTabPreviewPointerSnapshot(
+            eventTapPanelFrame: CGRect(x: 0, y: 0, width: 100, height: 100),
+            buttonTargets: buttons + [.init(
+                action: .focusWindow(.window(processIdentifier: 101, windowID: windowID)),
+                eventTapFrame: CGRect(x: 5, y: 5, width: 90, height: 90)
+            )],
+            requestGeneration: generation, targetIdentifier: targetIdentifier
+        )
+    }
+
     private func candidate(
         pid: pid_t,
         bundleIdentifier: String?,

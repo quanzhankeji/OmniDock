@@ -197,6 +197,61 @@ final class PreviewPanelControllerTests: XCTestCase {
         XCTAssertEqual(events, ["command-tab", "focus"])
     }
 
+    func testCommandTabCardBodyHasAnInterceptedExactWindowFocusAction() throws {
+        let info = previewInfo()
+        var focusedWindowID: CGWindowID?
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, windowID, _ in focusedWindowID = windowID },
+            requestWindowClose: { _, _, _, _ in XCTFail("Card body must not close a window") }
+        )
+        defer { controller.hide() }
+        controller.show(target: commandTabTarget(), windows: [info], message: nil)
+        let frame = try XCTUnwrap(controller.frame)
+        let point = CGPoint(x: frame.midX, y: frame.midY)
+        let hit = try XCTUnwrap(controller.commandTabButtonHitTargets().first {
+            $0.screenFrame.contains(point)
+        })
+        var pointer = CmdTabPreviewPointerState()
+        pointer.update(snapshot: CmdTabPreviewPointerSnapshot(
+            eventTapPanelFrame: frame,
+            buttonTargets: [.init(action: hit.action, eventTapFrame: hit.screenFrame)],
+            requestGeneration: 1, targetIdentifier: "command-tab:test"
+        ))
+        XCTAssertEqual(pointer.mouseDown(at: point), .swallow)
+        guard case let .invoke(invocation) = pointer.mouseUp(at: point) else {
+            return XCTFail("Card click must be handled before the system switcher")
+        }
+        controller.performCommandTabAction(invocation.action)
+        XCTAssertEqual(focusedWindowID, info.windowID)
+        XCTAssertNil(controller.frame)
+    }
+
+    func testCommandTabDragScrollUpdatesOnlyVisibleHitTargets() throws {
+        let priorWindows = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let controller = PreviewPanelController(
+            requestWindowFocus: { _, _, _, _ in XCTFail("Scrolling must not focus a window") },
+            requestWindowClose: { _, _, _, _ in }
+        )
+        defer { controller.hide() }
+        controller.show(target: commandTabTarget(), windows: (1...30).map {
+            previewInfo(windowID: CGWindowID($0))
+        }, message: nil)
+        let panel = try XCTUnwrap(NSApp.windows.first { !priorWindows.contains(ObjectIdentifier($0)) })
+        let scroll = try XCTUnwrap(panel.contentView?.subviews.compactMap { $0 as? NSScrollView }.first)
+        let originalOffset = scroll.contentView.bounds.minX
+        let originalTargets = controller.commandTabButtonHitTargets()
+        var changes = 0
+        controller.onCommandTabButtonTargetsChanged = { changes += 1 }
+
+        controller.scrollCommandTabPreview(deltaX: -400)
+
+        XCTAssertGreaterThan(scroll.contentView.bounds.minX, originalOffset)
+        XCTAssertEqual(changes, 1)
+        let targets = controller.commandTabButtonHitTargets()
+        XCTAssertNotEqual(targets, originalTargets)
+        XCTAssertTrue(targets.allSatisfy { panel.frame.contains($0.screenFrame) })
+    }
+
     func testHideReleasesInstalledPreviewContentAndPanelCanBeReused() {
         let controller = PreviewPanelController(
             requestWindowFocus: { _, _, _, _ in },
