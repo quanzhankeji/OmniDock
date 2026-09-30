@@ -8,7 +8,7 @@ final class DockPreviewLifecycleTests: XCTestCase {
         let applicationCenter = NotificationCenter()
         var cancellations = 0
         let panel = PreviewPanelController(
-            requestWindowFocus: { _, _, _, _ in XCTFail("Display changes must not focus a window") },
+            requestWindowFocus: { _, _ in XCTFail("Display changes must not focus a window") },
             requestWindowClose: { _, _, _, _ in },
             cancelWindowFocus: { cancellations += 1 }
         )
@@ -30,7 +30,7 @@ final class DockPreviewLifecycleTests: XCTestCase {
     func testScreenSleepClosesDockPreviewAndWakeDoesNotRestoreIt() {
         let center = NotificationCenter()
         let panel = PreviewPanelController(
-            requestWindowFocus: { _, _, _, _ in XCTFail("Suspension must not focus a window") },
+            requestWindowFocus: { _, _ in XCTFail("Suspension must not focus a window") },
             requestWindowClose: { _, _, _, _ in }
         )
         let coordinator = makeCoordinator(panel: panel, workspaceNotificationCenter: center)
@@ -55,7 +55,7 @@ final class DockPreviewLifecycleTests: XCTestCase {
 
     func testStoppingDockServiceClosesItsPanelAndReleasesContent() {
         let panel = PreviewPanelController(
-            requestWindowFocus: { _, _, _, _ in }, requestWindowClose: { _, _, _, _ in }
+            requestWindowFocus: { _, _ in }, requestWindowClose: { _, _, _, _ in }
         )
         let coordinator = makeCoordinator(panel: panel)
         defer { panel.hide() }
@@ -73,7 +73,7 @@ final class DockPreviewLifecycleTests: XCTestCase {
     func testStoppingDockServiceLeavesAnActiveSwitcherPanelAlone() {
         for kind in [PreviewAnchorKind.commandTab, .windowCycle] {
             let panel = PreviewPanelController(
-                requestWindowFocus: { _, _, _, _ in }, requestWindowClose: { _, _, _, _ in }
+                requestWindowFocus: { _, _ in }, requestWindowClose: { _, _, _, _ in }
             )
             let coordinator = makeCoordinator(panel: panel)
             defer { panel.hide() }

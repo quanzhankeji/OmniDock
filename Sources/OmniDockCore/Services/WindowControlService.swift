@@ -736,6 +736,7 @@ public final class WindowControlService {
         processIdentifier: pid_t,
         title: String?,
         windowID: CGWindowID?,
+        accessibilityReference: PreviewAccessibilityWindowReference? = nil,
         completion: @escaping (WindowFocusResult) -> Void
     ) {
         let token = operationTracker.begin(.focus, for: processIdentifier)
@@ -769,6 +770,7 @@ public final class WindowControlService {
                     launchDate: launchDate,
                     appElement: appElement,
                     target: &target,
+                    accessibilityReference: accessibilityReference,
                     title: title,
                     windowID: windowID
                 )
@@ -987,6 +989,7 @@ public final class WindowControlService {
         launchDate: Date?,
         appElement: AXUIElement,
         target: inout AXUIElement?,
+        accessibilityReference: PreviewAccessibilityWindowReference?,
         title: String?,
         windowID: CGWindowID?
     ) -> WindowFocusState {
@@ -1000,9 +1003,19 @@ public final class WindowControlService {
         guard query.succeeded else { return .unreadable }
         let candidates = normalWindowCandidates(in: query.windows)
         if target == nil {
-            target = focusWindowMatch(
-                in: candidates, processIdentifier: processIdentifier, title: title, windowID: windowID
-            )
+            if let accessibilityReference {
+                // A stale reference must never fall back to a same-title sibling.
+                guard let resolved = accessibilityReference.resolve(
+                    in: candidates, processIdentifier: processIdentifier, applicationLaunchDate: launchDate
+                ) else { return .unavailable }
+                if let windowID, let resolvedID = intAttribute("AXWindowNumber", from: resolved),
+                   CGWindowID(exactly: resolvedID) != windowID { return .unavailable }
+                target = resolved
+            } else {
+                target = focusWindowMatch(
+                    in: candidates, processIdentifier: processIdentifier, title: title, windowID: windowID
+                )
+            }
         }
         guard let target, candidates.contains(where: { CFEqual($0, target) }) else {
             return .unavailable

@@ -1,10 +1,38 @@
 import AppKit
+import ApplicationServices
 import ScreenCaptureKit
 import XCTest
 @testable import OmniDockCore
 
 @MainActor
 final class CmdTabPreviewServiceTests: XCTestCase {
+    func testMinimizedSameTitleCardKeepsAccessibilityIdentityThroughCachedAndFreshPresentation() throws {
+        let fixture = Fixture()
+        defer { fixture.stop() }
+        let reference = PreviewAccessibilityWindowReference(
+            element: AXUIElementCreateApplication(fixture.pid), processIdentifier: fixture.pid,
+            applicationLaunchDate: Date(timeIntervalSince1970: 100)
+        )
+        let original = fixture.window(1)
+        let minimized = PreviewWindowInfo(
+            id: "minimized", windowID: nil, processIdentifier: fixture.pid, appName: original.appName,
+            title: original.title, frame: CGRect(x: 900, y: 0, width: 800, height: 600),
+            isMinimized: true, accessibilityReference: reference
+        )
+        for cached in [false, true] {
+            fixture.windows = [original, minimized]
+            fixture.hasRecording = cached
+            if cached {
+                fixture.previewService.storeCachedSnapshotWindows([original, minimized], for: fixture.pid)
+            }
+            fixture.show()
+            let tile = try XCTUnwrap(fixture.tiles().first { $0.info.isMinimized })
+            XCTAssertEqual(tile.info.accessibilityReference, reference)
+            XCTAssertEqual(PreviewWindowIdentity(tile.info), PreviewWindowIdentity(minimized))
+            fixture.service.endInteraction()
+        }
+    }
+
     func testTitleChangeUsesVerifiedSurfaceIdentityWhenAXWindowNumberIsMissing() async throws {
         let fixture = Fixture()
         defer { fixture.stop() }
@@ -303,7 +331,7 @@ final class CmdTabPreviewServiceTests: XCTestCase {
         var hasAccessibility = true
         var activityChanges: [Bool] = []
         var captureReplies: [(SCShareableContent?, Error?) -> Void] = []
-        let panel = PreviewPanelController(requestWindowFocus: { _, _, _, _ in }, requestWindowClose: { _, _, _, _ in })
+        let panel = PreviewPanelController(requestWindowFocus: { _, _ in }, requestWindowClose: { _, _, _, _ in })
         lazy var inventory = WindowInventoryService(
             accessibilityWindowsProvider: { [unowned self] pid, _ in
                 inventoryReads.append(pid)

@@ -74,7 +74,8 @@ public final class ScreenCapturePreviewService {
                 id: window.id, windowID: window.windowID, processIdentifier: window.processIdentifier,
                 appName: window.appName, title: window.title, frame: window.frame,
                 isMinimized: window.isMinimized, isApplicationHidden: isHidden, isFullScreen: window.isFullScreen,
-                staticPreviewImage: window.staticPreviewImage, placeholderText: window.placeholderText
+                staticPreviewImage: window.staticPreviewImage, placeholderText: window.placeholderText,
+                accessibilityReference: window.accessibilityReference
             )
         }
     }
@@ -597,7 +598,8 @@ public final class ScreenCapturePreviewService {
             isApplicationHidden: info.isApplicationHidden,
             isFullScreen: info.isFullScreen,
             staticPreviewImage: staticPreviewImage,
-            placeholderText: placeholderText
+            placeholderText: placeholderText,
+            accessibilityReference: info.accessibilityReference
         )
     }
 

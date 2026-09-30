@@ -50,6 +50,7 @@ struct WindowInventoryRecord: Hashable {
     let isMinimized: Bool
     let isApplicationHidden: Bool?
     let isFullScreen: Bool?
+    let accessibilityReference: PreviewAccessibilityWindowReference?
     let displayOrder: Int
 
     init(_ window: PreviewWindowInfo, displayOrder: Int) {
@@ -62,6 +63,7 @@ struct WindowInventoryRecord: Hashable {
         isMinimized = window.isMinimized
         isApplicationHidden = window.isApplicationHidden
         isFullScreen = window.isFullScreen
+        accessibilityReference = window.accessibilityReference
         self.displayOrder = displayOrder
     }
 
@@ -75,6 +77,7 @@ struct WindowInventoryRecord: Hashable {
         isMinimized: Bool,
         isApplicationHidden: Bool? = nil,
         isFullScreen: Bool? = nil,
+        accessibilityReference: PreviewAccessibilityWindowReference? = nil,
         displayOrder: Int = 0
     ) {
         self.identity = identity
@@ -86,6 +89,7 @@ struct WindowInventoryRecord: Hashable {
         self.isMinimized = isMinimized
         self.isApplicationHidden = isApplicationHidden
         self.isFullScreen = isFullScreen
+        self.accessibilityReference = accessibilityReference
         self.displayOrder = displayOrder
     }
 
@@ -99,7 +103,8 @@ struct WindowInventoryRecord: Hashable {
             frame: frame,
             isMinimized: isMinimized,
             isApplicationHidden: isApplicationHidden,
-            isFullScreen: isFullScreen
+            isFullScreen: isFullScreen,
+            accessibilityReference: accessibilityReference
         )
     }
 }
@@ -708,6 +713,8 @@ enum AccessibilityPreviewWindowReader {
     }
 
     static func readWindows(for processIdentifier: pid_t, appName: String) -> [PreviewWindowInfo]? {
+        let application = NSRunningApplication(processIdentifier: processIdentifier)
+        let launchDate = application?.launchDate
         let applicationElement = AccessibilityElementFactory.application(
             processIdentifier: processIdentifier
         )
@@ -722,7 +729,8 @@ enum AccessibilityPreviewWindowReader {
             return nil
         }
 
-        let isApplicationHidden = NSRunningApplication(processIdentifier: processIdentifier)?.isHidden
+        let isApplicationHidden = application?.isHidden
+        let currentLaunchDate = application?.isTerminated == false ? launchDate : nil
         return windows.enumerated().compactMap { index, window in
             let role = stringAttribute(kAXRoleAttribute, from: window)
             let subrole = stringAttribute(kAXSubroleAttribute, from: window)
@@ -748,7 +756,12 @@ enum AccessibilityPreviewWindowReader {
                 frame: windowFrame ?? .zero,
                 isMinimized: boolAttribute(kAXMinimizedAttribute, from: window) ?? false,
                 isApplicationHidden: isApplicationHidden,
-                isFullScreen: boolAttribute("AXFullScreen", from: window)
+                isFullScreen: boolAttribute("AXFullScreen", from: window),
+                accessibilityReference: currentLaunchDate.map {
+                    PreviewAccessibilityWindowReference(
+                        element: window, processIdentifier: processIdentifier, applicationLaunchDate: $0
+                    )
+                }
             )
         }
     }
@@ -819,7 +832,8 @@ enum WindowInventorySwitcherSnapshotPolicy {
                 id: previous.id, windowID: windowID, processIdentifier: window.processIdentifier,
                 appName: window.appName, title: window.title, frame: window.frame,
                 isMinimized: true, isApplicationHidden: window.isApplicationHidden,
-                isFullScreen: window.isFullScreen
+                isFullScreen: window.isFullScreen,
+                accessibilityReference: window.accessibilityReference
             )
         }
         let verifiedWindowServerWindows = PreviewWindowCatalog.reconcileCaptureCandidates(

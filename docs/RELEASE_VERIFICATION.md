@@ -1067,3 +1067,46 @@ has passed on three machines and fails on a fourth is worth being able to see.
 - Detailed fingerprints, rollback locations, logs and guest screenshots are in
   the ignored `.private/local-builds/20260929-command-tab/acceptance.md`.
   No commit, push, version bump, notarization or release was performed.
+
+### 2026-09-29 · retained identity for minimized same-title windows
+
+- Reproduced OD-01-R1 on the installed `f634f7c` candidate in macOS 15.6.1:
+  with two same-title TextEdit windows, the minimized window could not be
+  restored once its WindowServer association was unavailable. No sibling was
+  incorrectly activated.
+- Retain the observed AX window and application launch date through inventory,
+  cached metadata, display copies and focus requests. Unnumbered in-memory
+  identities no longer depend on the window's title or list index. Before
+  acting, verify the application instance, owner PID, current normal-window
+  membership and any readable AX number. A stale reference is rejected without
+  falling back to a same-title sibling. Capture ownership and existing numbered
+  focus matching are unchanged; no polling or permission changes were added.
+- Added nine tests. Two initial failures demonstrated lost references during
+  inventory round trips and minimized-number recovery. **Passed:** 121 focused
+  tests, 858 full warnings-as-errors tests, strict SwiftPM/Xcode arm64 Release
+  builds, generated-project checks, staged resources, signed archive round-trip
+  verification and diff checks. One intermediate full rerun timed out in the
+  existing clipboard 200-row loading test; its 57-test suite and the subsequent
+  858-test full run passed without clipboard changes. The transient failure is
+  preserved in the local logs rather than counted as a clean run.
+- Installed the Developer ID arm64 `1.2.9` / build `19` candidate in the macOS
+  15.6.1 guest, preserving a rollback and verifying the old designated requirement,
+  strict nested signatures and executable hashes. The host was not replaced.
+- **Guest passed:** restore minimized A with same-title B still open; reverse
+  restore of B; retain focus after Command release; Dock minimized restoration;
+  ordinary same-title A/B card focus after reopening A. Each focus result was
+  confirmed by foreground process, AXDocument, AXMain and minimized state, not
+  merely by panel dismissal. Screenshots confirmed distinct content.
+- Closing minimized A between pointer-down and pointer-up did not focus B;
+  Finder remained frontmost. Escape dismissed the remaining preview. Only owned
+  fixture documents were closed; held modifiers were released. One enabled
+  Finder extension remains at the installed path, with settings and grants
+  unchanged.
+- OD-01-R1 passes this narrow regression. This does not close the full release
+  matrix: new host interaction, enabled Option-Tab, real permission transitions,
+  physical interruptions, independent displays, side Dock and full-screen/Space
+  still require their own acceptance. Rename/process-relaunch reference safety
+  is automated coverage here, not new interactive evidence.
+- Logs, fingerprints, rollback paths and screenshots are in the ignored
+  `.private/local-builds/20260929-minimized-identity/acceptance.md`. This fix is
+  uncommitted; no push, version bump, notarization or release was performed.

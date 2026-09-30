@@ -3,6 +3,7 @@ import ScreenCaptureKit
 
 enum PreviewWindowIdentity: Hashable {
     case window(processIdentifier: pid_t, windowID: CGWindowID)
+    case accessibility(PreviewAccessibilityWindowReference)
     case transient(processIdentifier: pid_t, identifier: String)
 
     init(_ window: PreviewWindowInfo) {
@@ -11,6 +12,8 @@ enum PreviewWindowIdentity: Hashable {
                 processIdentifier: window.processIdentifier,
                 windowID: windowID
             )
+        } else if let reference = window.accessibilityReference {
+            self = .accessibility(reference)
         } else {
             self = .transient(
                 processIdentifier: window.processIdentifier,
@@ -30,6 +33,8 @@ enum PreviewWindowIdentity: Hashable {
         switch self {
         case let .window(processIdentifier, _), let .transient(processIdentifier, _):
             return processIdentifier
+        case let .accessibility(reference):
+            return reference.processIdentifier
         }
     }
 }

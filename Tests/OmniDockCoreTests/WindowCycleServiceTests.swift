@@ -18,7 +18,10 @@ final class WindowCycleTests: XCTestCase {
         let input = TestWindowCycleInputMonitor()
         var focused: (pid_t, String?, CGWindowID?)?
         let panel = PreviewPanelController(
-            requestWindowFocus: { pid, title, windowID, completion in focused = (pid, title, windowID); completion(.focused) },
+            requestWindowFocus: { window, completion in
+                focused = (window.processIdentifier, window.title, window.windowID)
+                completion(.focused)
+            },
             requestWindowClose: { _, _, _, _ in }
         )
         let service = makeService(
@@ -78,7 +81,7 @@ final class WindowCycleTests: XCTestCase {
         inventory.start()
         let registry = TestHotkeyRegistry()
         let monitor = TestWindowCycleInputMonitor()
-        let panel = PreviewPanelController(requestWindowFocus: { _, _, _, _ in }, requestWindowClose: { _, _, _, _ in })
+        let panel = PreviewPanelController(requestWindowFocus: { _, _ in }, requestWindowClose: { _, _, _, _ in })
         let service = makeService(
             settings: configuredSettings(), registry: registry, panel: panel, inventory: inventory,
             inputMonitor: monitor,
@@ -125,8 +128,8 @@ final class WindowCycleTests: XCTestCase {
         let monitor = TestWindowCycleInputMonitor()
         var focusedIDs: [CGWindowID] = []
         let panel = PreviewPanelController(
-            requestWindowFocus: { _, _, windowID, completion in
-                if let windowID { focusedIDs.append(windowID) }
+            requestWindowFocus: { window, completion in
+                if let windowID = window.windowID { focusedIDs.append(windowID) }
                 completion(.focused)
             }, requestWindowClose: { _, _, _, _ in }
         )
@@ -170,7 +173,7 @@ final class WindowCycleTests: XCTestCase {
         let registry = TestHotkeyRegistry()
         let monitor = TestWindowCycleInputMonitor()
         let panel = PreviewPanelController(
-            requestWindowFocus: { _, _, _, _ in XCTFail("Window removal must not confirm a selection") },
+            requestWindowFocus: { _, _ in XCTFail("Window removal must not confirm a selection") },
             requestWindowClose: { _, _, _, _ in }
         )
         let service = makeService(
@@ -216,7 +219,7 @@ final class WindowCycleTests: XCTestCase {
         let registry = TestHotkeyRegistry()
         let monitor = TestWindowCycleInputMonitor()
         let panel = PreviewPanelController(
-            requestWindowFocus: { _, _, _, _ in XCTFail("Cancelled refresh must not focus a window") },
+            requestWindowFocus: { _, _ in XCTFail("Cancelled refresh must not focus a window") },
             requestWindowClose: { _, _, _, _ in }
         )
         let service = makeService(
@@ -246,7 +249,7 @@ final class WindowCycleTests: XCTestCase {
         let monitor = TestWindowCycleInputMonitor()
         let inventory = WindowInventoryService()
         let panel = PreviewPanelController(
-            requestWindowFocus: { _, _, _, _ in XCTFail("Display changes must not confirm a selection") },
+            requestWindowFocus: { _, _ in XCTFail("Display changes must not confirm a selection") },
             requestWindowClose: { _, _, _, _ in }
         )
         let service = makeService(
@@ -279,7 +282,7 @@ final class WindowCycleTests: XCTestCase {
         let monitor = TestWindowCycleInputMonitor()
         let inventory = WindowInventoryService()
         let panel = PreviewPanelController(
-            requestWindowFocus: { _, _, _, _ in XCTFail("Stale inventory must not focus a window") },
+            requestWindowFocus: { _, _ in XCTFail("Stale inventory must not focus a window") },
             requestWindowClose: { _, _, _, _ in }
         )
         let service = makeService(
@@ -344,7 +347,7 @@ final class WindowCycleTests: XCTestCase {
         let center = NotificationCenter()
         let inventory = WindowInventoryService()
         let panel = PreviewPanelController(
-            requestWindowFocus: { _, _, _, _ in XCTFail("Cancelled inventory must not focus a window") },
+            requestWindowFocus: { _, _ in XCTFail("Cancelled inventory must not focus a window") },
             requestWindowClose: { _, _, _, _ in }
         )
         let service = makeService(
@@ -372,7 +375,7 @@ final class WindowCycleTests: XCTestCase {
         let center = NotificationCenter()
         let inventory = WindowInventoryService()
         let panel = PreviewPanelController(
-            requestWindowFocus: { _, _, _, _ in XCTFail("Sleep must cancel, not confirm the selection") },
+            requestWindowFocus: { _, _ in XCTFail("Sleep must cancel, not confirm the selection") },
             requestWindowClose: { _, _, _, _ in }
         )
         let service = makeService(
@@ -418,7 +421,7 @@ final class WindowCycleTests: XCTestCase {
             let inventory = WindowInventoryService()
             var permissions = PermissionSnapshot(accessibility: true, screenRecording: false, inputMonitoring: true)
             let panel = PreviewPanelController(
-                requestWindowFocus: { _, _, _, _ in XCTFail("Cancelling must not focus a window") },
+                requestWindowFocus: { _, _ in XCTFail("Cancelling must not focus a window") },
                 requestWindowClose: { _, _, _, _ in }
             )
             let service = makeService(
@@ -471,8 +474,8 @@ final class WindowCycleTests: XCTestCase {
         let inventory = WindowInventoryService()
         var focusedIDs: [CGWindowID] = []
         let panel = PreviewPanelController(
-            requestWindowFocus: { _, _, windowID, completion in
-                if let windowID { focusedIDs.append(windowID) }
+            requestWindowFocus: { window, completion in
+                if let windowID = window.windowID { focusedIDs.append(windowID) }
                 completion(.focused)
             }, requestWindowClose: { _, _, _, _ in }
         )
@@ -808,7 +811,7 @@ final class WindowCycleTests: XCTestCase {
         let settings = configuredSettings()
         settings.windowCycleEnabled = false
         let panel = PreviewPanelController(
-            requestWindowFocus: { _, _, _, _ in }, requestWindowClose: { _, _, _, _ in }
+            requestWindowFocus: { _, _ in }, requestWindowClose: { _, _, _, _ in }
         )
         let service = makeService(settings: settings, registry: TestHotkeyRegistry(), panel: panel)
         service.start()

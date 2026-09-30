@@ -536,7 +536,8 @@ final class CmdTabPreviewService {
             isApplicationHidden: window.isApplicationHidden,
             isFullScreen: window.isFullScreen,
             staticPreviewImage: image,
-            placeholderText: placeholderText
+            placeholderText: placeholderText,
+            accessibilityReference: window.accessibilityReference
         )
     }
 

@@ -128,7 +128,8 @@ final class PreviewWindowStatusMonitor {
             appName: window.appName, title: state.title, frame: state.frame,
             isMinimized: state.isMinimized, isApplicationHidden: state.isApplicationHidden,
             isFullScreen: state.isFullScreen, staticPreviewImage: window.staticPreviewImage,
-            placeholderText: placeholder
+            placeholderText: placeholder,
+            accessibilityReference: window.accessibilityReference
         )
     }
 }

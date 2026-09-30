@@ -39,7 +39,8 @@ enum PreviewWindowCatalog {
             isMinimized: window.isMinimized,
             isApplicationHidden: state.isApplicationHidden ?? window.isApplicationHidden,
             isFullScreen: state.isFullScreen,
-            staticPreviewImage: window.staticPreviewImage, placeholderText: window.placeholderText
+            staticPreviewImage: window.staticPreviewImage, placeholderText: window.placeholderText,
+            accessibilityReference: window.accessibilityReference
         )
     }
 

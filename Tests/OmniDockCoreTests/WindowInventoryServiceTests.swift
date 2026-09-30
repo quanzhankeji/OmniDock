@@ -4,6 +4,49 @@ import XCTest
 @testable import OmniDockCore
 
 final class WindowInventoryStateTests: XCTestCase {
+    func testUnnumberedMinimizedWindowKeepsExactReferenceThroughInventory() throws {
+        let reference = PreviewAccessibilityWindowReference(
+            element: AXUIElementCreateApplication(101), processIdentifier: 101,
+            applicationLaunchDate: Date(timeIntervalSince1970: 100)
+        )
+        let minimized = PreviewWindowInfo(
+            id: "minimized", windowID: nil, processIdentifier: 101, appName: "Editor",
+            title: "Same", frame: CGRect(x: 10, y: 10, width: 800, height: 600),
+            isMinimized: true, accessibilityReference: reference
+        )
+        let sibling = PreviewWindowInfo(
+            id: "sibling", windowID: 20, processIdentifier: 101, appName: "Editor",
+            title: "Same", frame: CGRect(x: 900, y: 10, width: 800, height: 600),
+            isMinimized: false
+        )
+        let merged = WindowInventorySwitcherSnapshotPolicy.merge(
+            accessibilityWindows: [sibling, minimized], windowServerWindows: [sibling]
+        )
+        let target = try XCTUnwrap(merged.first(where: \.isMinimized))
+        let restored = WindowInventoryRecord(target, displayOrder: 1).makePreviewWindowInfo()
+        XCTAssertEqual(restored.accessibilityReference, reference)
+        XCTAssertNil(restored.windowID)
+    }
+
+    func testMinimizedNumberRecoveryKeepsCurrentAccessibilityReference() throws {
+        let previous = record(windowID: 10, title: "Document").makePreviewWindowInfo()
+        let reference = PreviewAccessibilityWindowReference(
+            element: AXUIElementCreateApplication(101), processIdentifier: 101,
+            applicationLaunchDate: Date(timeIntervalSince1970: 100)
+        )
+        let minimized = PreviewWindowInfo(
+            id: "ax-minimized", windowID: nil, processIdentifier: 101, appName: "Example",
+            title: previous.title, frame: previous.frame, isMinimized: true,
+            accessibilityReference: reference
+        )
+        let merged = WindowInventorySwitcherSnapshotPolicy.merge(
+            accessibilityWindows: [minimized], windowServerWindows: [], previousWindows: [previous]
+        )
+        let target = try XCTUnwrap(merged.first)
+        XCTAssertEqual(target.windowID, 10)
+        XCTAssertEqual(target.accessibilityReference, reference)
+    }
+
     func testEmptyApplicationRemainsTrackedUntilTermination() {
         var state = WindowInventoryState()
         _ = state.apply(.seed(processIdentifier: 101, revision: 1, records: []))

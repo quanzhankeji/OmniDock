@@ -1,9 +1,7 @@
 import AppKit
 
 typealias PreviewWindowFocusRequest = (
-    pid_t,
-    String?,
-    CGWindowID?,
+    PreviewWindowInfo,
     @escaping (WindowFocusResult) -> Void
 ) -> Void
 typealias PreviewWindowCloseRequest = (
@@ -75,11 +73,12 @@ public final class PreviewPanelController {
 
     public convenience init(windowControlService: WindowControlService) {
         self.init(
-            requestWindowFocus: { processIdentifier, title, windowID, completion in
+            requestWindowFocus: { window, completion in
                 windowControlService.focusWindow(
-                    processIdentifier: processIdentifier,
-                    title: title,
-                    windowID: windowID,
+                    processIdentifier: window.processIdentifier,
+                    title: window.title,
+                    windowID: window.windowID,
+                    accessibilityReference: window.accessibilityReference,
                     completion: completion
                 )
             },
@@ -620,7 +619,7 @@ public final class PreviewPanelController {
         focusRequestGeneration &+= 1
         let requestGeneration = focusRequestGeneration
         let presentationGeneration = targetGeneration
-        requestWindowFocus(info.processIdentifier, info.title, info.windowID) { [weak self] result in
+        requestWindowFocus(info) { [weak self] result in
             Task { @MainActor [weak self] in
                 guard let self,
                       result == .unavailable || result == .unconfirmed,

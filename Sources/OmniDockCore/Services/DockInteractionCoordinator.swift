@@ -1051,7 +1051,8 @@ public final class DockInteractionCoordinator {
                     isMinimized: window.isMinimized,
                     isApplicationHidden: window.isApplicationHidden,
                     isFullScreen: window.isFullScreen,
-                    staticPreviewImage: image
+                    staticPreviewImage: image,
+                    accessibilityReference: window.accessibilityReference
                 )
             case .textOnly:
                 return PreviewWindowInfo(
@@ -1064,7 +1065,8 @@ public final class DockInteractionCoordinator {
                     isMinimized: window.isMinimized,
                     isApplicationHidden: window.isApplicationHidden,
                     isFullScreen: window.isFullScreen,
-                    placeholderText: window.placeholderText
+                    placeholderText: window.placeholderText,
+                    accessibilityReference: window.accessibilityReference
                 )
             case .waiting, .unavailable, nil:
                 return nil
