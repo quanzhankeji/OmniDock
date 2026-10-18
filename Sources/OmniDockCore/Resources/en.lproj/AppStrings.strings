@@ -8,6 +8,8 @@
 "launchAtLoginFailedDetail" = "macOS could not update the login item: %@";
 "launchAtLoginUnsupportedDetail" = "Launch at Login requires macOS 13 or later.";
 "launchAtLoginUnavailableDetail" = "macOS could not find OmniDock's login item.";
+"statusMenuBarIconTitle" = "Show Menu Bar Icon";
+"statusMenuBarIconDetail" = "Show or hide OmniDock's menu bar icon. OmniDock remains available in Launchpad when hidden.";
 
 "languageTitle" = "Language";
 "languageDetail" = "Choose OmniDock's display language.";

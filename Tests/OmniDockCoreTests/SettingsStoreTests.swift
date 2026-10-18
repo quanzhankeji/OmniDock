@@ -22,6 +22,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(store.clipboardHistoryEnabled)
         XCTAssertEqual(store.clipboardHistoryLimit, 200)
         XCTAssertFalse(store.windowPlacementEnabled)
+        XCTAssertTrue(store.menuBarIconVisible)
         XCTAssertFalse(store.menuBarShelfEnabled)
         XCTAssertTrue(store.menuBarShelfAutoHideEnabled)
         XCTAssertEqual(store.menuBarShelfAutoHideDelay, 10)
@@ -57,6 +58,7 @@ final class SettingsStoreTests: XCTestCase {
         placementConfiguration.isEnabled = true
         placementConfiguration.commands[0].isEnabled = false
         store.windowPlacementConfiguration = placementConfiguration
+        store.menuBarIconVisible = false
         store.menuBarShelfEnabled = true
         store.menuBarShelfAutoHideEnabled = false
         store.menuBarShelfAutoHideDelay = 30
@@ -93,6 +95,7 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertTrue(reloaded.clipboardHistoryEnabled)
         XCTAssertEqual(reloaded.clipboardHistoryLimit, 350)
         XCTAssertTrue(reloaded.windowPlacementEnabled)
+        XCTAssertFalse(reloaded.menuBarIconVisible)
         XCTAssertTrue(reloaded.menuBarShelfEnabled)
         XCTAssertFalse(reloaded.menuBarShelfAutoHideEnabled)
         XCTAssertEqual(reloaded.menuBarShelfAutoHideDelay, 30)
@@ -220,6 +223,9 @@ final class SettingsStoreTests: XCTestCase {
         XCTAssertFalse(SettingsChange.language.affectsWindowCycle)
         XCTAssertFalse(SettingsChange.language.affectsAppHotkeys)
         XCTAssertFalse(SettingsChange.appearance.affectsDockInteraction)
+        XCTAssertFalse(SettingsChange.statusItem.affectsDockInteraction)
+        XCTAssertFalse(SettingsChange.statusItem.affectsCommandTabPreview)
+        XCTAssertFalse(SettingsChange.statusItem.affectsAppHotkeys)
 
         XCTAssertTrue(SettingsChange.dockClick.affectsDockInteraction)
         XCTAssertTrue(SettingsChange.windowCycle.affectsWindowCycle)

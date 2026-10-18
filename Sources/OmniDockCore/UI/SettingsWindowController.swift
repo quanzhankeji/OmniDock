@@ -89,6 +89,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
     private var finderExtensionSettingsView: FinderExtensionSettingsView?
     private var menuBarShelfSettingsView: MenuBarShelfSettingsView?
     private var launchAtLoginSwitch: NSSwitch?
+    private var statusMenuBarIconSwitch: NSSwitch?
     private var languagePopupButton: NSPopUpButton?
     private var appearancePopupButton: NSPopUpButton?
     private var updateVersionField: NSTextField?
@@ -308,6 +309,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         refreshLanguageControl()
         refreshAppearanceControl()
         refreshLaunchAtLoginControl()
+        statusMenuBarIconSwitch?.state = settings.menuBarIconVisible ? .on : .off
         refreshUpdateControls()
         previewSwitch?.state = settings.showDockPreviews ? .on : .off
         commandTabPreviewSwitch?.state = settings.showCommandTabPreviews ? .on : .off
@@ -385,6 +387,10 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             return
         }
         settings.appLanguage = language
+    }
+
+    @objc private func toggleStatusMenuBarIcon(_ sender: NSSwitch) {
+        settings.menuBarIconVisible = sender.state == .on
     }
 
     @objc private func toggleLaunchAtLogin(_ sender: NSSwitch) {
@@ -870,6 +876,7 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         windowPlacementContentView = nil
         hiddenBarContentView = nil
         launchAtLoginSwitch = nil
+        statusMenuBarIconSwitch = nil
         languagePopupButton = nil
         appearancePopupButton = nil
         previewSwitch = nil
@@ -983,6 +990,12 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
             title: AppStrings.text(.launchAtLoginTitle),
             detail: AppStrings.text(.launchAtLoginDetail),
             control: makeLaunchAtLoginControl()
+        ))
+
+        settings.addArrangedSubview(makeSettingRow(
+            title: AppStrings.text(.statusMenuBarIconTitle),
+            detail: AppStrings.text(.statusMenuBarIconDetail),
+            control: makeStatusMenuBarIconControl()
         ))
 
         settings.addArrangedSubview(makeSettingRow(
@@ -1465,6 +1478,15 @@ public final class SettingsWindowController: NSObject, NSTextFieldDelegate, NSSe
         self.languagePopupButton = popup
         refreshLanguageControl()
         return popup
+    }
+
+    private func makeStatusMenuBarIconControl() -> NSView {
+        let toggle = NSSwitch()
+        toggle.target = self
+        toggle.action = #selector(toggleStatusMenuBarIcon(_:))
+        statusMenuBarIconSwitch = toggle
+        toggle.state = settings.menuBarIconVisible ? .on : .off
+        return toggle
     }
 
     private func makeLaunchAtLoginControl() -> NSView {

@@ -118,6 +118,7 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
         item.button?.image = nil
         item.button?.imagePosition = .noImage
         item.button?.toolTip = "OmniDock"
+        item.isVisible = settings.menuBarIconVisible
         statusItem = item
 
         let menu = NSMenu()
@@ -156,6 +157,9 @@ public final class StatusMenuController: NSObject, NSMenuDelegate {
         let change = SettingsStore.change(in: notification)
         if change.affectsDockInteraction {
             coordinator.refreshForSettingsChange()
+        }
+        if change == .statusItem || change == .all {
+            statusItem?.isVisible = settings.menuBarIconVisible
         }
         // Menu item titles only depend on the localized tab names, so a full
         // rebuild is only needed for language changes; menuWillOpen rebuilds
